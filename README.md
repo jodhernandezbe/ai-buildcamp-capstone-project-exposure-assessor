@@ -1,14 +1,14 @@
-# Your Project Name
+# Exposure Assessor
 
-A starter template for the AI Engineering Buildcamp capstone. Replace this README with a description of your own project.
+An AI Engineering Buildcamp capstone project that turns fragmented environmental data into screening-level chemical exposure risk profiles.
 
 ## The Problem
 
-Describe the problem your project solves and who has it. One or two sentences.
+Public health researchers, environmental risk assessors, and community advocates often struggle to rapidly evaluate localized chemical exposure risks because critical data on industrial releases, chemical properties, and environmental transport variables are siloed across multiple disparate databases.
 
 ## What It Does
 
-Describe what the AI system does and a typical interaction. What does the user provide? What does the system return?
+Exposure Assessor unifies public datasets, such as the EPA Toxics Release Inventory (TRI), with phenomenological transport models to automate screening-level exposure assessments. A user provides a location, facility, or chemical of interest, and the system pulls together release data, chemical properties, and transport modeling to return an actionable risk profile — transforming siloed environmental data into a starting point for further investigation.
 
 ## Setup
 

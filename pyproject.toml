@@ -1,7 +1,7 @@
 [project]
-name = "ai-buildcamp-project"
+name = "exposure-assessor"
 version = "0.1.0"
-description = "My AI Engineering Buildcamp project"
+description = "Screening-level chemical exposure risk assessments from unified TRI data and transport models"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
