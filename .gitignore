@@ -5,3 +5,19 @@ __pycache__/
 *.pyo
 .ipynb_checkpoints/
 .DS_Store
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Packaging
+*.egg-info/
+build/
+dist/
+
+# Editors
+.idea/
+.vscode/

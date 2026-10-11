@@ -6,7 +6,40 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "jupyter>=1.0.0",
+    "langchain-core>=0.3.0",
+    "langgraph>=0.2.0",
     "minsearch>=0.0.5",
+    "numpy>=2.0.0",
     "openai>=1.50.0",
     "python-dotenv>=1.0.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.11.0",
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "FA", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN401"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["agent", "models", "prompts", "tools", "tests"]
