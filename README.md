@@ -24,9 +24,9 @@ Exposure Assessor unifies public datasets, such as the EPA Toxics Release Invent
 
        uv sync
 
-5. Start Jupyter:
+5. Verify the setup:
 
-       uv run jupyter notebook
+       uv run pytest
 
 ## Architecture
 
