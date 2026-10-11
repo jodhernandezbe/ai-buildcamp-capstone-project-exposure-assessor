@@ -9,9 +9,12 @@ assessments. Python 3.13, managed with uv.
     uv run pytest          # tests
     uv run ruff format .   # format (run before every commit)
     uv run ruff check .    # lint
-    uv run mypy            # strict type check
+    uv run pyright         # strict type check
+    uv run bandit -c pyproject.toml -r agent models prompts tools   # security lint
 
-All four of test, format, lint, and mypy must pass before work is considered done.
+Test, format, lint, pyright and bandit must pass before work is considered done.
+Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass with
+`--no-verify`; never put secrets in code (detect-secrets guards `.secrets.baseline`).
 
 ## Layout and boundaries
 

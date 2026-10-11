@@ -97,4 +97,8 @@ Tool names must be unique; the registry raises `ValueError` on duplicates.
     uv run pytest          # tests
     uv run ruff check .    # lint
     uv run ruff format .   # format
-    uv run mypy            # strict type check
+    uv run pyright         # strict type check
+    uv run pre-commit install        # one-time: enable git hooks
+    uv run pre-commit run --all-files
+
+Pre-commit runs on every commit: file hygiene, ruff (lint + format), `uv lock` check, detect-secrets, strict pyright, bandit (security lint) and pytest. If detect-secrets flags a false positive, review it and update the baseline with `uv run detect-secrets scan > .secrets.baseline` (after checking the diff). Dependency CVEs: `uv run pip-audit`.
