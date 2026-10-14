@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 
 class ChemicalProperties(TypedDict):
@@ -12,6 +12,14 @@ class ChemicalProperties(TypedDict):
     vapor_pressure: float  # mmHg at 25 C
     rfc: float  # inhalation reference concentration, mg/m3
     iur: float  # inhalation unit risk, (ug/m3)^-1
+
+
+class PropertyValue(TypedDict):
+    """One physical-chemical property value looked up from CompTox."""
+
+    value: float  # in `unit`, exactly as reported by the source
+    unit: str  # source unit string, e.g. "mmHg"; never converted
+    source: Literal["experimental", "predicted"]  # median type the value came from
 
 
 class EmissionRecord(TypedDict):

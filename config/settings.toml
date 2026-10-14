@@ -7,3 +7,26 @@ compound_property_path = "/compound/name/{identifier}/property/CanonicalSMILES/J
 # Seconds to wait before each request (PubChem allows ~5 requests/second).
 delay_seconds = 0.2
 timeout_seconds = 10.0
+
+[comptox]
+base_url = "https://comptox.epa.gov/ctx-api"
+# {smiles} is replaced with the URL-quoted SMILES; the response is a list with "dtxsid".
+dtxsid_by_smiles_path = "/chemical/detail/search/by-smiles/?smiles={smiles}"
+# {dtxsid} is replaced with the DTXSID; the response is a list of property summaries.
+properties_by_dtxsid_path = "/chemical/property/summary/search/by-dtxsid/{dtxsid}"
+# Header carrying the API key, and the environment variable (e.g. in .env) that holds it.
+api_key_header = "x-api-key"  # pragma: allowlist secret
+api_key_env_var = "COMPTOX_API_KEY"  # pragma: allowlist secret
+# Seconds to wait before each request.
+delay_seconds = 0.2
+timeout_seconds = 15.0
+
+# Properties to extract. `name` is CompTox's propName; `key` is the key in the result.
+# Add another [[comptox.properties]] table to extract more properties.
+[[comptox.properties]]
+key = "vapor_pressure"
+name = "Vapor Pressure"
+
+[[comptox.properties]]
+key = "density"
+name = "Density"
