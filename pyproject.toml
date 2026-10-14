@@ -5,13 +5,16 @@ description = "Screening-level chemical exposure risk assessments from unified T
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "httpx>=0.28.1",
     "jupyter>=1.0.0",
     "langchain-core>=0.3.0",
     "langgraph>=0.2.0",
     "minsearch>=0.0.5",
     "numpy>=2.0.0",
     "openai>=1.50.0",
+    "pint>=0.26.1",
     "python-dotenv>=1.0.0",
+    "rdkit>=2026.9.1",
 ]
 
 [dependency-groups]
@@ -45,7 +48,7 @@ pythonpath = ["."]
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["agent", "models", "prompts", "tools", "tests"]
+include = ["agent", "config", "models", "prompts", "tools", "tests"]
 venvPath = "."
 venv = ".venv"
 # langgraph ships partial typing; keep strict for our code, tolerate its gaps.

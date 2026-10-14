@@ -1,0 +1,9 @@
+# External-service settings. Change URLs/endpoints here, not in code.
+
+[pubchem]
+base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+# {identifier} is replaced with the URL-quoted CAS number.
+compound_property_path = "/compound/name/{identifier}/property/CanonicalSMILES/JSON"
+# Seconds to wait before each request (PubChem allows ~5 requests/second).
+delay_seconds = 0.2
+timeout_seconds = 10.0

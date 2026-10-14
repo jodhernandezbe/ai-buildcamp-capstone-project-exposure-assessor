@@ -47,7 +47,7 @@ repos:
         pass_filenames: false
       - id: bandit
         name: bandit (security lint)
-        entry: uv run bandit -c pyproject.toml -r agent models prompts tools
+        entry: uv run bandit -c pyproject.toml -r agent config models prompts tools
         language: system
         types: [python]
         pass_filenames: false

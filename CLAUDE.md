@@ -10,7 +10,7 @@ assessments. Python 3.13, managed with uv.
     uv run ruff format .   # format (run before every commit)
     uv run ruff check .    # lint
     uv run pyright         # strict type check
-    uv run bandit -c pyproject.toml -r agent models prompts tools   # security lint
+    uv run bandit -c pyproject.toml -r agent config models prompts tools   # security lint
 
 Test, format, lint, pyright and bandit must pass before work is considered done.
 Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass with
@@ -23,9 +23,12 @@ Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass wit
 - `tools/`   tool logic only, grouped by concern (`informatics/`, `emissions/`,
   `geospatial/`, `exposure/`). One module per tool group.
 - `prompts/` Markdown prompt files plus `registry.py` to load them.
+- `config/`  `settings.toml` plus a typed loader (`loader.py`) for external-service URLs,
+  endpoints and timing. Never hard-code URLs or endpoints in Python; add them here.
 - `tests/`   pytest suite mirroring the package layout (`tests/tools/emissions/test_stack.py` tests `tools/emissions/stack.py`). Every test directory needs an `__init__.py`.
 
-Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`. Never the reverse.
+Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`;
+`agent`/`tools` -> `config`. `config` imports nothing from the project. Never the reverse.
 
 ### Model rules
 - `models/` must not import langchain, langgraph, `tools`, `agent`, or `prompts`, and
