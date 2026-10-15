@@ -34,39 +34,27 @@ Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`;
 `agent`/`tools`/`models` -> `commons`; `agent`/`tools` -> `config`. `commons` and `config`
 import nothing from the project. Never the reverse.
 
-### Commons rules
-- `commons/` must not import any other project package, read `config/`, do I/O, or call an
-  LLM. Functions are pure; anything configurable (e.g. unit aliases) is a parameter.
-- Add a module here only when it is generic and used (or clearly about to be used) by more
-  than one layer; otherwise keep it with its caller.
+## Folder-specific rules
 
-### Model rules
-- `models/` must not import langchain, langgraph, `tools`, `agent`, or `prompts`, and
-  must not do I/O. Functions are pure and deterministic; validate inputs with `ValueError`.
-- State units explicitly (e.g. g/s, mg/m^3, mg/(kg*day)) in every docstring.
+Each layer keeps its own rules in a `CLAUDE.md` inside its folder. Claude Code loads these
+automatically when working in that folder, so read and follow the one that applies before
+editing there:
 
-### Agent rules
-- `agent/` must stay provider-agnostic: accept a `BaseChatModel` by injection.
-  Never import `langchain_openai`, `langchain_anthropic`, etc. in `agent/`, `tools/`,
-  or `prompts/`.
-- Do not put domain or calculation logic in `agent/`. If the agent needs a
-  capability, add a tool.
-- The agent reads tools only via `tools.registry`.
+- `agent/CLAUDE.md`   provider-agnostic orchestration only.
+- `commons/CLAUDE.md` generic pure utilities with no project imports.
+- `models/CLAUDE.md`  pure deterministic equations with units in every docstring.
+- `prompts/CLAUDE.md` prompt files, XML structure, loading through the registry.
+- `tools/CLAUDE.md`   `@tool` conventions, registry and test requirements.
 
-### Tool rules
-- Tools must not import from `agent/`, and must not call an LLM.
-- Tools must not import other tool subfolders; shared types go in `tools/schemas.py`.
-- Every tool uses `@tool`, has full type hints on inputs and outputs (TypedDicts,
-  not bare `dict`), and a rich docstring: purpose, `Args:`, `Returns:` with units.
-  The docstring is what the LLM sees, so keep it accurate.
-- New tools are added to the folder's `TOOLS` list and `tools/registry.py`, and
-  to `tests/tools/test_registry.py` and add a test under the tool's folder in `tests/tools/`.
+When a new layer needs rules of its own, add a `CLAUDE.md` in its folder and list it here.
+Keep this root file under 80 lines (checked by `tests/test_claude_md.py`); put detail in
+folder `CLAUDE.md` files or `docs/`.
 
-### Prompt rules
-- Prompts live in `prompts/*.md`. Never inline prompt text in Python.
-- Load prompts through `prompts.registry.load_prompt`.
-- Structure prompts with XML tags (`<role>`, `<context>`, `<instructions>`,
-  `<output_format>`).
+## Design principles
+
+SOLID, DRY and defensive programming apply to all code; the full rules are imported here:
+
+@docs/design-principles.md
 
 ## Code style
 
@@ -79,7 +67,3 @@ import nothing from the project. Never the reverse.
 - Formatting and linting are enforced by ruff (config in `pyproject.toml`); do not
   hand-format or add `# noqa` without a reason.
 - Never invent numeric values in tool stubs or tests that look like real data.
-
-## Secrets
-
-`.env` holds API keys and is git-ignored. Never commit it or print its contents.
