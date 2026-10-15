@@ -35,6 +35,7 @@ The code is split into four packages with one-way dependencies: `agent` -> `tool
     agent/
       graph.py               build_agent(model, ...) -> compiled LangGraph
       state.py               AgentState (message history)
+    commons/                 generic pure utilities shared across layers (units.py: Pint)
     models/                  pure NumPy physics, no LLM/LangChain imports
       dispersion.py          Pasquill-Gifford sigmas, Gaussian plume
       dose.py                ADD, LADD
@@ -53,7 +54,7 @@ The code is split into four packages with one-way dependencies: `agent` -> `tool
       exposure/metrics.py         get_population_receptors, calculate_exposure_metrics
     tests/                   pytest suite, mirrors the package layout
 
-The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. The tools are stubs that raise `NotImplementedError`.
+The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. `fetch_chemical_properties` is implemented (CAS -> SMILES -> CompTox, with Pint unit conversion to fixed units); the other tools are stubs that raise `NotImplementedError`.
 
 ## Swapping the LLM provider
 

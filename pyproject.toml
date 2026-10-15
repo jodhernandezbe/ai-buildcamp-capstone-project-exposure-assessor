@@ -14,7 +14,6 @@ dependencies = [
     "openai>=1.50.0",
     "pint>=0.26.1",
     "python-dotenv>=1.0.0",
-    "rdkit>=2026.9.1",
 ]
 
 [dependency-groups]
@@ -44,11 +43,15 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = '-m "not smoke"'
+markers = [
+    "smoke: live-network checks against real services (run with: pytest -m smoke)",
+]
 
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["agent", "config", "models", "prompts", "tools", "tests"]
+include = ["agent", "commons", "config", "models", "prompts", "scripts", "tools", "tests"]
 venvPath = "."
 venv = ".venv"
 # langgraph ships partial typing; keep strict for our code, tolerate its gaps.

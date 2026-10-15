@@ -1,17 +1,12 @@
 # External-service settings. Change URLs/endpoints here, not in code.
 
-[pubchem]
-base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
-# {identifier} is replaced with the URL-quoted CAS number.
-compound_property_path = "/compound/name/{identifier}/property/CanonicalSMILES/JSON"
-# Seconds to wait before each request (PubChem allows ~5 requests/second).
-delay_seconds = 0.2
-timeout_seconds = 10.0
-
 [comptox]
 base_url = "https://comptox.epa.gov/ctx-api"
-# {smiles} is replaced with the URL-quoted SMILES; the response is a list with "dtxsid".
-dtxsid_by_smiles_path = "/chemical/detail/search/by-smiles/?smiles={smiles}"
+# {casrn} is replaced with the hyphenated CAS number. The response is a list whose matching
+# entry has "searchName" = "CAS-RN" and carries "dtxsid", "casrn" and "smiles".
+dtxsid_by_cas_path = "/chemical/search/equal/{casrn}"
+# {dtxsid} is replaced with the DTXSID; the response is an object with "averageMass" (g/mol).
+detail_by_dtxsid_path = "/chemical/detail/search/by-dtxsid/{dtxsid}"
 # {dtxsid} is replaced with the DTXSID; the response is a list of property summaries.
 properties_by_dtxsid_path = "/chemical/property/summary/search/by-dtxsid/{dtxsid}"
 # {dtxsid} is replaced with the DTXSID; the response is a list of ToxVal records.
@@ -26,31 +21,69 @@ api_key_env_var = "COMPTOX_API_KEY"  # pragma: allowlist secret
 delay_seconds = 0.2
 timeout_seconds = 15.0
 
-# Properties to extract. `name` is CompTox's propName; `key` is the key in the result.
+# Molecular weight comes from the chemical detail response (detail_by_dtxsid_path). `field` is
+# the response field holding it; `unit` is the unit the API reports it in (the response carries
+# no unit); `target_unit` is the unit the tool returns.
+[comptox.molecular_weight]
+field = "averageMass"
+unit = "g/mol"
+target_unit = "g/mol"
+
+# Properties to extract. `name` is CompTox's propName; `key` is the key in the result;
+# `target_unit` is the unit the tool returns (values are converted to it with Pint).
 # Add another [[comptox.properties]] table to extract more properties.
 [[comptox.properties]]
 key = "vapor_pressure"
 name = "Vapor Pressure"
+target_unit = "mmHg"
 
 [[comptox.properties]]
 key = "density"
 name = "Density"
+target_unit = "g/cm^3"
 
-# Toxicity values to extract from ToxVal records. `types` are the accepted `toxvalType`
-# labels (exact match); `key` is the key in the result.
+# Toxicity values to extract from ToxVal records. A record is used when its `toxvalType` equals
+# one of `types` (exact match) and its `exposureRoute` is one of `routes` (case-insensitive).
+# Among records of the best-ranked source, `prefer` picks the "lowest" or "highest" value (the
+# most conservative one). `key` is the key in the result; `target_unit` as for properties.
+# The first route is the one the value applies to and is reported as such; "not specified" is
+# accepted only for RfD and RfC, whose names already imply the route.
 # Add another [[comptox.toxicity_values]] table to extract more values.
 [[comptox.toxicity_values]]
 key = "rfd"
 types = ["RfD"]
+routes = ["oral", "not specified"]
+prefer = "lowest"
+target_unit = "mg/(kg*day)"
 
 [[comptox.toxicity_values]]
 key = "rfc"
 types = ["RfC"]
+routes = ["inhalation", "not specified"]
+prefer = "lowest"
+target_unit = "mg/m^3"
 
 [[comptox.toxicity_values]]
 key = "sf"
-types = ["SF", "OSF"]
+types = ["cancer slope factor"]
+routes = ["oral"]
+prefer = "highest"
+target_unit = "1/(mg/(kg*day))"
 
 [[comptox.toxicity_values]]
 key = "iur"
-types = ["IUR"]
+types = ["cancer unit risk"]
+routes = ["inhalation"]
+prefer = "highest"
+target_unit = "1/(ug/m^3)"
+
+# Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
+# units and to target units before conversion; add a line when a new spelling shows up.
+[units.aliases]
+"mg/m3" = "mg/m^3"
+"ug/m3" = "ug/m^3"
+"mg/kg-day" = "mg/(kg*day)"
+"(mg/kg-day)-1" = "1/(mg/(kg*day))"
+"(ug/m3)-1" = "1/(ug/m^3)"
+"(mg/m3)-1" = "1/(mg/m^3)"
+"(mg/L)-1" = "1/(mg/L)"

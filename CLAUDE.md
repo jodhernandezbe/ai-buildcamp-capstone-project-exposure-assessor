@@ -10,9 +10,10 @@ assessments. Python 3.13, managed with uv.
     uv run ruff format .   # format (run before every commit)
     uv run ruff check .    # lint
     uv run pyright         # strict type check
-    uv run bandit -c pyproject.toml -r agent config models prompts tools   # security lint
+    uv run bandit -c pyproject.toml -r agent commons config models prompts tools   # security lint
+    uv run python scripts/check_function_length.py --max 18 $(git ls-files 'agent/*.py' 'commons/*.py' 'config/*.py' 'models/*.py' 'prompts/*.py' 'tools/*.py')   # function length
 
-Test, format, lint, pyright and bandit must pass before work is considered done.
+Test, format, lint, pyright, bandit and the function-length check must pass before work is considered done.
 Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass with
 `--no-verify`; never put secrets in code (detect-secrets guards `.secrets.baseline`).
 
@@ -25,10 +26,19 @@ Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass wit
 - `prompts/` Markdown prompt files plus `registry.py` to load them.
 - `config/`  `settings.toml` plus a typed loader (`loader.py`) for external-service URLs,
   endpoints and timing. Never hard-code URLs or endpoints in Python; add them here.
+- `commons/` small, generic, pure utilities used across layers (e.g. `units.py`, Pint-based
+  unit conversion). No project knowledge, no I/O, no config reads: callers pass in what they need.
 - `tests/`   pytest suite mirroring the package layout (`tests/tools/emissions/test_stack.py` tests `tools/emissions/stack.py`). Every test directory needs an `__init__.py`.
 
 Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`;
-`agent`/`tools` -> `config`. `config` imports nothing from the project. Never the reverse.
+`agent`/`tools`/`models` -> `commons`; `agent`/`tools` -> `config`. `commons` and `config`
+import nothing from the project. Never the reverse.
+
+### Commons rules
+- `commons/` must not import any other project package, read `config/`, do I/O, or call an
+  LLM. Functions are pure; anything configurable (e.g. unit aliases) is a parameter.
+- Add a module here only when it is generic and used (or clearly about to be used) by more
+  than one layer; otherwise keep it with its caller.
 
 ### Model rules
 - `models/` must not import langchain, langgraph, `tools`, `agent`, or `prompts`, and
@@ -61,6 +71,10 @@ Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`;
 ## Code style
 
 - Every Python file starts (after the docstring) with `from __future__ import annotations`.
+- Functions stay short: at most 18 body lines (signature, docstring, blank lines and comments
+  not counted; nested functions count toward the outer one). Split long ones into small named
+  helpers. Enforced by `scripts/check_function_length.py` as a pre-commit hook on the source
+  packages (not `tests/`); never raise the limit or skip the hook to make code fit.
 - Strict static typing: annotate all functions; no untyped `dict`, no `Any` unless unavoidable.
 - Formatting and linting are enforced by ruff (config in `pyproject.toml`); do not
   hand-format or add `# noqa` without a reason.

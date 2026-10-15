@@ -6,12 +6,21 @@ from typing import Literal, TypedDict
 
 
 class ChemicalProperties(TypedDict):
-    """Physical-chemical and toxicity values for one chemical."""
+    """Physical-chemical and toxicity values for one chemical, in the units noted below.
 
-    molecular_weight: float  # g/mol
-    vapor_pressure: float  # mmHg at 25 C
-    rfc: float  # inhalation reference concentration, mg/m3
-    iur: float  # inhalation unit risk, (ug/m3)^-1
+    A value is None when it could not be obtained or converted; ``warnings`` says why.
+    """
+
+    molecular_weight: float | None  # g/mol
+    vapor_pressure: float | None  # mmHg, as reported by the source (typically 25 C)
+    density: float | None  # g/cm^3
+    rfd: float | None  # oral reference dose, mg/(kg*day)
+    rfc: float | None  # inhalation reference concentration, mg/m^3
+    sf: float | None  # oral cancer slope factor, (mg/(kg*day))^-1
+    iur: float | None  # inhalation unit risk, (ug/m^3)^-1
+    sources: dict[str, str]  # field -> "CompTox", "experimental", "predicted" or ToxVal source
+    toxicity_details: dict[str, ToxicityDetail]  # rfd/rfc/sf/iur found -> route and endpoint
+    warnings: list[str]  # one entry per missing or unconvertible value
 
 
 class PropertyValue(TypedDict):
@@ -28,6 +37,19 @@ class ToxicityValue(TypedDict):
     value: float  # in `unit`, exactly as reported by the source
     unit: str  # source unit string, e.g. "mg/kg-day"; never converted
     source: str  # ToxVal source database name for the chosen record
+    route: str  # exposure route as recorded on the chosen record, lower-case, e.g. "oral"
+    endpoint: str | None  # critical effect or cancer endpoint, e.g. "leukemia"; None if unstated
+    assessment: str | None  # "cancer" or "non-cancer" as recorded; None if unstated
+
+
+class ToxicityDetail(TypedDict):
+    """Context of one toxicity value, for explaining it to the user."""
+
+    source: str  # database the value comes from, e.g. "IRIS"
+    exposure_route: str  # route the value applies to: "oral" or "inhalation"
+    route_reported: str  # route as recorded by the source; "not specified" if it gave none
+    endpoint: str | None  # critical effect or cancer endpoint, e.g. "leukemia"; None if unstated
+    assessment: str | None  # "cancer" or "non-cancer"; None if unstated
 
 
 class EmissionRecord(TypedDict):

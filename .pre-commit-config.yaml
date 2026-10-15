@@ -39,6 +39,12 @@ repos:
   # Project-environment hooks: run with the versions pinned in uv.lock.
   - repo: local
     hooks:
+      - id: function-length
+        name: function length (max 18 body lines)
+        entry: uv run python scripts/check_function_length.py --max 18
+        language: system
+        types: [python]
+        files: ^(agent|commons|config|models|prompts|tools)/
       - id: pyright
         name: pyright (strict)
         entry: uv run pyright
@@ -47,7 +53,7 @@ repos:
         pass_filenames: false
       - id: bandit
         name: bandit (security lint)
-        entry: uv run bandit -c pyproject.toml -r agent config models prompts tools
+        entry: uv run bandit -c pyproject.toml -r agent commons config models prompts tools
         language: system
         types: [python]
         pass_filenames: false
