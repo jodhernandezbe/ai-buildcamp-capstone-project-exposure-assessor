@@ -5,17 +5,21 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from config.loader import ComptoxSettings, PropertySpec
+from config.loader import ComptoxSettings, PropertySpec, ToxicityValueSpec
 from tools.informatics.helpers.comptox import ComptoxLookup
 
 ENV = {"TEST_KEY_VAR": "test-key"}
 
 
-def _settings(*extra: PropertySpec) -> ComptoxSettings:
+def _settings(
+    *extra: PropertySpec, tox_extra: tuple[ToxicityValueSpec, ...] = ()
+) -> ComptoxSettings:
     return ComptoxSettings(
         base_url="https://ctx.test/api",
         dtxsid_by_smiles_path="/s?smiles={smiles}",
         properties_by_dtxsid_path="/p/{dtxsid}",
+        toxval_by_dtxsid_path="/t/{dtxsid}",
+        source_priority=("SRC_A", "SRC_B"),
         api_key_header="x-test-key",  # pragma: allowlist secret
         api_key_env_var="TEST_KEY_VAR",  # pragma: allowlist secret
         delay_seconds=0.5,
@@ -24,6 +28,13 @@ def _settings(*extra: PropertySpec) -> ComptoxSettings:
             PropertySpec("vapor_pressure", "Vapor Pressure"),
             PropertySpec("density", "Density"),
             *extra,
+        ),
+        toxicity_values=(
+            ToxicityValueSpec("rfd", ("RfD",)),
+            ToxicityValueSpec("rfc", ("RfC",)),
+            ToxicityValueSpec("sf", ("SF", "OSF")),
+            ToxicityValueSpec("iur", ("IUR",)),
+            *tox_extra,
         ),
     )
 
@@ -182,4 +193,126 @@ def test_failures_return_empty_and_are_not_cached(kwargs: dict[str, object]) -> 
     assert lookup.get_properties("CCO") == {}
     count = len(requests)
     lookup.get_properties("CCO")
-    assert len(requests) == 2 * count
+    assert len(requests) > count  # the failed step is retried (a found DTXSID stays cached)
+
+
+def _rec(
+    type_: str,
+    value: object = 1.0,
+    unit: object = "u",
+    source: object = "SRC_X",
+) -> dict[str, object]:
+    return {"toxvalType": type_, "toxvalNumeric": value, "toxvalUnits": unit, "source": source}
+
+
+def test_toxicity_values_found_with_units_and_source() -> None:
+    records = [
+        _rec("RfD", 0.5, "mg/kg-day", "SRC_A"),
+        _rec("RfC", 0.25, "mg/m3", "SRC_A"),
+        _rec("OSF", 3.0, "(mg/kg-day)-1", "SRC_B"),
+        _rec("IUR", 0.001, "(ug/m3)-1", "SRC_B"),
+    ]
+    lookup, requests = _lookup(records)
+    assert lookup.get_toxicity_values("CCO") == {
+        "rfd": {"value": 0.5, "unit": "mg/kg-day", "source": "SRC_A"},
+        "rfc": {"value": 0.25, "unit": "mg/m3", "source": "SRC_A"},
+        "sf": {"value": 3.0, "unit": "(mg/kg-day)-1", "source": "SRC_B"},
+        "iur": {"value": 0.001, "unit": "(ug/m3)-1", "source": "SRC_B"},
+    }
+    assert str(requests[1].url) == "https://ctx.test/api/t/DTXSID0"
+    assert all(r.headers["x-test-key"] == "test-key" for r in requests)
+
+
+def test_toxicity_absent_other_types_and_non_numeric_ignored() -> None:
+    records = [
+        _rec("NOAEL", 9.0),
+        _rec("LOAEL", 9.0),
+        _rec("RfD", None),
+        _rec("RfC", "0.5"),
+        _rec("IUR", True),
+        _rec("SF", 2.0, None),
+        _rec("SF", 2.0, "u"),
+    ]
+    lookup, _ = _lookup(records)
+    assert lookup.get_toxicity_values("CCO") == {
+        "sf": {"value": 2.0, "unit": "u", "source": "SRC_X"}
+    }
+
+
+def test_toxicity_zero_is_a_value() -> None:
+    lookup, _ = _lookup([_rec("RfD", 0.0)])
+    assert lookup.get_toxicity_values("CCO")["rfd"]["value"] == 0.0
+
+
+def test_toxicity_extra_configured_value_picked_up() -> None:
+    records = [_rec("MRL", 4.0)]
+    settings = _settings(tox_extra=(ToxicityValueSpec("mrl", ("MRL",)),))
+    lookup, _ = _lookup(records, settings=settings)
+    assert set(lookup.get_toxicity_values("CCO")) == {"mrl"}
+
+
+def test_toxicity_source_priority() -> None:
+    records = [
+        _rec("RfC", 1.0, source="UNLISTED"),
+        _rec("RfC", 2.0, source="SRC_B"),
+        _rec("RfC", 3.0, source="SRC_A"),
+        _rec("RfC", 4.0, source="SRC_A"),
+    ]
+    lookup, _ = _lookup(records)
+    assert lookup.get_toxicity_values("CCO")["rfc"]["value"] == 3.0
+    only_unlisted = [_rec("RfC", 5.0, source="U1"), _rec("RfC", 6.0, source="U2")]
+    other, _ = _lookup(only_unlisted)
+    assert other.get_toxicity_values("CCO")["rfc"] == {"value": 5.0, "unit": "u", "source": "U1"}
+
+
+def test_toxicity_blank_smiles_and_missing_key() -> None:
+    lookup, requests = _lookup([])
+    assert lookup.get_toxicity_values(" ") == {}
+    assert requests == []
+    keyless, requests = _lookup([], env={})
+    with pytest.raises(RuntimeError, match="TEST_KEY_VAR"):
+        keyless.get_toxicity_values("CCO")
+    assert requests == []
+
+
+def test_dtxsid_resolved_once_for_properties_and_toxicity() -> None:
+    lookup, requests = _lookup([])
+    lookup.get_properties("CCO")
+    lookup.get_toxicity_values("CCO")
+    assert [r.url.path for r in requests] == ["/api/s", "/api/p/DTXSID0", "/api/t/DTXSID0"]
+
+
+def test_toxicity_cached_and_no_match_cached() -> None:
+    lookup, requests = _lookup([_rec("RfD", 1.0)])
+    lookup.get_toxicity_values("CCO")
+    lookup.get_toxicity_values("CCO")
+    assert len(requests) == 2
+    missing, requests = _lookup([], dtxsid_body=[])
+    assert missing.get_toxicity_values("CCO") == {}
+    missing.get_toxicity_values("CCO")
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"dtxsid_status": 500},
+        {"summary_status": 500},
+        {"summary": "not json"},
+        {"summary": {"not": "a list"}},
+    ],
+)
+def test_toxicity_failures_return_empty_and_are_not_cached(kwargs: dict[str, object]) -> None:
+    args: dict[str, object] = {"summary": [], **kwargs}
+    lookup, requests = _lookup(**args)  # pyright: ignore[reportArgumentType]
+    assert lookup.get_toxicity_values("CCO") == {}
+    count = len(requests)
+    lookup.get_toxicity_values("CCO")
+    assert len(requests) > count
+
+
+def test_toxicity_network_error_not_cached() -> None:
+    lookup, requests = _lookup([], fail=httpx.ConnectError("down"))
+    assert lookup.get_toxicity_values("CCO") == {}
+    assert lookup.get_toxicity_values("CCO") == {}
+    assert len(requests) == 2

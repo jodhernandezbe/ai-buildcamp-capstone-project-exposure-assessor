@@ -68,6 +68,8 @@ COMPTOX = """
 base_url = "https://ctx.test/api/"
 dtxsid_by_smiles_path = "/s?smiles={smiles}"
 properties_by_dtxsid_path = "/p/{dtxsid}"
+toxval_by_dtxsid_path = "/t/{dtxsid}"
+source_priority = ["SRC1", "SRC2"]
 api_key_header = "x-key"  # pragma: allowlist secret
 api_key_env_var = "SOME_KEY_VAR"  # pragma: allowlist secret
 delay_seconds = 0
@@ -80,6 +82,14 @@ name = "Prop A"
 [[comptox.properties]]
 key = "b"
 name = "Prop B"
+
+[[comptox.toxicity_values]]
+key = "x"
+types = ["X"]
+
+[[comptox.toxicity_values]]
+key = "y"
+types = ["Y1", "Y2"]
 """
 
 
@@ -89,6 +99,10 @@ def test_comptox_default_file_loads() -> None:
     assert "{smiles}" in settings.dtxsid_by_smiles_url
     assert "{dtxsid}" in settings.properties_by_dtxsid_url
     assert settings.api_key_env_var
+    assert {t.key for t in settings.toxicity_values} == {"rfd", "rfc", "sf", "iur"}
+    assert ("SF", "OSF") == next(t.types for t in settings.toxicity_values if t.key == "sf")
+    assert "{dtxsid}" in settings.toxval_by_dtxsid_url
+    assert settings.source_priority
 
 
 def test_comptox_explicit_path(tmp_path: Path) -> None:
@@ -97,6 +111,12 @@ def test_comptox_explicit_path(tmp_path: Path) -> None:
     assert settings.properties_by_dtxsid_url == "https://ctx.test/api/p/{dtxsid}"
     assert [(p.key, p.name) for p in settings.properties] == [("a", "Prop A"), ("b", "Prop B")]
     assert settings.timeout_seconds == 2.0
+    assert settings.toxval_by_dtxsid_url == "https://ctx.test/api/t/{dtxsid}"
+    assert settings.source_priority == ("SRC1", "SRC2")
+    assert [(t.key, t.types) for t in settings.toxicity_values] == [
+        ("x", ("X",)),
+        ("y", ("Y1", "Y2")),
+    ]
 
 
 def test_comptox_missing_section(tmp_path: Path) -> None:
@@ -132,3 +152,33 @@ def test_comptox_negative_delay(tmp_path: Path) -> None:
         load_comptox_settings(
             _write(tmp_path, COMPTOX.replace("delay_seconds = 0", "delay_seconds = -1"))
         )
+
+
+def test_comptox_toxval_path_required_with_placeholder(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="comptox.toxval_by_dtxsid_path"):
+        load_comptox_settings(_write(tmp_path, COMPTOX.replace("toxval_by_dtxsid_path", "other")))
+    with pytest.raises(ValueError, match="toxval_by_dtxsid_path must contain"):
+        load_comptox_settings(_write(tmp_path, COMPTOX.replace("/t/{dtxsid}", "/t/")))
+
+
+def test_comptox_source_priority_optional_but_validated(tmp_path: Path) -> None:
+    without = COMPTOX.replace('source_priority = ["SRC1", "SRC2"]\n', "")
+    assert load_comptox_settings(_write(tmp_path, without)).source_priority == ()
+    bad = COMPTOX.replace('["SRC1", "SRC2"]', '["SRC1", ""]')
+    with pytest.raises(ValueError, match="comptox.source_priority"):
+        load_comptox_settings(_write(tmp_path, bad))
+
+
+def test_comptox_requires_toxicity_values(tmp_path: Path) -> None:
+    head = COMPTOX.split("[[comptox.toxicity_values]]")[0]
+    with pytest.raises(ValueError, match="comptox.toxicity_values"):
+        load_comptox_settings(_write(tmp_path, head))
+
+
+def test_comptox_toxicity_entry_validation(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="types"):
+        load_comptox_settings(_write(tmp_path, COMPTOX.replace('types = ["X"]', "types = []")))
+    with pytest.raises(ValueError, match="comptox.toxicity_values.key"):
+        load_comptox_settings(_write(tmp_path, COMPTOX.replace('key = "x"', 'other = "x"')))
+    with pytest.raises(ValueError, match="unique"):
+        load_comptox_settings(_write(tmp_path, COMPTOX.replace('key = "y"', 'key = "x"')))

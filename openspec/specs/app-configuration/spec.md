@@ -8,11 +8,11 @@ so they can change without editing code.
 ## Requirements
 
 ### Requirement: Externalized service settings
-The system SHALL read the PubChem and CompTox base URLs, endpoint path templates, request delay and request timeout from a configuration file, and SHALL NOT embed them in Python code. The configuration SHALL also name the CompTox API-key header and the environment variable holding the key, and SHALL list the CompTox properties to extract (CompTox property name, result key).
+The system SHALL read the PubChem and CompTox base URLs, endpoint path templates, request delay and request timeout from a configuration file, and SHALL NOT embed them in Python code. The configuration SHALL also name the CompTox API-key header and the environment variable holding the key, SHALL list the CompTox properties to extract (CompTox property name, result key), and SHALL list the CompTox toxicity values to extract (result key, accepted ToxVal type labels) together with the ordered source-priority list used to choose among records.
 
 #### Scenario: Settings loaded
 - **WHEN** the loader is asked for the PubChem or CompTox settings
-- **THEN** it returns the base URL, endpoint templates, delay and timeout from the file, plus the header name, key variable name and property list for CompTox
+- **THEN** it returns the base URL, endpoint templates, delay and timeout from the file, plus the header name, key variable name, property list, toxicity value list and source-priority list for CompTox
 
 #### Scenario: Changing the endpoint
 - **WHEN** the URL in the configuration file is edited
@@ -21,6 +21,14 @@ The system SHALL read the PubChem and CompTox base URLs, endpoint path templates
 #### Scenario: Adding a property
 - **WHEN** an entry is added to the CompTox property list
 - **THEN** the loader returns it with no code change
+
+#### Scenario: Adding a toxicity value
+- **WHEN** an entry is added to the CompTox toxicity value list
+- **THEN** the loader returns it with no code change
+
+#### Scenario: Invalid toxicity entry
+- **WHEN** a toxicity entry has no key, no accepted labels, or a duplicate key
+- **THEN** the loader raises a `ValueError` naming the offending key
 
 ### Requirement: Validated, typed configuration
 The system SHALL validate the configuration on load and expose it as typed objects.

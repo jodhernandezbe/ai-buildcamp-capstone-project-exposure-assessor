@@ -48,6 +48,19 @@ class PropertySpec:
 
 
 @dataclass(frozen=True)
+class ToxicityValueSpec:
+    """One CompTox ToxVal toxicity value to extract.
+
+    Attributes:
+        key: Key used in the lookup result, e.g. ``"rfd"``.
+        types: Accepted ``toxvalType`` labels (exact match), e.g. ``("SF", "OSF")``.
+    """
+
+    key: str
+    types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ComptoxSettings:
     """EPA CompTox Chemicals Dashboard API settings.
 
@@ -57,21 +70,27 @@ class ComptoxSettings:
         base_url: Service root URL, without trailing slash.
         dtxsid_by_smiles_path: Path template appended to ``base_url``; contains ``{smiles}``.
         properties_by_dtxsid_path: Path template appended to ``base_url``; contains ``{dtxsid}``.
+        toxval_by_dtxsid_path: Path template appended to ``base_url``; contains ``{dtxsid}``.
+        source_priority: ToxVal ``source`` names, most preferred first.
         api_key_header: Name of the HTTP header carrying the API key.
         api_key_env_var: Name of the environment variable holding the API key.
         delay_seconds: Wait before each request, in seconds.
         timeout_seconds: Per-request timeout, in seconds.
         properties: Properties to extract, in order.
+        toxicity_values: Toxicity values to extract, in order.
     """
 
     base_url: str
     dtxsid_by_smiles_path: str
     properties_by_dtxsid_path: str
+    toxval_by_dtxsid_path: str
+    source_priority: tuple[str, ...]
     api_key_header: str
     api_key_env_var: str
     delay_seconds: float
     timeout_seconds: float
     properties: tuple[PropertySpec, ...]
+    toxicity_values: tuple[ToxicityValueSpec, ...]
 
     @property
     def dtxsid_by_smiles_url(self) -> str:
@@ -82,6 +101,11 @@ class ComptoxSettings:
     def properties_by_dtxsid_url(self) -> str:
         """Full URL template containing the ``{dtxsid}`` placeholder."""
         return self.base_url.rstrip("/") + self.properties_by_dtxsid_path
+
+    @property
+    def toxval_by_dtxsid_url(self) -> str:
+        """Full URL template containing the ``{dtxsid}`` placeholder."""
+        return self.base_url.rstrip("/") + self.toxval_by_dtxsid_path
 
 
 def _require_str(section: dict[str, object], key: str, name: str = "pubchem") -> str:
@@ -169,6 +193,44 @@ def _parse_properties(section: dict[str, object]) -> tuple[PropertySpec, ...]:
     return tuple(specs)
 
 
+def _parse_source_priority(section: dict[str, object]) -> tuple[str, ...]:
+    raw = section.get("source_priority", [])
+    if not isinstance(raw, list):
+        raise ValueError("comptox.source_priority must be a list of strings")
+    names = cast(list[object], raw)
+    if not all(isinstance(n, str) and n.strip() for n in names):
+        raise ValueError("comptox.source_priority must be a list of non-empty strings")
+    return tuple(cast(list[str], names))
+
+
+def _parse_toxicity_values(section: dict[str, object]) -> tuple[ToxicityValueSpec, ...]:
+    raw = section.get("toxicity_values")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("comptox.toxicity_values must be a non-empty list")
+    specs: list[ToxicityValueSpec] = []
+    for item in cast(list[object], raw):
+        if not isinstance(item, dict):
+            raise ValueError("comptox.toxicity_values entries must be tables")
+        entry = {str(k): v for k, v in cast(dict[object, object], item).items()}
+        types = entry.get("types")
+        if (
+            not isinstance(types, list)
+            or not types
+            or not all(isinstance(t, str) and t.strip() for t in cast(list[object], types))
+        ):
+            raise ValueError("comptox.toxicity_values.types must be a non-empty list of strings")
+        specs.append(
+            ToxicityValueSpec(
+                key=_require_str(entry, "key", "comptox.toxicity_values"),
+                types=tuple(cast(list[str], types)),
+            )
+        )
+    keys = [spec.key for spec in specs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("comptox.toxicity_values keys must be unique")
+    return tuple(specs)
+
+
 def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
     """Load and validate CompTox settings.
 
@@ -189,15 +251,21 @@ def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
     props_path = _require_str(section, "properties_by_dtxsid_path", "comptox")
     if "{dtxsid}" not in props_path:
         raise ValueError("comptox.properties_by_dtxsid_path must contain {dtxsid}")
+    toxval_path = _require_str(section, "toxval_by_dtxsid_path", "comptox")
+    if "{dtxsid}" not in toxval_path:
+        raise ValueError("comptox.toxval_by_dtxsid_path must contain {dtxsid}")
     return ComptoxSettings(
         base_url=_require_str(section, "base_url", "comptox"),
         dtxsid_by_smiles_path=smiles_path,
         properties_by_dtxsid_path=props_path,
+        toxval_by_dtxsid_path=toxval_path,
+        source_priority=_parse_source_priority(section),
         api_key_header=_require_str(section, "api_key_header", "comptox"),
         api_key_env_var=_require_str(section, "api_key_env_var", "comptox"),
         delay_seconds=_require_number(section, "delay_seconds", minimum=0, name="comptox"),
         timeout_seconds=_require_number(section, "timeout_seconds", minimum=0.001, name="comptox"),
         properties=_parse_properties(section),
+        toxicity_values=_parse_toxicity_values(section),
     )
 
 

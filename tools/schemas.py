@@ -22,6 +22,14 @@ class PropertyValue(TypedDict):
     source: Literal["experimental", "predicted"]  # median type the value came from
 
 
+class ToxicityValue(TypedDict):
+    """One toxicity value (RfD, RfC, SF, IUR, ...) looked up from CompTox ToxVal."""
+
+    value: float  # in `unit`, exactly as reported by the source
+    unit: str  # source unit string, e.g. "mg/kg-day"; never converted
+    source: str  # ToxVal source database name for the chosen record
+
+
 class EmissionRecord(TypedDict):
     """One facility's reported emissions of a chemical."""
 
