@@ -8,6 +8,7 @@ from functools import lru_cache
 
 from langchain_core.tools import tool
 
+from commons.cas import format_cas
 from commons.units import UnitConversionError, convert
 from config.loader import (
     ComptoxSettings,
@@ -16,7 +17,6 @@ from config.loader import (
     get_comptox_settings,
     get_unit_settings,
 )
-from tools.informatics.helpers.cas import format_cas
 from tools.informatics.helpers.comptox import ComptoxLookup
 from tools.schemas import ChemicalProperties, PropertyValue, ToxicityDetail, ToxicityValue
 
@@ -64,7 +64,12 @@ class _Collected:
 
 
 def _convert_checked(
-    out: _Collected, field: str, value: float, unit: str, target: str, aliases: dict[str, str]
+    out: _Collected,
+    field: str,
+    value: float,
+    unit: str,
+    target: str,
+    aliases: dict[str, str],
 ) -> float | None:
     """Convert ``value`` to ``target``; None (with a warning) if it fails or is not positive."""
     try:
@@ -111,7 +116,10 @@ def _add_one(
 
 
 def _add_molecular_weight(
-    out: _Collected, weight: float | None, spec: MolecularWeightSpec, aliases: dict[str, str]
+    out: _Collected,
+    weight: float | None,
+    spec: MolecularWeightSpec,
+    aliases: dict[str, str],
 ) -> None:
     reported = (weight, spec.unit, "CompTox") if weight is not None else None
     _add_one(out, "molecular_weight", reported, spec.target_unit, aliases)
@@ -254,5 +262,8 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
     """
     services = _services()
     return lookup_chemical_properties(
-        cas_number, services.comptox, services.settings, services.aliases
+        cas_number,
+        services.comptox,
+        services.settings,
+        services.aliases,
     )

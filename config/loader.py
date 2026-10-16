@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, cast
 
 DEFAULT_SETTINGS_PATH = Path(__file__).parent / "settings.toml"
@@ -133,6 +135,74 @@ class ComptoxSettings:
     def toxval_by_dtxsid_url(self) -> str:
         """Full URL template containing the ``{dtxsid}`` placeholder."""
         return self.base_url.rstrip("/") + self.toxval_by_dtxsid_path
+
+
+TRI_FIELD_KEYS = (
+    "medium",
+    "year",
+    "quantity",
+    "unit",
+    "facility_name",
+    "latitude",
+    "longitude",
+    "address",
+    "city",
+    "county",
+    "state",
+    "zip_code",
+)
+_MAX_HOURS_PER_YEAR = 8784  # 366 days x 24 h
+
+
+@dataclass(frozen=True)
+class TriSettings:
+    """EPA Envirofacts TRI release-query settings.
+
+    Attributes:
+        base_url: Service root URL, without trailing slash.
+        release_path: Path template appended to ``base_url``; contains ``{casrn}``,
+            ``{medium}``, ``{start}`` and ``{end}`` (inclusive row range).
+        media: Environmental media to keep, e.g. ``("AIR STACK",)``; one query per medium.
+        page_size: Rows requested per page.
+        max_pages: Most pages fetched per medium.
+        delay_seconds: Wait before each request, in seconds.
+        timeout_seconds: Per-request timeout, in seconds.
+        max_retries: Retries after a throttled, failed or timed-out request.
+        backoff_seconds: First retry wait in seconds; doubles on each further retry.
+        east_longitude_states: State codes whose longitudes are east of Greenwich.
+        facility_id_fields: TRI columns holding the FRS ID, first one set wins.
+        fields: Result key (see ``TRI_FIELD_KEYS``) -> TRI column name.
+    """
+
+    base_url: str
+    release_path: str
+    media: tuple[str, ...]
+    page_size: int
+    max_pages: int
+    delay_seconds: float
+    timeout_seconds: float
+    max_retries: int
+    backoff_seconds: float
+    east_longitude_states: tuple[str, ...]
+    facility_id_fields: tuple[str, ...]
+    fields: Mapping[str, str]
+
+    @property
+    def release_url(self) -> str:
+        """Full URL template with its ``{casrn}``, ``{medium}``, ``{start}``, ``{end}`` slots."""
+        return self.base_url.rstrip("/") + self.release_path
+
+
+@dataclass(frozen=True)
+class EmissionsSettings:
+    """Assumptions used to turn reported releases into emission rates.
+
+    Attributes:
+        operating_hours_per_year: Hours per year a source is assumed to operate (8760 is
+            continuous operation).
+    """
+
+    operating_hours_per_year: float
 
 
 def _require_str(section: dict[str, object], key: str, name: str) -> str:
@@ -343,3 +413,105 @@ def load_unit_settings(path: Path | None = None) -> UnitSettings:
 def get_unit_settings() -> UnitSettings:
     """Return the cached unit settings from the default file."""
     return load_unit_settings()
+
+
+def _require_int(section: dict[str, object], key: str, *, minimum: int, name: str) -> int:
+    value = section.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name}.{key} must be an integer")
+    if value < minimum:
+        raise ValueError(f"{name}.{key} must be >= {minimum}")
+    return value
+
+
+def _names(
+    section: dict[str, object], key: str, name: str, *, allow_empty: bool
+) -> tuple[str, ...]:
+    value = section.get(key)
+    items = cast(list[object], value) if isinstance(value, list) else None
+    if items is None or (not items and not allow_empty):
+        raise ValueError(f"{name}.{key} must be a non-empty list of strings")
+    if not all(isinstance(item, str) and item.strip() for item in items):
+        raise ValueError(f"{name}.{key} must be a list of non-empty strings")
+    return tuple(cast(str, item).strip() for item in items)
+
+
+def _parse_tri_fields(section: dict[str, object]) -> Mapping[str, str]:
+    raw = section.get("fields")
+    if not isinstance(raw, dict):
+        raise ValueError("tri.fields must be a table")
+    table = {str(k): v for k, v in cast(dict[object, object], raw).items()}
+    return MappingProxyType({key: _require_str(table, key, "tri.fields") for key in TRI_FIELD_KEYS})
+
+
+def _tri_template(section: dict[str, object]) -> str:
+    template = _require_str(section, "release_path", "tri")
+    for slot in ("{casrn}", "{medium}", "{start}", "{end}"):
+        if slot not in template:
+            raise ValueError(f"tri.release_path must contain {slot}")
+    return template
+
+
+def load_tri_settings(path: Path | None = None) -> TriSettings:
+    """Load and validate TRI release-query settings.
+
+    Args:
+        path: Settings file; defaults to the ``settings.toml`` shipped in ``config/``.
+
+    Returns:
+        The validated settings (delay, timeout and backoff in seconds).
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If a key is missing or invalid; the message names the key.
+    """
+    section = _section(_read_toml(path), "tri")
+    return TriSettings(
+        base_url=_require_str(section, "base_url", "tri"),
+        release_path=_tri_template(section),
+        media=_names(section, "media", "tri", allow_empty=False),
+        page_size=_require_int(section, "page_size", minimum=1, name="tri"),
+        max_pages=_require_int(section, "max_pages", minimum=1, name="tri"),
+        delay_seconds=_require_number(section, "delay_seconds", minimum=0, name="tri"),
+        timeout_seconds=_require_number(section, "timeout_seconds", minimum=0.001, name="tri"),
+        max_retries=_require_int(section, "max_retries", minimum=0, name="tri"),
+        backoff_seconds=_require_number(section, "backoff_seconds", minimum=0, name="tri"),
+        east_longitude_states=_names(section, "east_longitude_states", "tri", allow_empty=True),
+        facility_id_fields=_names(section, "facility_id_fields", "tri", allow_empty=False),
+        fields=_parse_tri_fields(section),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_tri_settings() -> TriSettings:
+    """Return the cached TRI settings from the default file."""
+    return load_tri_settings()
+
+
+def load_emissions_settings(path: Path | None = None) -> EmissionsSettings:
+    """Load and validate emission-rate assumptions.
+
+    Args:
+        path: Settings file; defaults to the ``settings.toml`` shipped in ``config/``.
+
+    Returns:
+        The validated settings.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If a key is missing or invalid, including operating hours that are not
+            in (0, 8784] hours per year; the message names the key.
+    """
+    section = _section(_read_toml(path), "emissions")
+    hours = _require_number(section, "operating_hours_per_year", minimum=0, name="emissions")
+    if not 0 < hours <= _MAX_HOURS_PER_YEAR:
+        raise ValueError(
+            f"emissions.operating_hours_per_year must be > 0 and <= {_MAX_HOURS_PER_YEAR}"
+        )
+    return EmissionsSettings(operating_hours_per_year=hours)
+
+
+@lru_cache(maxsize=1)
+def get_emissions_settings() -> EmissionsSettings:
+    """Return the cached emissions settings from the default file."""
+    return load_emissions_settings()

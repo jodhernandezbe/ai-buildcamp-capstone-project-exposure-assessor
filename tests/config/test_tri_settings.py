@@ -1,0 +1,168 @@
+"""Tests for the TRI and emissions settings loaders."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from commons.units import convert
+from config.loader import (
+    TRI_FIELD_KEYS,
+    TriSettings,
+    get_unit_settings,
+    load_emissions_settings,
+    load_tri_settings,
+)
+
+TRI = """
+[tri]
+base_url = "https://tri.test/api/"
+release_path = "/r/{casrn}/{medium}/{start}:{end}"
+media = ["AIR STACK", " AIR FUGITIVE "]
+page_size = 50
+max_pages = 3
+delay_seconds = 0
+timeout_seconds = 4
+max_retries = 1
+backoff_seconds = 0.5
+east_longitude_states = ["GU"]
+facility_id_fields = ["reg", "frs"]
+
+[tri.fields]
+medium = "m"
+year = "y"
+quantity = "q"
+unit = "u"
+facility_name = "n"
+latitude = "la"
+longitude = "lo"
+address = "a"
+city = "c"
+county = "co"
+state = "s"
+zip_code = "z"
+"""
+
+
+def _write(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "settings.toml"
+    path.write_text(text)
+    return path
+
+
+def _tri(tmp_path: Path, text: str = TRI) -> TriSettings:
+    return load_tri_settings(_write(tmp_path, text))
+
+
+def test_tri_explicit_values(tmp_path: Path) -> None:
+    settings = _tri(tmp_path)
+    assert settings.release_url == "https://tri.test/api/r/{casrn}/{medium}/{start}:{end}"
+    assert settings.media == ("AIR STACK", "AIR FUGITIVE")
+    assert (settings.page_size, settings.max_pages, settings.max_retries) == (50, 3, 1)
+    assert (settings.delay_seconds, settings.timeout_seconds, settings.backoff_seconds) == (
+        0,
+        4,
+        0.5,
+    )
+    assert settings.east_longitude_states == ("GU",)
+    assert settings.facility_id_fields == ("reg", "frs")
+    assert settings.fields["quantity"] == "q"
+
+
+def test_tri_default_file_loads() -> None:
+    settings = load_tri_settings()
+    assert settings.media == ("AIR STACK",)
+    assert set(settings.fields) == set(TRI_FIELD_KEYS)
+    assert settings.facility_id_fields[0] == "epa_registry_id"
+    assert settings.page_size > 0
+    assert settings.max_pages > 0
+    for slot in ("{casrn}", "{medium}", "{start}", "{end}"):
+        assert slot in settings.release_url
+
+
+def test_tri_fields_are_read_only(tmp_path: Path) -> None:
+    with pytest.raises(TypeError):
+        _tri(tmp_path).fields["quantity"] = "x"  # type: ignore[index]
+
+
+@pytest.mark.parametrize("slot", ["{casrn}", "{medium}", "{start}", "{end}"])
+def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
+    with pytest.raises(ValueError, match="tri.release_path"):
+        _tri(tmp_path, TRI.replace(slot, "x", 1))
+
+
+@pytest.mark.parametrize(
+    ("line", "bad", "key"),
+    [
+        ("page_size = 50", "page_size = 0", "page_size"),
+        ("page_size = 50", "page_size = 1.5", "page_size"),
+        ("page_size = 50", "page_size = true", "page_size"),
+        ("max_pages = 3", "max_pages = 0", "max_pages"),
+        ("max_retries = 1", "max_retries = -1", "max_retries"),
+        ("delay_seconds = 0", "delay_seconds = -1", "delay_seconds"),
+        ("timeout_seconds = 4", "timeout_seconds = 0", "timeout_seconds"),
+        ("backoff_seconds = 0.5", "backoff_seconds = -0.1", "backoff_seconds"),
+        ("backoff_seconds = 0.5", 'backoff_seconds = "x"', "backoff_seconds"),
+        ('media = ["AIR STACK", " AIR FUGITIVE "]', "media = []", "media"),
+        ('media = ["AIR STACK", " AIR FUGITIVE "]', 'media = [""]', "media"),
+        ('facility_id_fields = ["reg", "frs"]', "facility_id_fields = []", "facility_id_fields"),
+        ('east_longitude_states = ["GU"]', "east_longitude_states = [1]", "east_longitude_states"),
+        ('base_url = "https://tri.test/api/"', 'base_url = ""', "base_url"),
+    ],
+)
+def test_tri_invalid_values_name_the_key(tmp_path: Path, line: str, bad: str, key: str) -> None:
+    with pytest.raises(ValueError, match=f"tri.{key}"):
+        _tri(tmp_path, TRI.replace(line, bad))
+
+
+def test_tri_no_east_states_is_allowed(tmp_path: Path) -> None:
+    text = TRI.replace('east_longitude_states = ["GU"]', "east_longitude_states = []")
+    assert _tri(tmp_path, text).east_longitude_states == ()
+
+
+def test_tri_field_missing_and_table_missing(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="tri.fields.longitude"):
+        _tri(tmp_path, TRI.replace('longitude = "lo"\n', ""))
+    with pytest.raises(ValueError, match="tri.fields"):
+        _tri(tmp_path, TRI.split("[tri.fields]")[0])
+
+
+def test_tri_section_missing_and_file_missing(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="tri section"):
+        _tri(tmp_path, "[other]\nx = 1\n")
+    with pytest.raises(FileNotFoundError):
+        load_tri_settings(tmp_path / "nope.toml")
+
+
+def _emissions(tmp_path: Path, value: str) -> float:
+    path = _write(tmp_path, f"[emissions]\noperating_hours_per_year = {value}\n")
+    return load_emissions_settings(path).operating_hours_per_year
+
+
+def test_emissions_default_is_continuous_operation() -> None:
+    assert load_emissions_settings().operating_hours_per_year == 8760
+
+
+def test_emissions_explicit_value(tmp_path: Path) -> None:
+    assert _emissions(tmp_path, "2000") == 2000.0
+    assert _emissions(tmp_path, "8784") == 8784.0
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "8785", "true", '"8760"'])
+def test_emissions_invalid_hours(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ValueError, match="emissions.operating_hours_per_year"):
+        _emissions(tmp_path, value)
+
+
+def test_emissions_section_missing(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="emissions section"):
+        load_emissions_settings(_write(tmp_path, "[other]\nx = 1\n"))
+    with pytest.raises(ValueError, match="operating_hours_per_year"):
+        load_emissions_settings(_write(tmp_path, "[emissions]\n"))
+
+
+def test_pounds_alias_converts_to_grams() -> None:
+    aliases = get_unit_settings().aliases
+    assert aliases["Pounds"] == "pound"
+    assert convert(1.0, "Pounds", "g", aliases) == pytest.approx(453.59237)

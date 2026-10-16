@@ -53,11 +53,23 @@ class ToxicityDetail(TypedDict):
 
 
 class EmissionRecord(TypedDict):
-    """One facility's reported emissions of a chemical."""
+    """One facility's most recent reported release of a chemical to one environmental medium."""
 
-    frs_id: str
-    facility_name: str
-    emission_rate: float  # g/s
+    frs_id: str  # EPA Facility Registry Service identifier
+    facility_name: str | None
+    environmental_medium: str  # TRI medium, e.g. "AIR STACK"
+    reporting_year: int  # latest year the facility reported for this medium
+    total_release: float  # annual quantity, in `unit`, exactly as reported
+    unit: str  # unit of `total_release` as reported, e.g. "Pounds"
+    emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
+    operating_hours_per_year: float  # h/yr assumed for `emission_rate`
+    latitude: float  # decimal degrees, positive north
+    longitude: float  # decimal degrees, negative west of Greenwich
+    address: str | None  # street address
+    city: str | None
+    county: str | None
+    state: str | None  # postal abbreviation, e.g. "TX"
+    zip_code: str | None
 
 
 class StackParameters(TypedDict):

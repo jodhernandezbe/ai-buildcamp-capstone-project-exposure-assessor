@@ -17,7 +17,7 @@ import pytest
 from tools.informatics.properties import fetch_chemical_properties
 from tools.schemas import ChemicalProperties
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.comptox]
 
 Range = tuple[float, float]
 # Target units of the tool: mg/(kg*day), mg/m^3, (mg/(kg*day))^-1, (ug/m^3)^-1.

@@ -1,10 +1,10 @@
-"""Tests for tools.informatics.helpers.cas."""
+"""Tests for commons.cas."""
 
 from __future__ import annotations
 
 import pytest
 
-from tools.informatics.helpers.cas import format_cas
+from commons.cas import format_cas
 
 
 @pytest.mark.parametrize(

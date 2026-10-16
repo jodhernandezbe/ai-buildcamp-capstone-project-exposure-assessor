@@ -54,7 +54,7 @@ The code is split into four packages with one-way dependencies: `agent` -> `tool
       exposure/metrics.py         get_population_receptors, calculate_exposure_metrics
     tests/                   pytest suite, mirrors the package layout
 
-The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. `fetch_chemical_properties` is implemented (CAS -> SMILES -> CompTox, with Pint unit conversion to fixed units); the other tools are stubs that raise `NotImplementedError`.
+The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. `fetch_chemical_properties` is implemented (CAS -> SMILES -> CompTox, with Pint unit conversion to fixed units), and so is `query_emissions_inventory` (CAS -> EPA TRI facilities with their latest reported stack-air release, location and an average emission rate in g/s at 8760 operating hours per year, configurable in `config/settings.toml`); the other tools are stubs that raise `NotImplementedError`.
 
 ## Swapping the LLM provider
 
@@ -78,7 +78,7 @@ from langchain_google_vertexai import ChatVertexAI
 
 agent = build_agent(ChatVertexAI(model="gemini-2.5-pro"))
 
-agent.invoke({"messages": [("user", "Assess benzene (71-43-2) emissions for 2022")]})
+agent.invoke({"messages": [("user", "Assess benzene (71-43-2) emissions")]})
 ```
 
 Install the matching integration package yourself (e.g. `uv add langchain-anthropic`); none is a hard dependency.

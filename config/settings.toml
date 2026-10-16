@@ -77,6 +77,53 @@ routes = ["inhalation"]
 prefer = "highest"
 target_unit = "1/(ug/m^3)"
 
+# EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility and
+# release tables and filters on CAS number and environmental medium (the medium segment has
+# no "/equals/": that form returns nothing). {casrn} is the hyphenated CAS number, {medium} the
+# URL-encoded medium and {start}:{end} an inclusive row range, so a page of N rows is
+# start .. start+N-1. Rows are not ordered by year and the end of data is signalled by a page
+# shorter than page_size (probing past the end hangs), so the whole result is read.
+[tri]
+base_url = "https://data.epa.gov/efservice"
+release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/cas_registry_number/{casrn}/environmental_medium/{medium}/rows/{start}:{end}/JSON"
+# Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
+media = ["AIR STACK"]
+# A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
+page_size = 1000
+max_pages = 40
+# Seconds to wait before each request, per-request timeout, and retries on HTTP 429/5xx or
+# timeouts with a wait of backoff_seconds doubling each time (Retry-After is honoured).
+delay_seconds = 1.0
+timeout_seconds = 60.0
+max_retries = 2
+backoff_seconds = 5.0
+# TRI sends longitudes as positive numbers for the western hemisphere; these states and
+# territories lie east of Greenwich, so their longitudes stay positive.
+east_longitude_states = ["GU", "MP"]
+# FRS ID: first of these columns that is set. epa_registry_id is the FRS ID; frs_id is
+# empty in the rows seen so far.
+facility_id_fields = ["epa_registry_id", "frs_id"]
+
+# Result key -> TRI column.
+[tri.fields]
+medium = "environmental_medium"
+year = "reporting_year"
+quantity = "total_release"
+unit = "unit_of_measure"
+facility_name = "facility_name"
+latitude = "pref_latitude"
+longitude = "pref_longitude"
+address = "street_address"
+city = "city_name"
+county = "county_name"
+state = "state_abbr"
+zip_code = "zip_code"
+
+# Operating hours per year used to turn an annual release into an average rate. 8760 is
+# continuous operation (24 h x 365 d), a conservative screening assumption.
+[emissions]
+operating_hours_per_year = 8760
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]
@@ -87,3 +134,4 @@ target_unit = "1/(ug/m^3)"
 "(ug/m3)-1" = "1/(ug/m^3)"
 "(mg/m3)-1" = "1/(mg/m^3)"
 "(mg/L)-1" = "1/(mg/L)"
+"Pounds" = "pound"

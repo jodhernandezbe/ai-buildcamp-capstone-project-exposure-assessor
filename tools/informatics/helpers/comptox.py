@@ -13,8 +13,8 @@ from urllib.parse import quote
 
 import httpx
 
+from commons.cas import format_cas
 from config.loader import ComptoxSettings, ToxicityValueSpec, get_comptox_settings
-from tools.informatics.helpers.cas import format_cas
 from tools.schemas import PropertyValue, ToxicityValue
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-"""Smoke-test setup: load ``.env`` and skip when the CompTox key is missing."""
+"""Smoke-test setup: load ``.env`` and skip CompTox tests when the CompTox key is missing."""
 
 from __future__ import annotations
 
@@ -17,5 +17,5 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         return
     skip = pytest.mark.skip(reason=f"{variable} is not set")
     for item in items:
-        if "smoke" in item.keywords:
+        if "comptox" in item.keywords:
             item.add_marker(skip)
