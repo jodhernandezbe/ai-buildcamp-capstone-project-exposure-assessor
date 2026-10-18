@@ -9,8 +9,8 @@ from config.efservice import get_efservice_settings, get_frs_settings
 from config.loader import get_unit_settings
 from config.stack import get_stack_settings
 from tools.emissions.helpers.efservice import EfserviceClient
-from tools.emissions.helpers.nei_lookup import nei_stack_result
-from tools.emissions.helpers.pstk import scc_stack_parameters
+from tools.emissions.helpers.stack.nei_lookup import nei_stack_result
+from tools.emissions.helpers.stack.pstk import scc_stack_parameters
 from tools.schemas import NeiStackResult, StackParameters
 
 

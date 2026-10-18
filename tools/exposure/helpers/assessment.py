@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from config.exposure import STABILITY_CLASSES, ExposureSettings
-from models.exposure import (
+from models.exposure.inhalation import (
     annual_from_one_hour,
     cancer_risk_from_iur,
     doses_by_age_band,
@@ -13,7 +13,7 @@ from models.exposure import (
     hazard_quotient_from_rfc,
     highest_dose_band,
 )
-from models.screening import Atmosphere, ScreeningResult, Stack, screening_maximum
+from models.transport.screening import Atmosphere, ScreeningResult, Stack, screening_maximum
 from tools.exposure.helpers.inputs import is_number
 from tools.schemas import (
     ExposureMetrics,

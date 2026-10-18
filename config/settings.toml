@@ -381,7 +381,7 @@ receptor_height_m = 0.0
 # 24 h 0.4, annual 0.08).
 annual_average_factor = 0.08
 # SCREEN3 automated distance array, truncated at 10 km because the project's Briggs rural
-# dispersion coefficients (models/dispersion.py) are valid for 100 m to 10 km (EPA's array
+# dispersion coefficients (models/transport/dispersion.py) are valid for 100 m to 10 km (EPA's array
 # continues in 5 km and 10 km steps to 50 km). Distances in meters; `end` is inclusive.
 min_distance_m = 100.0
 distance_segments = [

@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from config.exposure import load_exposure_settings
-from models.screening import Atmosphere, ScreeningResult, Stack, screening_maximum
+from models.transport.screening import Atmosphere, ScreeningResult, Stack, screening_maximum
 from tools.exposure.helpers.assessment import (
     DEFAULT_SOURCE,
     _standing_notes,  # pyright: ignore[reportPrivateUsage]

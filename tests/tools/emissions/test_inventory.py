@@ -15,7 +15,7 @@ from tools.emissions import inventory
 from tools.emissions.inventory import query_emissions_inventory
 from tools.registry import get_all_tools
 
-ROWS = json.loads((Path(__file__).parent / "helpers" / "tri_rows.json").read_text())
+ROWS = json.loads((Path(__file__).parent / "helpers" / "inventory" / "tri_rows.json").read_text())
 
 
 @pytest.fixture

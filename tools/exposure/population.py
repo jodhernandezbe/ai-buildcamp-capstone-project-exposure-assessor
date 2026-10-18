@@ -8,7 +8,7 @@ import httpx
 from langchain_core.tools import tool
 
 from config.population import PopulationSettings, get_population_settings
-from tools.exposure.helpers.receptors import population_around
+from tools.exposure.helpers.population.receptors import population_around
 from tools.http import RetryingClient
 from tools.schemas import Population
 

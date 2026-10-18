@@ -11,7 +11,7 @@ import pytest
 
 from config.efservice import get_efservice_settings, get_frs_settings
 from tools.emissions.helpers.efservice import EfserviceClient
-from tools.emissions.helpers.frs import eis_ids_for_frs
+from tools.emissions.helpers.stack.frs import eis_ids_for_frs
 from tools.emissions.stack import fetch_stack_parameters_from_nei
 
 pytestmark = pytest.mark.smoke

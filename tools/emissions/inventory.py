@@ -11,8 +11,8 @@ from commons.cas import format_cas
 from config.efservice import get_efservice_settings
 from config.loader import get_emissions_settings, get_tri_settings, get_unit_settings
 from tools.emissions.helpers.efservice import EfserviceClient
-from tools.emissions.helpers.lookup import lookup_emissions
-from tools.emissions.helpers.tri import TriFetcher
+from tools.emissions.helpers.inventory.lookup import lookup_emissions
+from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
 logger = logging.getLogger(__name__)

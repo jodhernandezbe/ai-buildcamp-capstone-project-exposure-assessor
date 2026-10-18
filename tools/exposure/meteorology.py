@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 
 from config.loader import get_unit_settings
 from config.meteorology import get_meteorology_settings
-from tools.exposure.helpers.conditions import meteorology_for
+from tools.exposure.helpers.meteorology.conditions import meteorology_for
 from tools.http import RetryingClient
 from tools.schemas import Meteorology
 
