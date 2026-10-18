@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from models.risk import calculate_cancer_risk, calculate_emission_rate, calculate_hazard_quotient
+from models.risk import (
+    calculate_cancer_risk,
+    calculate_emission_rate,
+    calculate_hazard_quotient,
+)
 
 
 def test_emission_rate_continuous() -> None:

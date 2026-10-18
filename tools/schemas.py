@@ -138,18 +138,44 @@ class Population(TypedDict):
 
 
 class Toxicity(TypedDict):
-    """Inhalation toxicity values used for risk characterization."""
+    """Inhalation toxicity values used for risk characterization.
 
-    rfc: float  # mg/m3
-    iur: float  # (ug/m3)^-1
+    A value is None when it could not be obtained; the matching risk result is then None.
+    """
+
+    rfc: float | None  # mg/m3, inhalation reference concentration
+    iur: float | None  # (ug/m3)^-1, inhalation unit risk
 
 
-class ExposureMetrics(TypedDict):
-    """Screening-level exposure results."""
+class ScenarioResult(TypedDict):
+    """The screening result for one set of weather conditions.
 
-    max_concentration: float  # ug/m3, maximum modeled ambient concentration
-    add: float  # mg/kg-day, average daily dose
-    hq: float  # unitless hazard quotient
+    Every number is None when it could not be computed; the result's warnings say why.
+    """
+
+    max_concentration: float | None  # ug/m3, annual-average ground-level maximum
+    max_concentration_1h: float | None  # ug/m3, 1-hour maximum before the annual factor
+    distance_m: float | None  # m, downwind distance of the maximum
+    stability_class: str | None  # Pasquill-Gifford class at the maximum
+    wind_speed: float | None  # m/s at 10 m, at the maximum
+    effective_release_height: float | None  # m, stack height plus plume rise
+    hq: float | None  # unitless hazard quotient (annual exposure concentration / RfC)
+    cancer_risk: float | None  # unitless lifetime excess cancer risk (exposure concentration x IUR)
+
+
+class ExposureMetrics(ScenarioResult):
+    """Screening-level exposure results for one stack.
+
+    The fields of ``ScenarioResult`` are the EPA SCREEN3-style worst case over a grid of
+    weather and distances; ``representative`` is the same for the weather of the meteorology
+    input. ``add`` is the highest dose among the age bands present.
+    """
+
+    add: float | None  # mg/(kg*day), average daily dose of the most exposed age band
+    add_band: str | None  # age band with the highest dose
+    add_by_band: dict[str, float]  # age band present -> dose, mg/(kg*day)
+    representative: ScenarioResult  # the result for the representative weather
+    warnings: list[str]  # null results, defaults used and the method's limits
 
 
 class NeiStackResult(TypedDict):

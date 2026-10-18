@@ -9,7 +9,11 @@ from types import MappingProxyType
 
 from config.stack import PstkSettings, StackSettings
 from tools.digits import digit_string
-from tools.emissions.helpers.stack_values import StackRow, check_units_convertible, stack_values
+from tools.emissions.helpers.stack_values import (
+    StackRow,
+    check_units_convertible,
+    stack_values,
+)
 from tools.schemas import StackParameters, StackSource
 
 GLOBAL_DEFAULT: StackSource = "AirToxScreen global default"

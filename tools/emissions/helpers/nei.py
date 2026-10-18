@@ -10,7 +10,11 @@ from pathlib import Path
 from types import MappingProxyType
 
 from config.stack import STACK_QUANTITIES, NeiSettings, StackSettings
-from tools.emissions.helpers.stack_values import StackRow, check_units_convertible, stack_values
+from tools.emissions.helpers.stack_values import (
+    StackRow,
+    check_units_convertible,
+    stack_values,
+)
 
 Stack = Mapping[str, float]
 _Key = tuple[object, ...]

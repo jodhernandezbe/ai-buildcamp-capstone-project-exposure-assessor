@@ -223,9 +223,13 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
     """Fetch physical-chemical properties and toxicity values for a chemical.
 
     Purpose:
-        Use this first when assessing a chemical. The values it returns feed the
-        dispersion and risk steps (`calculate_exposure_metrics`). Every value is
-        converted to the fixed unit listed below, so results can be used directly.
+        Use this to learn what a chemical is and how hazardous it is to breathe or ingest:
+        its toxicity benchmarks (`rfc`, `iur`) are what an exposure result is judged
+        against, so without them a concentration can be computed but not interpreted. A
+        benchmark that comes back null means no usable value exists in the source; the
+        matching risk cannot be computed and that must be reported, not replaced by a
+        guess. Every value is converted to the fixed unit listed below, so results can be
+        used directly (pass `rfc` and `iur` to `calculate_exposure_metrics` as they are).
 
     Args:
         cas_number: CAS registry number, e.g. "71-43-2" for benzene (hyphens optional).

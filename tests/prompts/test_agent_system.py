@@ -1,0 +1,40 @@
+"""Tests for the agent system prompt: it teaches the assessment, it does not list tools."""
+
+from __future__ import annotations
+
+import re
+
+from prompts.registry import load_prompt
+from tools.registry import get_all_tools
+
+PROMPT = load_prompt("agent_system")
+TAGS = ("role", "context", "instructions", "output_format")
+
+
+def test_has_the_four_xml_sections_in_order() -> None:
+    positions = [PROMPT.index(f"<{tag}>") for tag in TAGS]
+    assert positions == sorted(positions)
+    assert all(f"</{tag}>" in PROMPT for tag in TAGS)
+
+
+def test_names_no_tool() -> None:
+    """Tools are chosen from their descriptions, so a new tool never needs a prompt edit."""
+    named = [t.name for t in get_all_tools() if t.name in PROMPT]
+    assert named == []
+
+
+def test_names_nothing_that_looks_like_a_tool() -> None:
+    """Catches a removed tool still being named: no snake_case call-like identifiers."""
+    identifiers = re.findall(r"`([a-z]+(?:_[a-z0-9]+)+)`", PROMPT)
+    allowed = {"source"}
+    assert [i for i in identifiers if i not in allowed] == []
+
+
+def test_prescribes_no_call_order() -> None:
+    assert not re.search(r"(?m)^\s*\d+\.\s", PROMPT)
+    assert "first call" not in PROMPT.lower()
+
+
+def test_requires_visible_quality_signals_and_limits() -> None:
+    for text in ("source", "warnings", "Limitations", "screening default", "never invent"):
+        assert text.lower() in PROMPT.lower()

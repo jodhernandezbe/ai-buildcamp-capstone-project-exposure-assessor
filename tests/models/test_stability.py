@@ -1,4 +1,4 @@
-"""Tests for models.stability against EPA-454/R-99-005 Tables 6-7 (SRDT) and 6-4 (Turner)."""
+"""Tests for models.stability against EPA-454/R-99-005 Tables 6-7 (SRDT) and 6-4."""
 
 from __future__ import annotations
 

@@ -12,7 +12,11 @@ import httpx
 import pytest
 
 from config.population import load_population_settings
-from tools.exposure.helpers.receptors import DEFAULT_SOURCE, population_around, screening_default
+from tools.exposure.helpers.receptors import (
+    DEFAULT_SOURCE,
+    population_around,
+    screening_default,
+)
 from tools.http import RetryingClient
 from tools.schemas import Population
 

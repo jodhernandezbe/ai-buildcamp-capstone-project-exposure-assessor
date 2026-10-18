@@ -35,7 +35,12 @@ def query_emissions_inventory(cas_number: str) -> list[EmissionRecord]:
         releases are not. Each result carries the facility's location (latitude, longitude,
         address), its `frs_id` identifies the facility for `fetch_stack_parameters_from_nei`,
         and `emission_rate` feeds `calculate_exposure_metrics`. A widely reported chemical
-        can take several minutes because TRI is read in many pages.
+        can take several minutes because TRI is read in many pages and may return hundreds
+        of facilities, so decide which to assess rather than assessing all. TRI says nothing
+        about a facility's industry or process (those are needed only for generic stack
+        defaults and must come from the user or be left unknown). An empty list means no
+        stack air release was found for this CAS number in TRI, which is not evidence that
+        nobody emits it: TRI covers only facilities above its reporting thresholds.
 
     Args:
         cas_number: CAS registry number, e.g. "50-00-0" (hyphens optional).

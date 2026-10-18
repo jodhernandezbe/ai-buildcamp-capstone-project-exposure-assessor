@@ -1,0 +1,82 @@
+"""The agent decides from tool descriptions, so each must carry its own decision guidance.
+
+The system prompt names no tool; these tests pin the phrases that make each description
+sufficient on its own (when it applies, what a null or a label means, what to do instead).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from tools.registry import get_all_tools
+
+DESCRIPTIONS = {t.name: " ".join(t.description.split()) for t in get_all_tools()}
+
+REQUIRED = {
+    "fetch_chemical_properties": (
+        "toxicity benchmarks",
+        "null means no usable value",
+        "must be reported, not replaced by a guess",
+    ),
+    "query_emissions_inventory": (
+        "decide which to assess",
+        "says nothing about a facility's industry or process",
+        "not evidence that nobody emits it",
+        "location",
+    ),
+    "lookup_scc_process_description": (
+        "not an official NAICS-to-SCC crosswalk",
+        "judge them",
+        "empty `matches` list",
+    ),
+    "fetch_stack_parameters_from_nei": (
+        "first choice",
+        "EVERY candidate",
+        "report the range",
+        "call `fetch_stack_parameters_from_scc` instead",
+    ),
+    "fetch_stack_parameters_from_scc": (
+        "ONLY after `fetch_stack_parameters_from_nei` returned no values",
+        "not measurements of the facility's own stack",
+        "without `scc_code`",
+        "AirToxScreen global default",
+    ),
+    "get_meteorological_boundary": (
+        "annual representatives, not worst-case",
+        "screening default",
+        "say so to the user",
+        "10 m, not at stack height",
+    ),
+    "get_population_receptors": (
+        "residents (not workers or visitors)",
+        "screening default",
+        "say so to the user",
+        "United States only",
+    ),
+    "calculate_exposure_metrics": (
+        "ONE stack",
+        "once per stack",
+        "A null number means it could not be computed",
+        "must be reported, not filled in",
+        "may fall where nobody lives",
+    ),
+}
+
+
+def test_every_registered_tool_is_audited() -> None:
+    assert set(REQUIRED) == set(DESCRIPTIONS)
+
+
+@pytest.mark.parametrize("name", sorted(REQUIRED))
+def test_description_carries_its_decision_guidance(name: str) -> None:
+    missing = [phrase for phrase in REQUIRED[name] if phrase not in DESCRIPTIONS[name]]
+    assert missing == []
+
+
+@pytest.mark.parametrize("name", sorted(DESCRIPTIONS))
+def test_no_description_orders_the_workflow(name: str) -> None:
+    """A tool says when it applies; it does not claim a position in a fixed sequence."""
+    text = DESCRIPTIONS[name].lower()
+    assert "use this first" not in text
+    assert "final step" not in text
+    assert "first step" not in text

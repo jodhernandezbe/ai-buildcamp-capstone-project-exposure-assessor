@@ -44,7 +44,9 @@ def lookup_scc_process_description(naics_description: str) -> SccLookupResult:
         user and to pick an SCC for `fetch_stack_parameters_from_scc`. Matches come from a
         semantic search over EPA's SCC list (active point-source codes only); they are
         candidates ranked by similarity, not an official NAICS-to-SCC crosswalk, so judge
-        them against what is known about the facility.
+        them against what is known about the facility. An empty `matches` list (see
+        `warnings`) means no process could be suggested; it does not mean the facility has
+        none.
 
     Args:
         naics_description: NAICS industry title or description, e.g. "Petroleum Refineries".
