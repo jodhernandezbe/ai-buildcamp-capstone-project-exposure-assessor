@@ -263,6 +263,63 @@ level_three = "scc level three"
 level_four = "scc level four"
 sector = "sector"
 
+# Meteorology: one reporting year of hourly reanalysis from the Open-Meteo historical archive
+# (no API key). Free tier terms: non-commercial use only, fewer than 10,000 calls a day, 5,000 an
+# hour and 600 a minute, data under CC BY 4.0 (attribution required).
+# `model` pins the reanalysis: "era5" is 0.25 degrees (about 25 km), hourly from 1940, published
+# with about a 5-day delay; the API default ("best_match") mixes products, so it is not used.
+# A year can be requested once its last day is `archive_lag_days` in the past.
+[meteorology]
+base_url = "https://archive-api.open-meteo.com"
+archive_path = "/v1/archive"
+model = "era5"
+wind_speed_unit = "ms"
+timezone = "UTC"
+coordinate_decimals = 4
+delay_seconds = 0.5
+timeout_seconds = 60.0
+max_retries = 2
+backoff_seconds = 5.0
+default_year = 2022
+first_year = 1940
+archive_lag_days = 7
+# The annual mean wind speed is not reported below this (m/s). A choice kept from the original
+# draft; AERSCREEN's own default minimum is 0.5 m/s.
+minimum_wind_speed = 1.0
+# Width of the wind direction sectors used for the prevailing direction (degrees; divides 360).
+sector_width = 10.0
+
+# Quantity -> archive variable name.
+[meteorology.variables]
+temperature = "temperature_2m"
+wind_speed = "wind_speed_10m"
+wind_direction = "wind_direction_10m"
+solar_radiation = "shortwave_radiation"
+cloud_cover = "cloud_cover"
+low_cloud_cover = "cloud_cover_low"
+is_day = "is_day"
+
+# Quantity -> unit the archive must report (checked on every response); `temperature` is
+# converted from it to K with Pint.
+[meteorology.units]
+temperature = "°C"
+wind_speed = "m/s"
+wind_direction = "°"
+solar_radiation = "W/m²"
+cloud_cover = "%"
+low_cloud_cover = "%"
+is_day = ""
+
+# Returned, labelled "screening default", when no usable data are available. 293 K is the
+# ambient temperature SCREEN3's user's guide says to use when it is not known; no EPA source was
+# found for a single default wind speed, direction and class, so those are assumptions (neutral
+# class D, a light wind, a westerly direction).
+[meteorology.screening_default]
+wind_speed = 2.5
+wind_direction = 270.0
+stability_class = "D"
+ambient_temperature = 293.0
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]

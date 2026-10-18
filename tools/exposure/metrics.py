@@ -47,9 +47,11 @@ def calculate_exposure_metrics(
 
     Args:
         emission_rate: Source emission rate, g/s (from `query_emissions_inventory`).
-        stack_params: Output of `fetch_stack_parameters_from_nei` or, when NEI has no
-            values, `fetch_stack_parameters_from_scc`.
-        meteorology: Output of `get_meteorological_boundary`.
+        stack_params: One stack: a single entry of `candidates` from
+            `fetch_stack_parameters_from_nei` (call this tool once per candidate) or, when
+            NEI has none, the output of `fetch_stack_parameters_from_scc`.
+        meteorology: Output of `get_meteorological_boundary` (annual representative wind
+            speed, direction, stability class and ambient temperature, K).
         population: Output of `get_population_receptors`.
         toxicity: Dict with `rfc` (mg/m3) and `iur` (per ug/m3), taken from
             `fetch_chemical_properties`.

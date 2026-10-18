@@ -111,11 +111,18 @@ class SccLookupResult(TypedDict):
 
 
 class Meteorology(TypedDict):
-    """Representative boundary-layer conditions at a point."""
+    """Representative boundary-layer conditions at a point, for one year.
 
-    wind_speed: float  # m/s
+    The values are annual representatives (not worst-case conditions) from a gridded
+    reanalysis; ``source`` says "screening default" when no data could be used.
+    """
+
+    wind_speed: float  # m/s, annual mean at 10 m (not below the configured minimum)
     wind_direction: float  # degrees clockwise from north, direction wind blows from
     stability_class: str  # Pasquill-Gifford class "A" (unstable) to "F" (stable)
+    ambient_temperature: float  # K, annual mean
+    source: str  # data source and year, or "screening default"
+    warnings: list[str]  # hours excluded, adjustments made, or why the default was used
 
 
 class Population(TypedDict):
