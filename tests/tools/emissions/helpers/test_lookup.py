@@ -11,19 +11,24 @@ from pathlib import Path
 import httpx
 import pytest
 
+from config.efservice import load_efservice_settings
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
+from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.lookup import lookup_emissions
 from tools.emissions.helpers.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
 ROWS = json.loads(Path(__file__).with_name("tri_rows.json").read_text())
-SETTINGS = replace(load_tri_settings(), page_size=4, max_pages=3, delay_seconds=0.0)
+SETTINGS = replace(load_tri_settings(), page_size=4, max_pages=3)
 EMISSIONS = EmissionsSettings(8760.0)
 CAS = "50-00-0"
 
 
 def _fetcher(transport: httpx.MockTransport, settings: TriSettings = SETTINGS) -> TriFetcher:
-    return TriFetcher(settings, httpx.Client(transport=transport), lambda _seconds: None)
+    client = EfserviceClient(
+        load_efservice_settings(), httpx.Client(transport=transport), lambda _seconds: None
+    )
+    return TriFetcher(settings, client)
 
 
 def _serve(pages: Sequence[Sequence[Mapping[str, object]]]) -> httpx.MockTransport:

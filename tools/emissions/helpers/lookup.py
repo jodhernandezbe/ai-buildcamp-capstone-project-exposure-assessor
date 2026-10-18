@@ -6,8 +6,9 @@ import logging
 from collections.abc import Mapping
 
 from config.loader import EmissionsSettings, TriSettings
+from tools.emissions.helpers.efservice import EfserviceError
 from tools.emissions.helpers.reduce import LatestReports
-from tools.emissions.helpers.tri import TriFetcher, TriFetchError
+from tools.emissions.helpers.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def lookup_emissions(
                     medium,
                     tri.max_pages,
                 )
-    except TriFetchError as exc:
+    except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
         return []
     records = reducer.records(emissions, aliases)

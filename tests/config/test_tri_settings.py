@@ -17,15 +17,10 @@ from config.loader import (
 
 TRI = """
 [tri]
-base_url = "https://tri.test/api/"
 release_path = "/r/{casrn}/{medium}/{start}:{end}"
 media = ["AIR STACK", " AIR FUGITIVE "]
 page_size = 50
 max_pages = 3
-delay_seconds = 0
-timeout_seconds = 4
-max_retries = 1
-backoff_seconds = 0.5
 east_longitude_states = ["GU"]
 facility_id_fields = ["reg", "frs"]
 
@@ -57,14 +52,9 @@ def _tri(tmp_path: Path, text: str = TRI) -> TriSettings:
 
 def test_tri_explicit_values(tmp_path: Path) -> None:
     settings = _tri(tmp_path)
-    assert settings.release_url == "https://tri.test/api/r/{casrn}/{medium}/{start}:{end}"
+    assert settings.release_path == "/r/{casrn}/{medium}/{start}:{end}"
     assert settings.media == ("AIR STACK", "AIR FUGITIVE")
-    assert (settings.page_size, settings.max_pages, settings.max_retries) == (50, 3, 1)
-    assert (settings.delay_seconds, settings.timeout_seconds, settings.backoff_seconds) == (
-        0,
-        4,
-        0.5,
-    )
+    assert (settings.page_size, settings.max_pages) == (50, 3)
     assert settings.east_longitude_states == ("GU",)
     assert settings.facility_id_fields == ("reg", "frs")
     assert settings.fields["quantity"] == "q"
@@ -78,7 +68,7 @@ def test_tri_default_file_loads() -> None:
     assert settings.page_size > 0
     assert settings.max_pages > 0
     for slot in ("{casrn}", "{medium}", "{start}", "{end}"):
-        assert slot in settings.release_url
+        assert slot in settings.release_path
 
 
 def test_tri_fields_are_read_only(tmp_path: Path) -> None:
@@ -99,16 +89,10 @@ def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
         ("page_size = 50", "page_size = 1.5", "page_size"),
         ("page_size = 50", "page_size = true", "page_size"),
         ("max_pages = 3", "max_pages = 0", "max_pages"),
-        ("max_retries = 1", "max_retries = -1", "max_retries"),
-        ("delay_seconds = 0", "delay_seconds = -1", "delay_seconds"),
-        ("timeout_seconds = 4", "timeout_seconds = 0", "timeout_seconds"),
-        ("backoff_seconds = 0.5", "backoff_seconds = -0.1", "backoff_seconds"),
-        ("backoff_seconds = 0.5", 'backoff_seconds = "x"', "backoff_seconds"),
         ('media = ["AIR STACK", " AIR FUGITIVE "]', "media = []", "media"),
         ('media = ["AIR STACK", " AIR FUGITIVE "]', 'media = [""]', "media"),
         ('facility_id_fields = ["reg", "frs"]', "facility_id_fields = []", "facility_id_fields"),
         ('east_longitude_states = ["GU"]', "east_longitude_states = [1]", "east_longitude_states"),
-        ('base_url = "https://tri.test/api/"', 'base_url = ""', "base_url"),
     ],
 )
 def test_tri_invalid_values_name_the_key(tmp_path: Path, line: str, bad: str, key: str) -> None:

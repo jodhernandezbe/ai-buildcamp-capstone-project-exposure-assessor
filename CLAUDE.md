@@ -22,7 +22,7 @@ Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass wit
 - `models/`  pure deterministic NumPy equations; physical units in every docstring.
 - `agent/`   orchestration only: graph wiring, state, model calls.
 - `tools/`   tool logic only, grouped by concern (`informatics/`, `emissions/`,
-  `geospatial/`, `exposure/`). One module per tool group.
+  `exposure/`). One module per tool group.
 - `prompts/` Markdown prompt files plus `registry.py` to load them.
 - `config/`  `settings.toml` plus typed loaders, one module per concern (`loader.py`,
   `stack.py`, `retrieval.py`; shared validators in `parsing.py`) for URLs, endpoints, timing,

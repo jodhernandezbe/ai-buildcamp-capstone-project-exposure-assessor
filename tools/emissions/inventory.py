@@ -8,7 +8,9 @@ import httpx
 from langchain_core.tools import tool
 
 from commons.cas import format_cas
+from config.efservice import get_efservice_settings
 from config.loader import get_emissions_settings, get_tri_settings, get_unit_settings
+from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.lookup import lookup_emissions
 from tools.emissions.helpers.tri import TriFetcher
 from tools.schemas import EmissionRecord
@@ -30,10 +32,10 @@ def query_emissions_inventory(cas_number: str) -> list[EmissionRecord]:
         Inventory (TRI). For each facility it uses the most recent year the facility
         reported, so different facilities may be reported for different years. Only
         stack (point-source) air releases are returned; fugitive air, water and land
-        releases are not. Each result's `frs_id` identifies the facility for
-        `get_facility_metadata` and `fetch_stack_parameters_from_nei`, and `emission_rate` feeds
-        `calculate_exposure_metrics`. A widely reported chemical can take several minutes
-        because TRI is read in many pages.
+        releases are not. Each result carries the facility's location (latitude, longitude,
+        address), its `frs_id` identifies the facility for `fetch_stack_parameters_from_nei`,
+        and `emission_rate` feeds `calculate_exposure_metrics`. A widely reported chemical
+        can take several minutes because TRI is read in many pages.
 
     Args:
         cas_number: CAS registry number, e.g. "50-00-0" (hyphens optional).
@@ -60,7 +62,7 @@ def query_emissions_inventory(cas_number: str) -> list[EmissionRecord]:
         return []
     tri = get_tri_settings()
     with _open_client() as client:
-        fetcher = TriFetcher(tri, client)
+        fetcher = TriFetcher(tri, EfserviceClient(get_efservice_settings(), client))
         return lookup_emissions(
             cas, tri, get_emissions_settings(), get_unit_settings().aliases, fetcher
         )

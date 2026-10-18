@@ -15,7 +15,6 @@ def test_all_tools_registered_with_docstrings() -> None:
         "lookup_scc_process_description",
         "fetch_stack_parameters_from_nei",
         "fetch_stack_parameters_from_scc",
-        "get_facility_metadata",
         "get_meteorological_boundary",
         "get_population_receptors",
         "calculate_exposure_metrics",

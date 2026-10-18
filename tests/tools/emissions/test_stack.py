@@ -2,25 +2,67 @@
 
 from __future__ import annotations
 
+import gzip
 from dataclasses import replace
 from pathlib import Path
 
+import httpx
 import pytest
 
-from config.stack import load_stack_settings
+from config.efservice import get_efservice_settings
+from config.stack import StackSettings, load_stack_settings
 from tools.emissions import stack
 from tools.emissions.stack import fetch_stack_parameters_from_nei, fetch_stack_parameters_from_scc
 
 
-def test_nei_schema() -> None:
-    assert fetch_stack_parameters_from_nei.name == "fetch_stack_parameters_from_nei"
-    assert set(fetch_stack_parameters_from_nei.args) == {"frs_id"}
-    assert "fetch_stack_parameters_from_scc" in fetch_stack_parameters_from_nei.description
+def test_nei_schema_and_description() -> None:
+    tool = fetch_stack_parameters_from_nei
+    assert tool.name == "fetch_stack_parameters_from_nei"
+    assert set(tool.args) == {"frs_id"}
+    description = tool.description
+    assert "fetch_stack_parameters_from_scc" in description
+    assert "first choice" in description
+    assert "EVERY candidate" in description
+    for text in ("m above ground", "m/s", "(K)", "never averaged"):
+        assert text in description
 
 
-def test_nei_stub_not_implemented() -> None:
-    with pytest.raises(NotImplementedError):
-        fetch_stack_parameters_from_nei.invoke({"frs_id": "x"})
+def _nei_settings(tmp_path: Path, rows: str) -> StackSettings:
+    (tmp_path / "nei_stacks_1.csv.gz").write_bytes(
+        gzip.compress(("eis_id,stkhgt,stkdiam,stkvel,stktemp\n" + rows).encode())
+    )
+    base = load_stack_settings()
+    return replace(base, nei=replace(base.nei, directory=tmp_path, prefix_digits=1))
+
+
+def test_nei_tool_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    frs = "999999999999"
+    body = [{"registry_id": frs, "pgm_sys_acrnm": "EIS", "pgm_sys_id": "1000001"}]
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=body))
+    monkeypatch.setattr(stack, "_open_client", lambda: httpx.Client(transport=transport))
+    ef = replace(get_efservice_settings(), delay_seconds=0.0)
+    monkeypatch.setattr(stack, "get_efservice_settings", lambda: ef)
+    nei = _nei_settings(tmp_path, "1000001,10,3,10,200\n1000001,20,3,10,200\n")
+    monkeypatch.setattr(stack, "get_stack_settings", lambda: nei)
+    result = fetch_stack_parameters_from_nei.invoke({"frs_id": frs})
+    assert result["eis_ids"] == ["1000001"]
+    assert [round(c["stack_height"] / 0.3048) for c in result["candidates"]] == [10, 20]
+    assert all(c["source"] == "NEI" for c in result["candidates"])
+
+
+@pytest.mark.parametrize("frs", ["abc", ""])
+def test_nei_tool_with_invalid_frs_id_makes_no_request(
+    frs: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request expected")
+
+    monkeypatch.setattr(
+        stack, "_open_client", lambda: httpx.Client(transport=httpx.MockTransport(fail))
+    )
+    result = fetch_stack_parameters_from_nei.invoke({"frs_id": frs})
+    assert result["candidates"] == []
+    assert "fetch_stack_parameters_from_scc" in result["warnings"][-1]
 
 
 def test_scc_schema_and_description() -> None:

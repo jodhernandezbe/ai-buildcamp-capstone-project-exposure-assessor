@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import csv
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
 from config.stack import PstkSettings, StackSettings
+from tools.emissions.helpers.digits import digit_string
 from tools.emissions.helpers.stack_values import StackRow, check_units_convertible, stack_values
 from tools.schemas import StackParameters, StackSource
 
 GLOBAL_DEFAULT: StackSource = "AirToxScreen global default"
 # ASCII digits only: in Python, \d also matches other scripts' digits, which no SCC uses.
-_SCC_PATTERN = re.compile(r"[0-9]+")
 
 
 @dataclass(frozen=True)
@@ -37,15 +36,10 @@ _TABLES: dict[tuple[object, ...], PstkTable] = {}
 def normalize_scc(code: str | int) -> str | None:
     """Return the SCC as a digit string, or None if it is not one.
 
-    Whitespace around a string is ignored. Nothing else is changed: SCCs have a fixed
-    length (8 digits for point sources), so a code with an extra leading zero is a
-    different, unknown code. An integer is accepted for callers that pass the code as a
-    number; a boolean or negative integer is not an SCC.
+    SCCs have a fixed length (8 digits for point sources), so a code with an extra leading
+    zero is a different, unknown code (see ``digit_string``).
     """
-    if isinstance(code, bool) or (isinstance(code, int) and code < 0):
-        return None
-    text = str(code).strip()
-    return text if _SCC_PATTERN.fullmatch(text) else None
+    return digit_string(code)
 
 
 def _is_national(row: StackRow, pstk: PstkSettings) -> bool:

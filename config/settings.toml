@@ -77,6 +77,26 @@ routes = ["inhalation"]
 prefer = "highest"
 target_unit = "1/(ug/m^3)"
 
+# EPA Envirofacts (efservice): one place for the service root and how politely it is called.
+# Every query (TRI, FRS) goes through it. Seconds to wait before each request, per-request
+# timeout, and retries on HTTP 429/5xx or timeouts with a wait of backoff_seconds doubling
+# each time (Retry-After is honoured).
+[efservice]
+base_url = "https://data.epa.gov/efservice"
+delay_seconds = 1.0
+timeout_seconds = 60.0
+max_retries = 2
+backoff_seconds = 5.0
+
+# FRS ID -> EIS facility ID (the NEI's own facility key). {frs_id} is the 12-digit FRS ID; the
+# response lists the facility's registrations in the EIS program, whose `pgm_sys_id` is the EIS ID.
+[frs]
+eis_path = "/FRS_PROGRAM_FACILITY/REGISTRY_ID/{frs_id}/PGM_SYS_ACRNM/EIS/JSON"
+program = "EIS"
+registry_field = "registry_id"
+program_field = "pgm_sys_acrnm"
+eis_id_field = "pgm_sys_id"
+
 # EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility and
 # release tables and filters on CAS number and environmental medium (the medium segment has
 # no "/equals/": that form returns nothing). {casrn} is the hyphenated CAS number, {medium} the
@@ -84,19 +104,12 @@ target_unit = "1/(ug/m^3)"
 # start .. start+N-1. Rows are not ordered by year and the end of data is signalled by a page
 # shorter than page_size (probing past the end hangs), so the whole result is read.
 [tri]
-base_url = "https://data.epa.gov/efservice"
 release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/cas_registry_number/{casrn}/environmental_medium/{medium}/rows/{start}:{end}/JSON"
 # Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
 media = ["AIR STACK"]
 # A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
 page_size = 1000
 max_pages = 40
-# Seconds to wait before each request, per-request timeout, and retries on HTTP 429/5xx or
-# timeouts with a wait of backoff_seconds doubling each time (Retry-After is honoured).
-delay_seconds = 1.0
-timeout_seconds = 60.0
-max_retries = 2
-backoff_seconds = 5.0
 # TRI sends longitudes as positive numbers for the western hemisphere; these states and
 # territories lie east of Greenwich, so their longitudes stay positive.
 east_longitude_states = ["GU", "MP"]
@@ -151,6 +164,43 @@ stack_height = "m"
 stack_diameter = "m"
 exit_velocity = "m/s"
 exit_temperature = "K"
+
+# Tier 1: EPA NEI stack values, a compact table of one row per distinct (EIS facility ID, four
+# stack values) split into gzip CSV shards named by the leading `prefix_digits` digits of the EIS
+# ID, so a lookup reads one small file. Build it from the raw SMOKE point flat file (a zip, kept in
+# data/raw/, not committed) with: uv run python -m scripts.compact_nei_stacks
+# A facility can have many stacks: at most `max_candidates` distinct combinations are returned,
+# lowest stack first, after merging combinations equal to `merge_significant_digits` digits.
+[stack.nei]
+directory = "data/nei_stacks"
+file_template = "nei_stacks_{prefix}.csv.gz"
+prefix_digits = 1
+id_column = "eis_id"
+max_candidates = 10
+merge_significant_digits = 2
+raw_path = "data/raw/nei_smoke_point_2023.zip"
+raw_id_column = "FACILITY_ID"
+
+# Quantity -> shard column.
+[stack.nei.columns]
+stack_height = "stkhgt"
+stack_diameter = "stkdiam"
+exit_velocity = "stkvel"
+exit_temperature = "stktemp"
+
+# Quantity -> unit the table reports it in. The SMOKE FF10 point format is imperial.
+[stack.nei.units]
+stack_height = "ft"
+stack_diameter = "ft"
+exit_velocity = "ft/s"
+exit_temperature = "degF"
+
+# Quantity -> column of the raw SMOKE flat file.
+[stack.nei.raw_columns]
+stack_height = "STKHGT"
+stack_diameter = "STKDIAM"
+exit_velocity = "STKVEL"
+exit_temperature = "STKTEMP"
 
 # Units the stack tools return.
 [stack.target_units]

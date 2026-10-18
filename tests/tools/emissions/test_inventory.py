@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from config.loader import load_tri_settings
+from config.efservice import get_efservice_settings
 from tools.emissions import inventory
 from tools.emissions.inventory import query_emissions_inventory
 from tools.registry import get_all_tools
@@ -29,8 +29,8 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     monkeypatch.setattr(
         inventory, "_open_client", lambda: httpx.Client(transport=httpx.MockTransport(handler))
     )
-    settings = replace(load_tri_settings(), delay_seconds=0.0, backoff_seconds=0.0)
-    monkeypatch.setattr(inventory, "get_tri_settings", lambda: settings)
+    settings = replace(get_efservice_settings(), delay_seconds=0.0, backoff_seconds=0.0)
+    monkeypatch.setattr(inventory, "get_efservice_settings", lambda: settings)
     return seen
 
 

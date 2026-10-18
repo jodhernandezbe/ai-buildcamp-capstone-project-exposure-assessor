@@ -164,38 +164,23 @@ class TriSettings:
     """EPA Envirofacts TRI release-query settings.
 
     Attributes:
-        base_url: Service root URL, without trailing slash.
-        release_path: Path template appended to ``base_url``; contains ``{casrn}``,
+        release_path: Path template appended to the Envirofacts base URL; contains ``{casrn}``,
             ``{medium}``, ``{start}`` and ``{end}`` (inclusive row range).
         media: Environmental media to keep, e.g. ``("AIR STACK",)``; one query per medium.
         page_size: Rows requested per page.
         max_pages: Most pages fetched per medium.
-        delay_seconds: Wait before each request, in seconds.
-        timeout_seconds: Per-request timeout, in seconds.
-        max_retries: Retries after a throttled, failed or timed-out request.
-        backoff_seconds: First retry wait in seconds; doubles on each further retry.
         east_longitude_states: State codes whose longitudes are east of Greenwich.
         facility_id_fields: TRI columns holding the FRS ID, first one set wins.
         fields: Result key (see ``TRI_FIELD_KEYS``) -> TRI column name.
     """
 
-    base_url: str
     release_path: str
     media: tuple[str, ...]
     page_size: int
     max_pages: int
-    delay_seconds: float
-    timeout_seconds: float
-    max_retries: int
-    backoff_seconds: float
     east_longitude_states: tuple[str, ...]
     facility_id_fields: tuple[str, ...]
     fields: Mapping[str, str]
-
-    @property
-    def release_url(self) -> str:
-        """Full URL template with its ``{casrn}``, ``{medium}``, ``{start}``, ``{end}`` slots."""
-        return self.base_url.rstrip("/") + self.release_path
 
 
 @dataclass(frozen=True)
@@ -412,7 +397,7 @@ def load_tri_settings(path: Path | None = None) -> TriSettings:
         path: Settings file; defaults to the ``settings.toml`` shipped in ``config/``.
 
     Returns:
-        The validated settings (delay, timeout and backoff in seconds).
+        The validated settings .
 
     Raises:
         FileNotFoundError: If the file does not exist.
@@ -420,15 +405,10 @@ def load_tri_settings(path: Path | None = None) -> TriSettings:
     """
     section = _section(_read_toml(path), "tri")
     return TriSettings(
-        base_url=_require_str(section, "base_url", "tri"),
         release_path=_tri_template(section),
         media=_names(section, "media", "tri", allow_empty=False),
         page_size=_require_int(section, "page_size", minimum=1, name="tri"),
         max_pages=_require_int(section, "max_pages", minimum=1, name="tri"),
-        delay_seconds=_require_number(section, "delay_seconds", minimum=0, name="tri"),
-        timeout_seconds=_require_number(section, "timeout_seconds", minimum=0.001, name="tri"),
-        max_retries=_require_int(section, "max_retries", minimum=0, name="tri"),
-        backoff_seconds=_require_number(section, "backoff_seconds", minimum=0, name="tri"),
         east_longitude_states=_names(section, "east_longitude_states", "tri", allow_empty=True),
         facility_id_fields=_names(section, "facility_id_fields", "tri", allow_empty=False),
         fields=_parse_tri_fields(section),

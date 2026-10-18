@@ -110,15 +110,6 @@ class SccLookupResult(TypedDict):
     warnings: list[str]
 
 
-class FacilityMetadata(TypedDict):
-    """Location and classification of a facility."""
-
-    latitude: float  # decimal degrees
-    longitude: float  # decimal degrees
-    address: str
-    scc_code: str
-
-
 class Meteorology(TypedDict):
     """Representative boundary-layer conditions at a point."""
 
@@ -147,3 +138,16 @@ class ExposureMetrics(TypedDict):
     max_concentration: float  # ug/m3, maximum modeled ambient concentration
     add: float  # mg/kg-day, average daily dose
     hq: float  # unitless hazard quotient
+
+
+class NeiStackResult(TypedDict):
+    """Tier 1 stack candidates of a facility, from the NEI.
+
+    ``candidates`` are distinct real stacks (never averaged), lowest stack first, each a
+    ``StackParameters`` with source "NEI"; evaluate the exposure for every one.
+    """
+
+    eis_ids: list[str]  # NEI facility IDs found for the FRS ID
+    candidates: list[StackParameters]  # empty when the NEI has no usable stack
+    total_candidates: int  # distinct combinations before the cap
+    warnings: list[str]  # why candidates are missing, or what was merged or omitted
