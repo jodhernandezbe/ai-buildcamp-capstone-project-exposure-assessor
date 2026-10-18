@@ -42,9 +42,10 @@ def empty_scenario() -> ScenarioResult:
     )
 
 
-def _no_result(warnings: list[str]) -> ExposureMetrics:
+def _no_result(warnings: list[str], stack_source: str | None) -> ExposureMetrics:
     return ExposureMetrics(
         **empty_scenario(),
+        stack_source=stack_source,
         add=None,
         add_band=None,
         add_by_band={},
@@ -176,6 +177,23 @@ def _doses(
     return doses
 
 
+_GLOBAL_STACK = "AirToxScreen global default"
+_PROCESS_STACK = "PSTK"
+
+
+def _stack_notes(source: str | None) -> list[str]:
+    """Say when the stack is not the facility's own: concentrations depend strongly on it."""
+    if source == _GLOBAL_STACK:
+        return [
+            "the stack is the EPA global default (3 m high, 0.2 m wide, cold and slow), not this "
+            "facility's own; a low, cold stack gives much higher concentrations than a real tall "
+            "one, so these results are a generic worst-case-like screening value"
+        ]
+    if source == _PROCESS_STACK:
+        return ["the stack is a default for this kind of process (PSTK), not the facility's own"]
+    return []
+
+
 def _standing_notes(
     meteorology: Meteorology, population: Population, found: ScreeningResult
 ) -> list[str]:
@@ -225,8 +243,16 @@ def assess_exposure(
     problem = _input_problem(emission_rate, meteorology)
     stack = _stack(stack_params)
     if problem is not None or isinstance(stack, str):
-        return _no_result([problem or str(stack)])
-    return _assess(emission_rate, stack, meteorology, population, toxicity, settings)
+        return _no_result([problem or str(stack)], stack_params.get("source"))
+    return _assess(
+        emission_rate,
+        stack,
+        stack_params.get("source"),
+        meteorology,
+        population,
+        toxicity,
+        settings,
+    )
 
 
 def _atmosphere(meteorology: Meteorology, settings: ExposureSettings) -> Atmosphere:
@@ -241,6 +267,7 @@ def _atmosphere(meteorology: Meteorology, settings: ExposureSettings) -> Atmosph
 def _assess(
     emission_rate: float,
     stack: Stack,
+    stack_source: str | None,
     meteorology: Meteorology,
     population: Population,
     toxicity: Toxicity,
@@ -257,12 +284,27 @@ def _assess(
     top = highest_dose_band(doses)
     return ExposureMetrics(
         **worst,
+        stack_source=stack_source,
         add=top[1] if top else None,
         add_band=top[0] if top else None,
         add_by_band=doses,
         representative=typical,
-        warnings=[*dict.fromkeys(notes), *_standing_notes(meteorology, population, found)],
+        warnings=_all_notes(notes, stack_source, meteorology, population, found),
     )
+
+
+def _all_notes(
+    notes: list[str],
+    stack_source: str | None,
+    meteorology: Meteorology,
+    population: Population,
+    found: ScreeningResult,
+) -> list[str]:
+    return [
+        *dict.fromkeys(notes),
+        *_stack_notes(stack_source),
+        *_standing_notes(meteorology, population, found),
+    ]
 
 
 def _representative_result(

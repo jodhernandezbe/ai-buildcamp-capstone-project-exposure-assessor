@@ -59,6 +59,9 @@ class EmissionRecord(TypedDict):
     facility_name: str | None
     environmental_medium: str  # TRI medium, e.g. "AIR STACK"
     reporting_year: int  # latest year the facility reported for this medium
+    doc_ctrl_num: (
+        str | None
+    )  # TRI control number of that year's submission (its highest, if several)
     total_release: float  # annual quantity, in `unit`, exactly as reported
     unit: str  # unit of `total_release` as reported, e.g. "Pounds"
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
@@ -171,6 +174,7 @@ class ExposureMetrics(ScenarioResult):
     input. ``add`` is the highest dose among the age bands present.
     """
 
+    stack_source: str | None  # where the stack came from: "NEI", "PSTK" or the EPA global default
     add: float | None  # mg/(kg*day), average daily dose of the most exposed age band
     add_band: str | None  # age band with the highest dose
     add_by_band: dict[str, float]  # age band present -> dose, mg/(kg*day)
@@ -189,3 +193,17 @@ class NeiStackResult(TypedDict):
     candidates: list[StackParameters]  # empty when the NEI has no usable stack
     total_candidates: int  # distinct combinations before the cap
     warnings: list[str]  # why candidates are missing, or what was merged or omitted
+
+
+class FacilityIndustry(TypedDict):
+    """The primary industry of one TRI submission (the one an emission record reports).
+
+    The title (in words) is what the SCC process search needs; the code alone means nothing to
+    it. Both are None when no industry could be determined; ``warnings`` says why.
+    """
+
+    naics_code: str | None  # six-digit NAICS code, digits only
+    naics_title: str | None  # the title of the code, in words
+    code_origin: str | None  # "reported" by the facility, "assigned" by EPA, or None if unknown
+    source: str | None  # where the industry comes from; None when there is none
+    warnings: list[str]  # why a value is missing, or that EPA assigned the code

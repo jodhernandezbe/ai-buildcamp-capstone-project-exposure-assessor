@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
-from tools.emissions.helpers.inventory.reduce import LatestReports, parse_report
+from tools.emissions.helpers.inventory.reduce import LatestReports, Location, parse_report
 from tools.schemas import EmissionRecord
 
 FIXTURE = Path(__file__).with_name("tri_rows.json")
@@ -24,6 +24,7 @@ def _row(**over: object) -> dict[str, object]:
         "epa_registry_id": "110000000001",
         "frs_id": None,
         "reporting_year": "2020",
+        "doc_ctrl_num": "1320000000001",
         "environmental_medium": "AIR STACK",
         "total_release": 1000,
         "unit_of_measure": "Pounds",
@@ -42,7 +43,7 @@ def _row(**over: object) -> dict[str, object]:
 def _run(
     rows: list[dict[str, object]], settings: TriSettings | None = None
 ) -> tuple[list[EmissionRecord], LatestReports]:
-    reducer = LatestReports(settings or load_tri_settings())
+    reducer = LatestReports(settings or load_tri_settings(), first_year=0)
     reducer.add_rows(rows)
     return reducer.records(EMISSIONS, ALIASES), reducer
 
@@ -253,7 +254,7 @@ def test_record_carries_hours_and_rate() -> None:
 
 
 def test_rate_uses_the_configured_hours() -> None:
-    reducer = LatestReports(load_tri_settings())
+    reducer = LatestReports(load_tri_settings(), first_year=0)
     reducer.add_rows([_row(total_release=8760)])
     record = reducer.records(EmissionsSettings(4380.0), ALIASES)[0]
     assert record["operating_hours_per_year"] == 4380.0
@@ -290,3 +291,119 @@ def test_warnings_describe_each_count() -> None:
     text = " ".join(reducer.stats.warnings())
     assert "1 rows skipped" in text
     assert "1 facilities omitted: no usable release quantity" in text
+
+
+def _window(
+    rows: list[dict[str, object]], first_year: int
+) -> tuple[list[EmissionRecord], LatestReports]:
+    reducer = LatestReports(load_tri_settings(), first_year=first_year)
+    reducer.add_rows(rows)
+    return reducer.records(EMISSIONS, ALIASES), reducer
+
+
+def test_a_facility_whose_latest_report_is_outside_the_window_is_absent() -> None:
+    old = _row(epa_registry_id="110000000001", reporting_year="2010")
+    new = _row(epa_registry_id="110000000002", reporting_year="2022")
+    records, reducer = _window([old, new], first_year=2017)
+    assert [r["frs_id"] for r in records] == ["110000000002"]
+    assert reducer.stats.outside_window == 1
+    assert any("before the window of recent years" in w for w in reducer.stats.warnings())
+
+
+def test_the_first_year_of_the_window_is_included() -> None:
+    records, reducer = _window(
+        [_row(reporting_year="2017"), _row(reporting_year="2016")], first_year=2017
+    )
+    assert [r["reporting_year"] for r in records] == [2017]
+    assert reducer.stats.outside_window == 1
+
+
+def test_old_rows_do_not_hide_a_recent_one_and_never_win() -> None:
+    rows = [_row(reporting_year=str(y), total_release=y) for y in (1999, 2010, 2020)]
+    (record,) = _window(rows, first_year=2015)[0]
+    assert record["reporting_year"] == 2020 and record["total_release"] == 2020.0 * 1.0
+
+
+def test_a_window_that_excludes_everything_gives_no_records() -> None:
+    records, reducer = _window([_row(reporting_year="2001")], first_year=2017)
+    assert records == [] and reducer.stats.outside_window == 1
+
+
+def test_the_control_number_of_the_reported_year_is_carried() -> None:
+    rows = [
+        _row(reporting_year="2019", doc_ctrl_num="1319000000001"),
+        _row(reporting_year="2021", doc_ctrl_num="1321000000007"),
+    ]
+    assert _only(rows)["doc_ctrl_num"] == "1321000000007"
+
+
+def test_same_year_forms_report_the_highest_control_number() -> None:
+    rows = [
+        _row(reporting_year="2021", doc_ctrl_num="1321000000002"),
+        _row(reporting_year="2021", doc_ctrl_num="1321000000009"),
+        _row(reporting_year="2021", doc_ctrl_num="1321000000005"),
+    ]
+    assert _only(rows)["doc_ctrl_num"] == "1321000000009"
+
+
+def test_a_form_without_a_quantity_does_not_lend_its_control_number() -> None:
+    rows = [
+        _row(reporting_year="2021", total_release=None, doc_ctrl_num="1321000000099"),
+        _row(reporting_year="2021", doc_ctrl_num="1321000000001"),
+    ]
+    assert _only(rows)["doc_ctrl_num"] == "1321000000001"
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_a_missing_control_number_is_none(value: object) -> None:
+    assert _only([_row(doc_ctrl_num=value)])["doc_ctrl_num"] is None
+
+
+def test_a_missing_control_number_does_not_hide_a_present_one_in_the_same_year() -> None:
+    rows = [_row(doc_ctrl_num=None), _row(doc_ctrl_num="1320000000003")]
+    assert _only(rows)["doc_ctrl_num"] == "1320000000003"
+
+
+def _no_coordinates(**over: object) -> dict[str, object]:
+    return _row(pref_latitude=None, pref_longitude=None, **over)
+
+
+def test_a_facility_without_coordinates_is_located_from_frs() -> None:
+    asked: list[str] = []
+
+    def locate(frs_id: str) -> Location | None:
+        asked.append(frs_id)
+        return Location(12.5, -70.5)
+
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_no_coordinates()])
+    (record,) = reducer.records(EMISSIONS, ALIASES, locate)
+    assert asked == ["110000000001"]
+    assert (record["latitude"], record["longitude"]) == (12.5, -70.5)
+    assert reducer.stats.from_frs == 1 and reducer.stats.no_location == 0
+    assert any("located from their FRS record" in w for w in reducer.stats.warnings())
+
+
+def test_tri_coordinates_are_preferred_and_frs_is_not_asked() -> None:
+    def locate(frs_id: str) -> Location | None:
+        raise AssertionError("FRS must not be asked when TRI has coordinates")
+
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_row()])
+    assert len(reducer.records(EMISSIONS, ALIASES, locate)) == 1
+
+
+def test_frs_is_not_asked_for_a_facility_without_a_quantity() -> None:
+    def locate(frs_id: str) -> Location | None:
+        raise AssertionError("no quantity, so no coordinates are needed")
+
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_no_coordinates(total_release=None)])
+    assert reducer.records(EMISSIONS, ALIASES, locate) == []
+
+
+def test_a_facility_frs_cannot_locate_is_still_omitted() -> None:
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_no_coordinates()])
+    assert reducer.records(EMISSIONS, ALIASES, lambda _: None) == []
+    assert reducer.stats.no_location == 1 and reducer.stats.from_frs == 0

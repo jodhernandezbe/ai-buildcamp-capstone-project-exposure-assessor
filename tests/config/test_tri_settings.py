@@ -17,9 +17,10 @@ from config.loader import (
 
 TRI = """
 [tri]
-release_path = "/r/{casrn}/{medium}/{start}:{end}"
+release_path = "/r/{casrn}/{medium}/{after_year}/{start}:{end}"
 media = ["AIR STACK", " AIR FUGITIVE "]
 page_size = 50
+recent_years = 7
 max_pages = 3
 east_longitude_states = ["GU"]
 facility_id_fields = ["reg", "frs"]
@@ -27,6 +28,7 @@ facility_id_fields = ["reg", "frs"]
 [tri.fields]
 medium = "m"
 year = "y"
+doc_ctrl_num = "dc"
 quantity = "q"
 unit = "u"
 facility_name = "n"
@@ -52,7 +54,9 @@ def _tri(tmp_path: Path, text: str = TRI) -> TriSettings:
 
 def test_tri_explicit_values(tmp_path: Path) -> None:
     settings = _tri(tmp_path)
-    assert settings.release_path == "/r/{casrn}/{medium}/{start}:{end}"
+    assert settings.release_path == "/r/{casrn}/{medium}/{after_year}/{start}:{end}"
+    assert settings.recent_years == 7
+    assert settings.fields["doc_ctrl_num"] == "dc"
     assert settings.media == ("AIR STACK", "AIR FUGITIVE")
     assert (settings.page_size, settings.max_pages) == (50, 3)
     assert settings.east_longitude_states == ("GU",)
@@ -67,7 +71,8 @@ def test_tri_default_file_loads() -> None:
     assert settings.facility_id_fields[0] == "epa_registry_id"
     assert settings.page_size > 0
     assert settings.max_pages > 0
-    for slot in ("{casrn}", "{medium}", "{start}", "{end}"):
+    assert settings.recent_years == 10
+    for slot in ("{casrn}", "{medium}", "{after_year}", "{start}", "{end}"):
         assert slot in settings.release_path
 
 
@@ -76,7 +81,7 @@ def test_tri_fields_are_read_only(tmp_path: Path) -> None:
         _tri(tmp_path).fields["quantity"] = "x"  # type: ignore[index]
 
 
-@pytest.mark.parametrize("slot", ["{casrn}", "{medium}", "{start}", "{end}"])
+@pytest.mark.parametrize("slot", ["{casrn}", "{medium}", "{after_year}", "{start}", "{end}"])
 def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
     with pytest.raises(ValueError, match="tri.release_path"):
         _tri(tmp_path, TRI.replace(slot, "x", 1))
@@ -85,6 +90,10 @@ def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
 @pytest.mark.parametrize(
     ("line", "bad", "key"),
     [
+        ("recent_years = 7", "recent_years = 0", "recent_years"),
+        ("recent_years = 7", "recent_years = 1.5", "recent_years"),
+        ("recent_years = 7", "recent_years = true", "recent_years"),
+        ("recent_years = 7", "", "recent_years"),
         ("page_size = 50", "page_size = 0", "page_size"),
         ("page_size = 50", "page_size = 1.5", "page_size"),
         ("page_size = 50", "page_size = true", "page_size"),
@@ -150,3 +159,16 @@ def test_pounds_alias_converts_to_grams() -> None:
     aliases = get_unit_settings().aliases
     assert aliases["Pounds"] == "pound"
     assert convert(1.0, "Pounds", "g", aliases) == pytest.approx(453.59237)
+
+
+def test_the_window_starts_the_year_after_the_cut(tmp_path: Path) -> None:
+    settings = _tri(tmp_path)  # recent_years = 7
+    assert settings.after_year(2026) == 2019
+    assert settings.first_year(2026) == 2020  # 2020..2026 are seven reporting years
+    assert load_tri_settings().first_year(2026) == 2017  # the default: ten years
+
+
+def test_the_default_window_covers_exactly_ten_reporting_years() -> None:
+    settings = load_tri_settings()
+    years = range(settings.first_year(2026), 2027)
+    assert len(years) == settings.recent_years == 10

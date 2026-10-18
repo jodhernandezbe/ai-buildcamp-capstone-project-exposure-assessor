@@ -7,7 +7,6 @@ so they can change without editing code.
 
 ## Requirements
 
-
 ### Requirement: Externalized service settings
 The system SHALL read the CompTox base URL, endpoint path templates (CAS search, chemical detail, property summary and ToxVal), request delay and request timeout from a configuration file, and SHALL NOT embed them in Python code. The configuration SHALL also name the CompTox API-key header and the environment variable holding the key, SHALL name where molecular weight is read from (response field, the unit the service reports it in, target unit), SHALL list the CompTox properties to extract (CompTox property name, result key, target unit), and SHALL list the CompTox toxicity values to extract (result key, accepted ToxVal type labels, accepted exposure routes, preference for the lowest or highest value, target unit) together with the ordered source-priority list used to choose among records. The configuration SHALL also hold a table of unit-spelling aliases used before unit conversion.
 
@@ -196,3 +195,36 @@ The system SHALL read from an `[exposure]` table, and SHALL NOT embed in Python 
 #### Scenario: Invalid entry
 - **WHEN** a stability class is not A to F, a wind speed or distance is not positive, a segment does not advance, the annual factor is outside 0 to 1, the frequency is above 365 days, the exposure time is above 24 hours, a band is missing or unknown, or an inhalation rate or body weight is not positive
 - **THEN** the loader raises a `ValueError` naming the offending key
+
+### Requirement: Industry settings
+The system SHALL read from an `[industry]` table the Envirofacts path that lists the primary NAICS row of a submission (containing `{doc_ctrl_num}`) and the one that looks up a NAICS title (containing `{naics_code}`), the response field names (code, primary indicator, sequence, origin, title), the primary-indicator value, the origin labels for reported and assigned codes, and the placeholder codes, validated on load, and SHALL NOT embed them in Python code. The base URL and request policy SHALL be the shared Envirofacts ones.
+
+#### Scenario: Settings loaded
+- **WHEN** the loader is asked for the industry settings
+- **THEN** it returns the paths, field names, labels and placeholder codes from the file
+
+#### Scenario: Invalid entry
+- **WHEN** a path lacks its placeholder, a field name or label is empty, or a placeholder is not a digit string
+- **THEN** the loader raises a `ValueError` naming the offending key
+
+### Requirement: Recent TRI years setting
+The `[tri]` table SHALL define `recent_years`, a positive integer, and a `{after_year}` placeholder in the release path, and the loader SHALL reject a missing, non-integer, boolean or non-positive value and a path without the placeholder.
+
+#### Scenario: Window years
+- **WHEN** `recent_years` is 10 and the current year is 2026
+- **THEN** the settings give 2016 as the year after which reports count and 2017 as the first year
+
+#### Scenario: Invalid window
+- **WHEN** `recent_years` is 0, true or 2.5
+- **THEN** the loader raises a `ValueError` naming `recent_years`
+
+### Requirement: FRS point settings
+The system SHALL read from an `[frs_point]` table the Envirofacts path that returns a facility's coordinates (containing `{frs_id}`) and the latitude, longitude and timestamp field names, validated on load.
+
+#### Scenario: Settings loaded
+- **WHEN** the loader is asked for the FRS point settings
+- **THEN** it returns the path and field names from the file
+
+#### Scenario: Invalid entry
+- **WHEN** the path lacks `{frs_id}` or a field name is missing
+- **THEN** the loader raises a `ValueError` naming the key

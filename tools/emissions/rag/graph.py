@@ -1,6 +1,6 @@
 """LangGraph retrieval graph for SCC process descriptions.
 
-    START -> validate --(empty query)--> END
+    START -> validate --(empty or code-only query)--> END
                  \\-> ensure_index --(index unavailable)--> END
                           \\-> retrieve -> END
 
@@ -10,6 +10,7 @@ There is no generation node: the graph only retrieves, and the agent's LLM reads
 from __future__ import annotations
 
 import operator
+import re
 from collections.abc import Callable, Sequence
 from typing import Annotated, TypedDict
 
@@ -33,12 +34,48 @@ class SccState(TypedDict):
 class SccUpdate(TypedDict, total=False):
     """Partial state returned by a node."""
 
+    query: str
     hits: list[SccHit]
     warnings: list[str]
     failed: bool
 
 
 SccGraph = CompiledStateGraph[SccState, None, SccState, SccState]
+
+
+_CODE_WORDS = frozenset({"naics", "code", "number", "no"})
+_NUMERIC = r"[\W_]*\d[\d\W_]*"
+_CODE_ONLY = (
+    "the industry description is only a NAICS code ({given!r}); a code means nothing to a text "
+    "search, so give the industry's name in words (the NAICS title, for example "
+    "'Petroleum Refineries')"
+)
+
+
+def industry_text(query: str) -> str:
+    """Return the words of an industry description, without any NAICS code or its label.
+
+    Numeric tokens (``324110``, ``324-110``), stray punctuation and, next to a number, the
+    label words "NAICS" and "code" are dropped because the index holds process descriptions,
+    not codes: they only add noise to the similarity search. The result is empty when nothing
+    but a code (or the words "NAICS code") was given.
+    """
+    tokens = query.split()
+    has_number = any(re.fullmatch(_NUMERIC, token) for token in tokens)
+    words = [
+        token
+        for token in tokens
+        if not re.fullmatch(_NUMERIC, token)
+        and re.search(r"\w", token)
+        and not (has_number and _bare(token) in _CODE_WORDS)
+    ]
+    if all(_bare(word) in _CODE_WORDS for word in words):
+        return ""
+    return " ".join(words)
+
+
+def _bare(token: str) -> str:
+    return re.sub(r"\W", "", token).lower()
 
 
 def _hits(scored: Sequence[ScoredDocument]) -> SccUpdate:
@@ -69,9 +106,13 @@ class _Nodes:
         self._load = load
 
     def validate(self, state: SccState) -> SccUpdate:
-        if state["query"].strip():
-            return SccUpdate()
-        return SccUpdate(warnings=["the industry description is empty"], failed=True)
+        given = state["query"].strip()
+        if not given:
+            return SccUpdate(warnings=["the industry description is empty"], failed=True)
+        text = industry_text(given)
+        if not text:
+            return SccUpdate(warnings=[_CODE_ONLY.format(given=given)], failed=True)
+        return SccUpdate(query=text)
 
     def ensure_index(self, state: SccState) -> SccUpdate:
         del state  # the index does not depend on the query

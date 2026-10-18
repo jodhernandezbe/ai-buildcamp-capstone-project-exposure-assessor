@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
@@ -21,6 +21,10 @@ class Location:
 
     latitude: float
     longitude: float
+
+
+Locator = Callable[[str], Location | None]
+"""Gives the coordinates of an FRS ID, or None when they cannot be found."""
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ class Report:
     facility_id: str
     medium: str
     year: int
+    doc_ctrl_num: str | None
     quantity: float | None
     unit: str | None
     place: Place
@@ -53,6 +58,7 @@ class Slot:
     """What is kept for one (medium, facility): its latest year and best coordinates."""
 
     year: int
+    doc_ctrl_num: str | None  # control number of the kept year's submission (highest, if several)
     quantity: float | None
     unit: str | None
     summed: int  # number of usable quantities added into `quantity`
@@ -74,8 +80,10 @@ class Stats:
     """Counts of what was dropped or combined, for warnings."""
 
     skipped_rows: int = 0
+    outside_window: int = 0
     no_quantity: int = 0
     no_location: int = 0
+    from_frs: int = 0
     bad_unit: int = 0
     mixed_units: int = 0
     combined: int = 0
@@ -84,8 +92,10 @@ class Stats:
         """Return one message per non-zero count."""
         labels = (
             ("skipped_rows", "rows skipped (no facility ID or year, or a medium not configured)"),
+            ("outside_window", "rows ignored: reported before the window of recent years"),
             ("no_quantity", "facilities omitted: no usable release quantity in their latest year"),
             ("no_location", "facilities omitted: no usable coordinates in any row"),
+            ("from_frs", "facilities located from their FRS record (TRI had no coordinates)"),
             ("bad_unit", "facilities omitted: release unit is not a convertible mass unit"),
             ("mixed_units", "same-year reports ignored: unit differs from the first report"),
             ("combined", "facilities whose latest-year reports were added together"),
@@ -193,13 +203,21 @@ def parse_report(row: Row, settings: TriSettings) -> Report | None:
         return None
     quantity, unit = _quantity(row, settings)
     return Report(
-        facility_id, medium, year, quantity, unit, _place(row, settings), _location(row, settings)
+        facility_id,
+        medium,
+        year,
+        _text(row.get(settings.fields["doc_ctrl_num"])),
+        quantity,
+        unit,
+        _place(row, settings),
+        _location(row, settings),
     )
 
 
 def _new_slot(report: Report) -> Slot:
     return Slot(
         year=report.year,
+        doc_ctrl_num=report.doc_ctrl_num,
         quantity=report.quantity,
         unit=report.unit,
         summed=0 if report.quantity is None else 1,
@@ -212,6 +230,7 @@ def _new_slot(report: Report) -> Slot:
 def _take_year(slot: Slot, report: Report) -> None:
     """Make ``report`` (a later year) the slot's year-level data."""
     slot.year = report.year
+    slot.doc_ctrl_num = report.doc_ctrl_num
     slot.quantity = report.quantity
     slot.unit = report.unit
     slot.summed = 0 if report.quantity is None else 1
@@ -226,8 +245,10 @@ class LatestReports:
     facility's most recent row that has valid ones, since the latest row often lacks them.
     """
 
-    def __init__(self, settings: TriSettings) -> None:
+    def __init__(self, settings: TriSettings, first_year: int) -> None:
+        """Args: TRI settings; the first reporting year that counts (older rows are ignored)."""
         self._settings = settings
+        self._first_year = first_year
         self._slots: dict[tuple[str, str], Slot] = {}
         self.stats = Stats()
 
@@ -240,6 +261,9 @@ class LatestReports:
         report = parse_report(row, self._settings)
         if report is None or report.medium not in self._settings.media:
             self.stats.skipped_rows += 1
+            return
+        if report.year < self._first_year:
+            self.stats.outside_window += 1
             return
         key = (report.medium, report.facility_id)
         slot = self._slots.get(key)
@@ -263,45 +287,70 @@ class LatestReports:
             return
         if slot.quantity is None:
             slot.quantity, slot.unit, slot.summed = report.quantity, report.unit, 1
+            slot.doc_ctrl_num = report.doc_ctrl_num
         elif slot.unit != report.unit:
             self.stats.mixed_units += 1
         else:
             slot.quantity += report.quantity
             slot.summed += 1
+            slot.doc_ctrl_num = max(
+                filter(None, (slot.doc_ctrl_num, report.doc_ctrl_num)), default=None
+            )
 
     def records(
-        self, emissions: EmissionsSettings, aliases: Mapping[str, str] | None = None
+        self,
+        emissions: EmissionsSettings,
+        aliases: Mapping[str, str] | None = None,
+        locate: Locator | None = None,
     ) -> list[EmissionRecord]:
         """Return the kept records, converting each release to an emission rate.
 
         Args:
             emissions: Emission-rate assumptions (operating hours per year).
             aliases: Source unit spelling -> Pint-parsable unit string.
+            locate: Gives the coordinates of an FRS ID (or None); asked only for facilities
+                that have a usable quantity but no coordinates in any TRI row.
 
         Returns:
             One record per (medium, facility) with a usable latest-year quantity and
             coordinates; the others are counted in ``stats``.
         """
         hours = operating_hours_per_year(emissions)
-        found = (self._record(key, slot, hours, aliases) for key, slot in self._slots.items())
+        found = (
+            self._record(key, slot, hours, aliases, locate) for key, slot in self._slots.items()
+        )
         records = [record for record in found if record is not None]
         self.stats.combined = sum(slot.summed > 1 for slot in self._slots.values())
         return records
 
-    def _amount(self, slot: Slot) -> _Amount | None:
+    def _located(self, facility_id: str, slot: Slot, locate: Locator | None) -> Location | None:
+        """Return the slot's coordinates, asking ``locate`` when TRI gave none."""
+        if slot.location is not None:
+            return slot.location
+        found = locate(facility_id) if locate is not None else None
+        if found is None:
+            self.stats.no_location += 1
+        else:
+            self.stats.from_frs += 1
+        return found
+
+    def _amount(self, facility_id: str, slot: Slot, locate: Locator | None) -> _Amount | None:
         """Return the slot's quantity, unit and location, or count why it is unusable."""
         if slot.quantity is None or slot.unit is None:
             self.stats.no_quantity += 1
-        elif slot.location is None:
-            self.stats.no_location += 1
-        else:
-            return _Amount(slot.quantity, slot.unit, slot.location)
-        return None
+            return None
+        location = self._located(facility_id, slot, locate)
+        return None if location is None else _Amount(slot.quantity, slot.unit, location)
 
     def _record(
-        self, key: tuple[str, str], slot: Slot, hours: float, aliases: Mapping[str, str] | None
+        self,
+        key: tuple[str, str],
+        slot: Slot,
+        hours: float,
+        aliases: Mapping[str, str] | None,
+        locate: Locator | None,
     ) -> EmissionRecord | None:
-        amount = self._amount(slot)
+        amount = self._amount(key[1], slot, locate)
         if amount is None:
             return None
         try:
@@ -319,6 +368,7 @@ class _Reported(TypedDict):
     facility_name: str | None
     environmental_medium: str
     reporting_year: int
+    doc_ctrl_num: str | None
     total_release: float
     unit: str
     emission_rate: float
@@ -344,6 +394,7 @@ def _reported(
         "facility_name": slot.place.name,
         "environmental_medium": medium,
         "reporting_year": slot.year,
+        "doc_ctrl_num": slot.doc_ctrl_num,
         "total_release": amount.quantity,
         "unit": amount.unit,
         "emission_rate": rate,

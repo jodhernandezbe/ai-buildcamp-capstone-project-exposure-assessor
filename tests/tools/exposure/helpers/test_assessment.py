@@ -64,7 +64,9 @@ def _run(
 
 def _all_null(result: ExposureMetrics) -> bool:
     numbers = [
-        v for k, v in result.items() if k not in ("warnings", "representative", "add_by_band")
+        v
+        for k, v in result.items()
+        if k not in ("warnings", "representative", "add_by_band", "stack_source")
     ]
     reps = list(result["representative"].values())
     return all(v is None for v in [*numbers, *reps]) and result["add_by_band"] == {}
@@ -272,3 +274,48 @@ def test_it_is_deterministic() -> None:
 def test_warnings_are_not_repeated() -> None:
     warnings = _run(tox=Toxicity(rfc=None, iur=None))["warnings"]
     assert len(warnings) == len(set(warnings))
+
+
+def _sourced(source: str | None, **changes: float | None) -> StackParameters:
+    return StackParameters(**{**_stack(**changes), "source": source})  # type: ignore[typeddict-item]
+
+
+def test_the_stack_source_is_echoed() -> None:
+    for source in ("NEI", "PSTK", None):
+        assert _run(stack=_sourced(source))["stack_source"] == source
+
+
+def test_the_global_default_stack_is_called_out_as_generic() -> None:
+    result = _run(stack=_sourced("AirToxScreen global default"))
+    assert result["stack_source"] == "AirToxScreen global default"
+    assert any(
+        "EPA global default" in w and "not this facility's own" in w for w in result["warnings"]
+    )
+
+
+def test_a_process_default_stack_is_called_out() -> None:
+    result = _run(stack=_sourced("PSTK"))
+    assert any("this kind of process (PSTK)" in w for w in result["warnings"])
+
+
+def test_the_facilitys_own_stack_needs_no_stack_warning() -> None:
+    warnings = _run(stack=_sourced("NEI"))["warnings"]
+    assert not any("global default" in w or "PSTK" in w for w in warnings)
+
+
+def test_the_source_is_kept_even_when_nothing_can_be_computed() -> None:
+    result = _run(stack=_sourced("PSTK", exit_temperature=None))
+    assert result["max_concentration"] is None and result["stack_source"] == "PSTK"
+
+
+def test_the_generic_stack_gives_much_higher_concentrations_than_a_tall_hot_one() -> None:
+    generic = _sourced(
+        "AirToxScreen global default",
+        stack_height=3.0,
+        stack_diameter=0.2,
+        exit_velocity=4.0,
+        exit_temperature=295.4,
+    )
+    own = _run()["max_concentration"]
+    low = _run(stack=generic)["max_concentration"]
+    assert own is not None and low is not None and low > 100 * own

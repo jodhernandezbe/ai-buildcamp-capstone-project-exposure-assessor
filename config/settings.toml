@@ -97,19 +97,34 @@ registry_field = "registry_id"
 program_field = "pgm_sys_acrnm"
 eis_id_field = "pgm_sys_id"
 
+# A facility's coordinates from FRS, used when TRI has none (TRI stopped collecting them for most
+# facilities; FRS holds them). {frs_id} is the 12-digit FRS ID; the response lists points in decimal
+# degrees (WGS84, west negative), the newest by `timestamp_field` wins.
+[frs_point]
+path = "/GEO_FACILITY_POINT/REGISTRY_ID/{frs_id}/JSON"
+latitude_field = "latitude83"
+longitude_field = "longitude83"
+timestamp_field = "timestamp"
+
 # EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility and
 # release tables and filters on CAS number and environmental medium (the medium segment has
 # no "/equals/": that form returns nothing). {casrn} is the hyphenated CAS number, {medium} the
-# URL-encoded medium and {start}:{end} an inclusive row range, so a page of N rows is
+# URL-encoded medium, {after_year} the year after which reports are wanted and {start}:{end} an inclusive row range, so a page of N rows is
 # start .. start+N-1. Rows are not ordered by year and the end of data is signalled by a page
 # shorter than page_size (probing past the end hangs), so the whole result is read.
 [tri]
-release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/cas_registry_number/{casrn}/environmental_medium/{medium}/rows/{start}:{end}/JSON"
+release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
 # Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
 media = ["AIR STACK"]
 # A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
 page_size = 1000
 max_pages = 40
+# Only the most recent reporting years count: a facility whose latest report is older has probably
+# stopped (a 1988 record would be assessed as if it were current). The window is the last
+# `recent_years` reporting years ending with the current year, so the URL asks for
+# `reporting_year > current year - recent_years` and rows outside it are dropped again on arrival.
+# TRI is published with a lag, so the newest year with data is usually the previous one.
+recent_years = 10
 # TRI sends longitudes as positive numbers for the western hemisphere; these states and
 # territories lie east of Greenwich, so their longitudes stay positive.
 east_longitude_states = ["GU", "MP"]
@@ -121,6 +136,8 @@ facility_id_fields = ["epa_registry_id", "frs_id"]
 [tri.fields]
 medium = "environmental_medium"
 year = "reporting_year"
+# Control number of the submission (form); it identifies the reported record, e.g. for its NAICS.
+doc_ctrl_num = "doc_ctrl_num"
 quantity = "total_release"
 unit = "unit_of_measure"
 facility_name = "facility_name"
@@ -443,6 +460,27 @@ body_weight_kg = 71.6
 [exposure.age_bands."65+"]
 inhalation_rate_m3_per_day = 14.2
 body_weight_kg = 80.0
+
+# Facility industry: the primary NAICS code of ONE TRI submission (the one an emission record
+# reports, identified by its control number `doc_ctrl_num`) and the title of that code, both from
+# Envirofacts (shared base URL and request policy in [efservice]). The first query reads the
+# submission's primary NAICS row (`primary_ind` = 1: exactly one per submission); the second reads
+# the title from REF_NAICS. The title, not the code, is what the SCC process search needs.
+# The row's `source` says who gave the code: "Reported" (the facility, from reporting year 2006) or
+# "ASSIGNED" (EPA, by crosswalk or from commercial data; often generic). `placeholder_codes` are
+# codes that are not industries (999999 is "AFS Migration").
+[industry]
+submission_naics_path = "/tri_submission_naics/primary_ind/1/doc_ctrl_num/{doc_ctrl_num}/JSON"
+title_path = "/REF_NAICS/NAICS_CODE/{naics_code}/JSON"
+code_field = "naics_code"
+primary_field = "primary_ind"
+primary_value = "1"
+sequence_field = "naics_sequence_num"
+origin_field = "source"
+reported_value = "Reported"
+assigned_value = "ASSIGNED"
+title_field = "naics_desc"
+placeholder_codes = ["999999"]
 
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.

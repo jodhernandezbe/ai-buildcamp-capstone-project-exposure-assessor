@@ -108,3 +108,61 @@ def test_default_retriever_needs_api_key(monkeypatch: pytest.MonkeyPatch) -> Non
     with pytest.raises(EmbeddingError, match="is not set"):
         retriever_module.default_scc_retriever()
     default_scc_retriever.cache_clear()
+
+
+class _Recording(KeywordEmbeddings):
+    """Records the text that is actually embedded for each query."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.queried: list[str] = []
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queried.append(text)
+        return super().embed_query(text)
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["324110", "  325412 ", "NAICS 324110", "naics code 324-110", "code: 335999", "NAICS #324110"],
+)
+def test_a_bare_naics_code_is_refused_without_a_search(tmp_path: Path, query: str) -> None:
+    embeddings = _Recording()
+    lookup = _retriever(tmp_path, embeddings).lookup(query)
+    assert lookup.hits == ()
+    assert len(lookup.warnings) == 1
+    assert "only a NAICS code" in lookup.warnings[0]
+    assert "in words" in lookup.warnings[0]
+    assert embeddings.document_calls == embeddings.query_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("query", "searched"),
+    [
+        ("324110 Petroleum Refineries", "Petroleum Refineries"),
+        ("NAICS 324110 - Petroleum Refineries", "Petroleum Refineries"),
+        ("Petroleum Refineries (324110)", "Petroleum Refineries"),
+        ("324-110 Petroleum Refineries", "Petroleum Refineries"),
+        ("Petroleum Refineries", "Petroleum Refineries"),
+    ],
+)
+def test_a_code_before_or_after_the_words_is_dropped_from_the_search(
+    tmp_path: Path, query: str, searched: str
+) -> None:
+    embeddings = _Recording()
+    lookup = _retriever(tmp_path, embeddings).lookup(query)
+    assert lookup.warnings == ()
+    assert lookup.hits[0].document.scc == "99900001"
+    assert embeddings.queried == [searched]
+
+
+def test_digits_inside_words_are_kept(tmp_path: Path) -> None:
+    embeddings = _Recording()
+    _retriever(tmp_path, embeddings).lookup("3D Printing Services")
+    assert embeddings.queried == ["3D Printing Services"]
+
+
+def test_a_title_that_contains_a_label_word_is_kept_when_no_number_is_given(tmp_path: Path) -> None:
+    embeddings = _Recording()
+    _retriever(tmp_path, embeddings).lookup("Number Plate Manufacturing")
+    assert embeddings.queried == ["Number Plate Manufacturing"]

@@ -13,6 +13,17 @@ from tools.registry import get_all_tools
 DESCRIPTIONS = {t.name: " ".join(t.description.split()) for t in get_all_tools()}
 
 REQUIRED = {
+    "fetch_facility_industry": (
+        "the numeric code alone is useless there",
+        "only for facilities you are assessing",
+        "which unit emits",
+        "`doc_ctrl_num`",
+        '"assigned" when EPA assigned it',
+        "a null result is not an error",
+        "do not guess it",
+        "naics_title",
+        "without a code to get the EPA global default",
+    ),
     "fetch_chemical_properties": (
         "toxicity benchmarks",
         "null means no usable value",
@@ -28,6 +39,10 @@ REQUIRED = {
         "not an official NAICS-to-SCC crosswalk",
         "judge them",
         "empty `matches` list",
+        "in WORDS",
+        "Never pass only the numeric NAICS code",
+        "refused with a warning",
+        "without `scc_code` to get the EPA global default stack",
     ),
     "fetch_stack_parameters_from_nei": (
         "first choice",
@@ -54,6 +69,8 @@ REQUIRED = {
         "United States only",
     ),
     "calculate_exposure_metrics": (
+        "`stack_source` echoes where the stack came from",
+        "can be far higher than for the facility's real stack",
         "ONE stack",
         "once per stack",
         "A null number means it could not be computed",

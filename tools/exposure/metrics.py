@@ -70,8 +70,11 @@ def calculate_exposure_metrics(
         the worst case), and `warnings`.
         A null number means it could not be computed, and `warnings` says why (missing stack
         value, missing RfC or IUR, invalid input); nothing is ever defaulted or guessed, so a
-        null must be reported, not filled in. `warnings` also say when the weather or the
-        population input was itself a generic default, when the maximum is at the edge of the
+        null must be reported, not filled in. `stack_source` echoes where the stack came from;
+        a stack that is the EPA global default or a process default is generic (short, cold
+        and slow), so concentrations, hq and cancer_risk can be far higher than for the
+        facility's real stack: report that with the numbers. `warnings` also say when the weather or
+        the population input was itself a generic default, when the maximum is at the edge of the
         range, and that the worst case may be where nobody lives; pass these on.
         These are screening estimates, not regulatory determinations.
     """

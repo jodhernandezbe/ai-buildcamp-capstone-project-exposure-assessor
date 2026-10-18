@@ -12,6 +12,7 @@ def test_all_tools_registered_with_docstrings() -> None:
     assert {t.name for t in tools} == {
         "fetch_chemical_properties",
         "query_emissions_inventory",
+        "fetch_facility_industry",
         "lookup_scc_process_description",
         "fetch_stack_parameters_from_nei",
         "fetch_stack_parameters_from_scc",

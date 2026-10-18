@@ -19,7 +19,8 @@ from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
 ROWS = json.loads(Path(__file__).with_name("tri_rows.json").read_text())
-SETTINGS = replace(load_tri_settings(), page_size=4, max_pages=3)
+SETTINGS = replace(load_tri_settings(), page_size=4, max_pages=3, recent_years=1000)
+YEAR = 2012  # with the wide window above, every fixture row (1988 to 2009) is recent
 EMISSIONS = EmissionsSettings(8760.0)
 CAS = "50-00-0"
 
@@ -28,7 +29,7 @@ def _fetcher(transport: httpx.MockTransport, settings: TriSettings = SETTINGS) -
     client = EfserviceClient(
         load_efservice_settings(), httpx.Client(transport=transport), lambda _seconds: None
     )
-    return TriFetcher(settings, client)
+    return TriFetcher(settings, client, YEAR)
 
 
 def _serve(pages: Sequence[Sequence[Mapping[str, object]]]) -> httpx.MockTransport:
@@ -36,8 +37,10 @@ def _serve(pages: Sequence[Sequence[Mapping[str, object]]]) -> httpx.MockTranspo
     return httpx.MockTransport(lambda request: httpx.Response(200, json=queue.pop(0)))
 
 
-def _lookup(fetcher: TriFetcher, settings: TriSettings = SETTINGS) -> list[EmissionRecord]:
-    return lookup_emissions(CAS, settings, EMISSIONS, get_unit_settings().aliases, fetcher)
+def _lookup(
+    fetcher: TriFetcher, settings: TriSettings = SETTINGS, year: int = YEAR
+) -> list[EmissionRecord]:
+    return lookup_emissions(CAS, settings, EMISSIONS, get_unit_settings().aliases, fetcher, year)
 
 
 def test_rows_across_pages_are_reduced() -> None:

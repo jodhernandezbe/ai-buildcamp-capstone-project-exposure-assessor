@@ -16,15 +16,18 @@ class TriFetcher:
     timeouts are the shared Envirofacts client's.
     """
 
-    def __init__(self, settings: TriSettings, client: EfserviceClient) -> None:
+    def __init__(self, settings: TriSettings, client: EfserviceClient, current_year: int) -> None:
         """Create a fetcher.
 
         Args:
             settings: TRI settings (query path, paging).
             client: Envirofacts client (injectable for tests).
+            current_year: The current calendar year; the window of recent reporting years ends
+                with it.
         """
         self._settings = settings
         self._client = client
+        self._after_year = settings.after_year(current_year)
 
     def fetch(
         self,
@@ -61,4 +64,5 @@ class TriFetcher:
             medium=quote(medium, safe=""),
             start=start,
             end=start + self._settings.page_size - 1,
+            after_year=self._after_year,
         )

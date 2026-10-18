@@ -6,7 +6,6 @@ Lets the agent discover which facilities report releasing a chemical to selected
 
 ## Requirements
 
-
 ### Requirement: Facility emissions lookup by CAS
 The system SHALL provide a tool that, given a CAS registry number, returns the facilities that reported releases of that chemical to the configured environmental media. The tool SHALL NOT take a reporting year. The CAS number SHALL be validated before any request is made; an invalid CAS yields an empty result with a warning and no request.
 
@@ -23,11 +22,19 @@ The system SHALL provide a tool that, given a CAS registry number, returns the f
 - **THEN** it returns an empty list
 
 ### Requirement: Latest year per facility and medium
-The system SHALL keep, for each combination of environmental medium and facility FRS ID, only the record with the latest reporting year. The facility FRS ID SHALL be the EPA registry identifier TRI records for the facility, falling back to TRI's separate FRS ID column when the registry identifier is absent; a row with neither is skipped with a warning.
+The system SHALL keep, for each combination of environmental medium and facility FRS ID, only the record with the latest reporting year, considering only reports of the last `recent_years` TRI reporting years; the window SHALL be applied in the TRI request itself (reporting year after the current year minus `recent_years`) and rows outside it SHALL be ignored with a warning count. The facility FRS ID SHALL be the EPA registry identifier TRI records for the facility, falling back to TRI's separate FRS ID column when the registry identifier is absent; a row with neither is skipped with a warning.
 
 #### Scenario: Several years reported
-- **WHEN** a facility reported to AIR STACK in 1990, 2005 and 2022
-- **THEN** only the 2022 record is returned for that facility and medium
+- **WHEN** a facility reported to AIR STACK in each of the last three years of the window
+- **THEN** only the newest of them is returned for that facility and medium
+
+#### Scenario: Reported only before the window
+- **WHEN** a facility's latest report is older than the window
+- **THEN** the facility is absent from the result
+
+#### Scenario: Window in the request
+- **WHEN** the current year is 2012 and `recent_years` is 10
+- **THEN** the TRI request filters reporting years after 2002
 
 #### Scenario: Latest year not reported
 - **WHEN** the latest-year record has no release quantity (not applicable or empty)
@@ -38,8 +45,8 @@ The system SHALL keep, for each combination of environmental medium and facility
 - **THEN** it appears once per medium, each with its own latest year
 
 #### Scenario: Several reports in the latest year
-- **WHEN** a facility has two reports for the same medium in its latest year (for example 909 and 2683 pounds)
-- **THEN** their valid quantities are added (3592 pounds) and returned as one record, and a warning counts the combined facilities
+- **WHEN** a facility has two reports for the same medium in its latest year
+- **THEN** their valid quantities are added and returned as one record, carrying the highest control number of the reports that gave a quantity
 
 ### Requirement: Medium filter from configuration
 The system SHALL keep only rows whose environmental medium is in the configured list (initially `AIR STACK`); rows for other media SHALL be discarded.
@@ -53,11 +60,15 @@ The system SHALL keep only rows whose environmental medium is in the configured 
 - **THEN** its records are returned with no code change
 
 ### Requirement: Returned facility record
-Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
+Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, the TRI submission control number (`doc_ctrl_num`, null if TRI gave none), `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
 
 #### Scenario: Complete record
 - **WHEN** a facility record is returned
 - **THEN** it includes every field above, with `total_release` in the returned unit and `emission_rate` in g/s
+
+#### Scenario: Control number carried
+- **WHEN** the TRI row has a control number
+- **THEN** the record carries it as text of digits, ready for the facility industry tool
 
 #### Scenario: Reported value preserved
 - **WHEN** TRI reports the quantity in "Pounds"
@@ -123,3 +134,18 @@ The system SHALL retrieve rows sequentially in pages of a configured size, wait 
 #### Scenario: Unexpected response shape
 - **WHEN** a response is not a JSON list of objects
 - **THEN** it is treated as a failed page, not as data
+
+### Requirement: Coordinates recovered from FRS
+When none of a facility's TRI rows in the window has valid coordinates, and the facility has a usable release quantity, the system SHALL look the facility up by FRS ID in the Envirofacts FRS point table (`[frs_point]`) and use the newest valid point (decimal degrees, west negative, within range). It SHALL NOT make that request for a facility that has TRI coordinates or no usable quantity, SHALL make at most one request per FRS ID, and SHALL count recovered facilities in a warning. A failed request or an unusable point SHALL leave the facility omitted and counted as without coordinates; it SHALL NOT raise.
+
+#### Scenario: TRI has no coordinates, FRS has
+- **WHEN** a facility's TRI rows lack coordinates and FRS returns a valid point
+- **THEN** the record carries the FRS latitude and longitude and a warning counts the facility as located from FRS
+
+#### Scenario: TRI coordinates win
+- **WHEN** a TRI row has valid coordinates
+- **THEN** FRS is not queried
+
+#### Scenario: FRS has nothing
+- **WHEN** FRS returns no valid point or the request fails
+- **THEN** the facility is omitted and counted as without coordinates

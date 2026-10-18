@@ -14,9 +14,10 @@ from tools.emissions.helpers.efservice import EfserviceClient, EfserviceError, R
 from tools.emissions.helpers.inventory.tri import TriFetcher
 
 CAS = "50-00-0"
+CURRENT_YEAR = 2026
 SETTINGS = replace(
     load_tri_settings(),
-    release_path="/r/{casrn}/m/{medium}/rows/{start}:{end}/JSON",
+    release_path="/r/{casrn}/m/{medium}/y/{after_year}/rows/{start}:{end}/JSON",
     page_size=3,
     max_pages=4,
 )
@@ -48,7 +49,9 @@ class Run:
             return handler(request)
 
         client = httpx.Client(transport=httpx.MockTransport(record))
-        self.fetcher = TriFetcher(settings, EfserviceClient(EFSERVICE, client, self.sleeps.append))
+        self.fetcher = TriFetcher(
+            settings, EfserviceClient(EFSERVICE, client, self.sleeps.append), CURRENT_YEAR
+        )
 
     def go(self, medium: str = "AIR STACK") -> bool:
         return self.fetcher.fetch(CAS, medium, self.pages.append)
@@ -75,9 +78,9 @@ def test_pages_until_a_short_one() -> None:
     assert run.go() is False
     assert [len(p) for p in run.pages] == [3, 3, 1]
     assert run.urls == [
-        "https://tri.test/r/50-00-0/m/AIR%20STACK/rows/0:2/JSON",
-        "https://tri.test/r/50-00-0/m/AIR%20STACK/rows/3:5/JSON",
-        "https://tri.test/r/50-00-0/m/AIR%20STACK/rows/6:8/JSON",
+        "https://tri.test/r/50-00-0/m/AIR%20STACK/y/2016/rows/0:2/JSON",
+        "https://tri.test/r/50-00-0/m/AIR%20STACK/y/2016/rows/3:5/JSON",
+        "https://tri.test/r/50-00-0/m/AIR%20STACK/y/2016/rows/6:8/JSON",
     ]
 
 
@@ -110,7 +113,7 @@ def test_full_last_page_at_the_cap_is_flagged_even_if_complete() -> None:
 def test_medium_and_cas_are_url_encoded() -> None:
     run = Run(_script(_page(0)))
     run.fetcher.fetch("50-00-0", "AIR/STACK X", run.pages.append)
-    assert "m/AIR%2FSTACK%20X/rows" in run.urls[0]
+    assert "m/AIR%2FSTACK%20X/y/2016/rows" in run.urls[0]
 
 
 def test_a_failing_page_raises_without_hiding_earlier_pages() -> None:
@@ -118,3 +121,16 @@ def test_a_failing_page_raises_without_hiding_earlier_pages() -> None:
     with pytest.raises(EfserviceError):
         run.go()
     assert [len(p) for p in run.pages] == [3]  # the caller must discard what it folded in
+
+
+def test_the_request_asks_only_for_recent_years() -> None:
+    """With ten recent years ending in 2026, reports after 2016 are requested, on every page."""
+    run = Run(_script(_page(3), _page(1, 3)), replace(SETTINGS, recent_years=10))
+    run.go()
+    assert all("/y/2016/" in url for url in run.urls)
+
+
+def test_a_different_window_changes_the_year_in_the_request() -> None:
+    run = Run(_script(_page(0)), replace(SETTINGS, recent_years=3))
+    run.go()
+    assert "/y/2023/" in run.urls[0]

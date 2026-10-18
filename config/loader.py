@@ -145,6 +145,7 @@ class ComptoxSettings:
 TRI_FIELD_KEYS = (
     "medium",
     "year",
+    "doc_ctrl_num",
     "quantity",
     "unit",
     "facility_name",
@@ -165,10 +166,11 @@ class TriSettings:
 
     Attributes:
         release_path: Path template appended to the Envirofacts base URL; contains ``{casrn}``,
-            ``{medium}``, ``{start}`` and ``{end}`` (inclusive row range).
+            ``{medium}``, ``{after_year}``, ``{start}`` and ``{end}`` (inclusive row range).
         media: Environmental media to keep, e.g. ``("AIR STACK",)``; one query per medium.
         page_size: Rows requested per page.
         max_pages: Most pages fetched per medium.
+        recent_years: Reporting years that count, ending with the current year.
         east_longitude_states: State codes whose longitudes are east of Greenwich.
         facility_id_fields: TRI columns holding the FRS ID, first one set wins.
         fields: Result key (see ``TRI_FIELD_KEYS``) -> TRI column name.
@@ -178,9 +180,18 @@ class TriSettings:
     media: tuple[str, ...]
     page_size: int
     max_pages: int
+    recent_years: int
     east_longitude_states: tuple[str, ...]
     facility_id_fields: tuple[str, ...]
     fields: Mapping[str, str]
+
+    def after_year(self, current_year: int) -> int:
+        """Return the year after which reports count (the window starts the year after it)."""
+        return current_year - self.recent_years
+
+    def first_year(self, current_year: int) -> int:
+        """Return the first reporting year inside the window."""
+        return self.after_year(current_year) + 1
 
 
 @dataclass(frozen=True)
@@ -384,7 +395,7 @@ def _parse_tri_fields(section: dict[str, object]) -> Mapping[str, str]:
 
 def _tri_template(section: dict[str, object]) -> str:
     template = _require_str(section, "release_path", "tri")
-    for slot in ("{casrn}", "{medium}", "{start}", "{end}"):
+    for slot in ("{casrn}", "{medium}", "{after_year}", "{start}", "{end}"):
         if slot not in template:
             raise ValueError(f"tri.release_path must contain {slot}")
     return template
@@ -409,6 +420,7 @@ def load_tri_settings(path: Path | None = None) -> TriSettings:
         media=_names(section, "media", "tri", allow_empty=False),
         page_size=_require_int(section, "page_size", minimum=1, name="tri"),
         max_pages=_require_int(section, "max_pages", minimum=1, name="tri"),
+        recent_years=_require_int(section, "recent_years", minimum=1, name="tri"),
         east_longitude_states=_names(section, "east_longitude_states", "tri", allow_empty=True),
         facility_id_fields=_names(section, "facility_id_fields", "tri", allow_empty=False),
         fields=_parse_tri_fields(section),

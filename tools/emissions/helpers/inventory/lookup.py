@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 from config.loader import EmissionsSettings, TriSettings
 from tools.emissions.helpers.efservice import EfserviceError
-from tools.emissions.helpers.inventory.reduce import LatestReports
+from tools.emissions.helpers.inventory.reduce import LatestReports, Locator
 from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
@@ -20,6 +20,8 @@ def lookup_emissions(
     emissions: EmissionsSettings,
     aliases: Mapping[str, str] | None,
     fetcher: TriFetcher,
+    current_year: int,
+    locate: Locator | None = None,
 ) -> list[EmissionRecord]:
     """Find the latest-year release record of each facility for a chemical.
 
@@ -29,13 +31,17 @@ def lookup_emissions(
         emissions: Emission-rate assumptions.
         aliases: Source unit spelling -> Pint-parsable unit string.
         fetcher: Source of TRI rows (injected).
+        current_year: The current calendar year; only the last ``tri.recent_years`` reporting
+            years ending with it are used.
+        locate: Gives the coordinates of a facility from its FRS ID (injected); used only for
+            facilities whose TRI rows have none. Without it such facilities are omitted.
 
     Returns:
         One record per (medium, facility); empty if nothing was reported or if retrieval
         failed (a partial result is never returned as if it were complete). Data problems
         and a hit page cap are logged as warnings.
     """
-    reducer = LatestReports(tri)
+    reducer = LatestReports(tri, tri.first_year(current_year))
     try:
         for medium in tri.media:
             if fetcher.fetch(cas, medium, reducer.add_rows):
@@ -48,7 +54,7 @@ def lookup_emissions(
     except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
         return []
-    records = reducer.records(emissions, aliases)
+    records = reducer.records(emissions, aliases, locate)
     for message in reducer.stats.warnings():
         logger.warning("TRI %s: %s", cas, message)
     return records
