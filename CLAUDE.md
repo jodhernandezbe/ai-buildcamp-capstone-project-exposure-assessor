@@ -24,8 +24,9 @@ Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass wit
 - `tools/`   tool logic only, grouped by concern (`informatics/`, `emissions/`,
   `geospatial/`, `exposure/`). One module per tool group.
 - `prompts/` Markdown prompt files plus `registry.py` to load them.
-- `config/`  `settings.toml` plus a typed loader (`loader.py`) for external-service URLs,
-  endpoints and timing. Never hard-code URLs or endpoints in Python; add them here.
+- `config/`  `settings.toml` plus typed loaders, one module per concern (`loader.py`,
+  `stack.py`, `retrieval.py`; shared validators in `parsing.py`) for URLs, endpoints, timing,
+  data paths, columns, units and model names. Never hard-code these in Python; add them here.
 - `commons/` small, generic, pure utilities used across layers (e.g. `units.py`, Pint-based
   unit conversion). No project knowledge, no I/O, no config reads: callers pass in what they need.
 - `tests/`   pytest suite mirroring the package layout (`tests/tools/emissions/test_stack.py` tests `tools/emissions/stack.py`). Every test directory needs an `__init__.py`.
@@ -43,6 +44,7 @@ editing there:
 - `agent/CLAUDE.md`   provider-agnostic orchestration only.
 - `commons/CLAUDE.md` generic pure utilities with no project imports.
 - `models/CLAUDE.md`  pure deterministic equations with units in every docstring.
+- `tools/emissions/rag/CLAUDE.md` SCC retrieval (RAG); the one place a provider is imported.
 - `prompts/CLAUDE.md` prompt files, XML structure, loading through the registry.
 - `tools/CLAUDE.md`   `@tool` conventions, registry and test requirements.
 

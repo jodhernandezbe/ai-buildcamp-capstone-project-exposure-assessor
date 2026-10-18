@@ -124,6 +124,92 @@ zip_code = "zip_code"
 [emissions]
 operating_hours_per_year = 8760
 
+# Stack parameters. Quantities are always the four keys stack_height, stack_diameter,
+# exit_velocity and exit_temperature.
+#
+# Tier 2: EPA PSTK (Point Source Stack Replacements), SCC-keyed default stacks, read from a
+# local CSV. Only national rows are used: an empty FIPS cell or one of `national_fips` (the
+# tool has no location input, so county-specific rows are ignored). Delete `fips_column` if
+# the file has none; every row then counts as national.
+[stack.pstk]
+path = "data/pstk.csv"
+scc_column = "scc"
+fips_column = "fips"
+national_fips = ["0", "00000"]
+
+# Quantity -> PSTK column.
+[stack.pstk.columns]
+stack_height = "stkhgt"
+stack_diameter = "stkdiam"
+exit_velocity = "stkvel"
+exit_temperature = "stktemp"
+
+# Quantity -> unit the PSTK file reports it in (SMOKE PSTK files are metric). Converted with
+# Pint, so e.g. "ft", "ft/s" or "degF" also work.
+[stack.pstk.units]
+stack_height = "m"
+stack_diameter = "m"
+exit_velocity = "m/s"
+exit_temperature = "K"
+
+# Units the stack tools return.
+[stack.target_units]
+stack_height = "m"
+stack_diameter = "m"
+exit_velocity = "m/s"
+exit_temperature = "K"
+
+# Plausible [minimum, maximum] per quantity, in the target units. A value outside its range
+# is treated as missing (fail closed), never clipped.
+[stack.ranges]
+stack_height = [0.1, 450.0]
+stack_diameter = [0.01, 30.0]
+exit_velocity = [0.01, 150.0]
+exit_temperature = [200.0, 1800.0]
+
+# Final fallback when the SCC lookup fails: the global point-source default from the EPA
+# AirToxScreen Technical Support Document (3.0 m = 9.84 ft, 0.2 m = 0.66 ft,
+# 4.0 m/s = 13.12 ft/s, 295.4 K = 72.05 degF).
+[stack.global_fallback]
+stack_height = 3.0
+stack_diameter = 0.2
+exit_velocity = 4.0
+exit_temperature = 295.4
+
+# Embedding model used by the SCC retrieval (tools/emissions/rag/). `provider` selects the
+# implementation in tools/emissions/rag/embeddings.py; the API key is read from the
+# environment variable named here.
+[embeddings]
+provider = "openai"
+model = "text-embedding-3-small"
+api_key_env_var = "OPENAI_API_KEY"  # pragma: allowlist secret
+timeout_seconds = 30.0
+
+# SCC process-context retrieval: a persistent vector index of the EPA SCC table, queried
+# with a NAICS (industry) description. The index is rebuilt automatically when the table,
+# the filters, the column mapping or the embedding model change.
+[scc_index]
+source_path = "data/epa_scc_to_epa_emission_sector.csv"
+persist_dir = ".cache/scc_index"
+collection = "scc_point_active"
+# Rows kept: `data category` in categories and `status` in statuses.
+categories = ["Point"]
+statuses = ["Active"]
+# Results returned per query, and documents embedded per request while indexing.
+top_k = 5
+batch_size = 500
+
+# Field -> column of the SCC table.
+[scc_index.columns]
+scc = "SCC"
+category = "data category"
+status = "status"
+level_one = "scc level one"
+level_two = "scc level two"
+level_three = "scc level three"
+level_four = "scc level four"
+sector = "sector"
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]

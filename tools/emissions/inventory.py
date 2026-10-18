@@ -31,7 +31,7 @@ def query_emissions_inventory(cas_number: str) -> list[EmissionRecord]:
         reported, so different facilities may be reported for different years. Only
         stack (point-source) air releases are returned; fugitive air, water and land
         releases are not. Each result's `frs_id` identifies the facility for
-        `get_facility_metadata` and `fetch_stack_parameters`, and `emission_rate` feeds
+        `get_facility_metadata` and `fetch_stack_parameters_from_nei`, and `emission_rate` feeds
         `calculate_exposure_metrics`. A widely reported chemical can take several minutes
         because TRI is read in many pages.
 

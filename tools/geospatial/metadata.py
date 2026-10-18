@@ -14,7 +14,7 @@ def get_facility_metadata(frs_id: str) -> FacilityMetadata:
     Purpose:
         Use this to turn a facility identifier into coordinates for the
         meteorology and population lookups, and into the SCC code needed by
-        `fetch_stack_parameters`.
+        `fetch_stack_parameters_from_scc`.
 
     Args:
         frs_id: EPA Facility Registry Service identifier.

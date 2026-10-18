@@ -48,13 +48,15 @@ The code is split into four packages with one-way dependencies: `agent` -> `tool
       schemas.py             TypedDicts shared by tool inputs/outputs
       informatics/properties.py   fetch_chemical_properties
       emissions/inventory.py      query_emissions_inventory
-      emissions/stack.py          fetch_stack_parameters
+      emissions/process.py        lookup_scc_process_description (NAICS text -> SCC processes)
+      emissions/stack.py          fetch_stack_parameters_from_nei (tier 1), _from_scc (tier 2)
+      emissions/rag/              SCC retrieval: embeddings, Chroma index, LangGraph graph
       geospatial/metadata.py      get_facility_metadata
       exposure/meteorology.py     get_meteorological_boundary
       exposure/metrics.py         get_population_receptors, calculate_exposure_metrics
     tests/                   pytest suite, mirrors the package layout
 
-The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. `fetch_chemical_properties` is implemented (CAS -> SMILES -> CompTox, with Pint unit conversion to fixed units), and so is `query_emissions_inventory` (CAS -> EPA TRI facilities with their latest reported stack-air release, location and an average emission rate in g/s at 8760 operating hours per year, configurable in `config/settings.toml`); the other tools are stubs that raise `NotImplementedError`.
+The intended tool flow for an assessment: chemical properties -> emissions inventory -> facility metadata -> stack parameters -> meteorology and population -> exposure metrics. `fetch_chemical_properties` is implemented (CAS -> SMILES -> CompTox, with Pint unit conversion to fixed units), and so is `query_emissions_inventory` (CAS -> EPA TRI facilities with their latest reported stack-air release, location and an average emission rate in g/s at 8760 operating hours per year, configurable in `config/settings.toml`). `fetch_stack_parameters_from_scc` returns EPA PSTK stack defaults for an SCC (a PSTK CSV is expected at `[stack.pstk].path`), falling back to the AirToxScreen global point-source default, and `lookup_scc_process_description` finds candidate SCC process descriptions for a NAICS description by semantic search over `data/epa_scc_to_epa_emission_sector.csv` (OpenAI embeddings, `OPENAI_API_KEY`; the index is cached in `.cache/scc_index` and can be pre-built with `uv run python scripts/build_scc_index.py`). The other tools, including `fetch_stack_parameters_from_nei`, are stubs that raise `NotImplementedError`.
 
 ## Swapping the LLM provider
 

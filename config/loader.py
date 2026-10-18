@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -10,7 +9,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, cast
 
-DEFAULT_SETTINGS_PATH = Path(__file__).parent / "settings.toml"
+from config.parsing import DEFAULT_SETTINGS_PATH as DEFAULT_SETTINGS_PATH
+from config.parsing import names as _names
+from config.parsing import read_toml as _read_toml
+from config.parsing import require_int as _require_int
+from config.parsing import require_number as _require_number
+from config.parsing import require_str as _require_str
+from config.parsing import section as _section
 
 
 @dataclass(frozen=True)
@@ -205,37 +210,6 @@ class EmissionsSettings:
     operating_hours_per_year: float
 
 
-def _require_str(section: dict[str, object], key: str, name: str) -> str:
-    value = section.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name}.{key} must be a non-empty string")
-    return value
-
-
-def _require_number(section: dict[str, object], key: str, *, minimum: float, name: str) -> float:
-    value = section.get(key)
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"{name}.{key} must be a number")
-    if value < minimum or (minimum > 0 and value == 0):
-        raise ValueError(f"{name}.{key} must be >= {minimum}")
-    return float(value)
-
-
-def _read_toml(path: Path | None) -> dict[str, object]:
-    settings_path = path or DEFAULT_SETTINGS_PATH
-    if not settings_path.is_file():
-        raise FileNotFoundError(f"Settings file not found: {settings_path}")
-    with settings_path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
-def _section(data: dict[str, object], name: str) -> dict[str, object]:
-    raw = data.get(name)
-    if not isinstance(raw, dict):
-        raise ValueError(f"{name} section is missing")
-    return {str(k): v for k, v in raw.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
-
-
 def _tables(section: dict[str, object], key: str) -> list[dict[str, object]]:
     """Return the non-empty array of tables ``comptox.<key>`` as plain dicts."""
     raw = section.get(key)
@@ -413,27 +387,6 @@ def load_unit_settings(path: Path | None = None) -> UnitSettings:
 def get_unit_settings() -> UnitSettings:
     """Return the cached unit settings from the default file."""
     return load_unit_settings()
-
-
-def _require_int(section: dict[str, object], key: str, *, minimum: int, name: str) -> int:
-    value = section.get(key)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{name}.{key} must be an integer")
-    if value < minimum:
-        raise ValueError(f"{name}.{key} must be >= {minimum}")
-    return value
-
-
-def _names(
-    section: dict[str, object], key: str, name: str, *, allow_empty: bool
-) -> tuple[str, ...]:
-    value = section.get(key)
-    items = cast(list[object], value) if isinstance(value, list) else None
-    if items is None or (not items and not allow_empty):
-        raise ValueError(f"{name}.{key} must be a non-empty list of strings")
-    if not all(isinstance(item, str) and item.strip() for item in items):
-        raise ValueError(f"{name}.{key} must be a list of non-empty strings")
-    return tuple(cast(str, item).strip() for item in items)
 
 
 def _parse_tri_fields(section: dict[str, object]) -> Mapping[str, str]:

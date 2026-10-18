@@ -44,8 +44,9 @@ def convert(
     """Convert ``value`` from ``from_unit`` to ``to_unit``.
 
     The configured ``aliases`` are applied to both unit strings first, so source spellings
-    such as "mg/m3" can be mapped to ones Pint parses. Offset units (e.g. degC) are not
-    intended for use here.
+    such as "mg/m3" can be mapped to ones Pint parses. Offset units (degF, degC) convert
+    as absolute temperatures (32 degF -> 273.15 K); do not use them for temperature
+    differences, and do not combine them with other units (e.g. "degC/s").
 
     Args:
         value: Magnitude in ``from_unit``. Must be finite.

@@ -72,13 +72,42 @@ class EmissionRecord(TypedDict):
     zip_code: str | None
 
 
-class StackParameters(TypedDict):
-    """Release-point geometry and plume conditions."""
+StackSource = Literal["NEI", "PSTK", "AirToxScreen global default"]
 
-    stack_height: float  # m
-    stack_diameter: float  # m
-    exit_velocity: float  # m/s
-    exit_temperature: float  # K
+
+class StackParameters(TypedDict):
+    """Release-point geometry and plume conditions.
+
+    The four values are all set or all None (never mixed across sources); ``warnings`` says
+    why they are missing or which rule chose them.
+    """
+
+    stack_height: float | None  # m above ground
+    stack_diameter: float | None  # m
+    exit_velocity: float | None  # m/s
+    exit_temperature: float | None  # K
+    source: StackSource | None  # where the values come from; None when there are none
+    scc: str | None  # SCC whose PSTK row supplied the values; None otherwise
+    warnings: list[str]
+
+
+class SccMatch(TypedDict):
+    """One SCC whose process description matches an industry description."""
+
+    scc: str  # Source Classification Code, e.g. "30600101"
+    level_one: str  # broadest category, e.g. "Industrial Processes"
+    level_two: str
+    level_three: str
+    level_four: str  # most specific process description
+    sector: str  # EPA emission sector, e.g. "Industrial Processes - Petroleum Refineries"
+    score: float  # semantic similarity, 0 (unrelated) to 1 (identical)
+
+
+class SccLookupResult(TypedDict):
+    """Candidate SCCs for an industry description, best first."""
+
+    matches: list[SccMatch]
+    warnings: list[str]
 
 
 class FacilityMetadata(TypedDict):

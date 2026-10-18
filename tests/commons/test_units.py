@@ -57,3 +57,19 @@ def test_alias_added_later() -> None:
     with pytest.raises(UnitConversionError):
         convert(1.0, "mg/m3", "ug/m^3", {})
     assert convert(1.0, "mg/m3", "ug/m^3", {"mg/m3": "mg/m^3"}) == pytest.approx(1000.0)
+
+
+@pytest.mark.parametrize(
+    ("value", "source", "target", "expected"),
+    [
+        (32.0, "degF", "K", 273.15),
+        (72.05, "degF", "K", 295.4),
+        (0.0, "degC", "K", 273.15),
+        (9.84, "ft", "m", 2.9992),
+        (13.12, "ft/s", "m/s", 3.9990),
+    ],
+)
+def test_absolute_temperature_and_length(
+    value: float, source: str, target: str, expected: float
+) -> None:
+    assert convert(value, source, target) == pytest.approx(expected, abs=1e-3)

@@ -21,3 +21,6 @@ dist/
 # Editors
 .idea/
 .vscode/
+
+# Local caches (e.g. the persisted SCC vector index)
+.cache/
