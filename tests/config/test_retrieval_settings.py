@@ -90,7 +90,7 @@ def test_default_file_indexes_point_active() -> None:
     settings = load_scc_index_settings()
     assert settings.categories == ("Point",)
     assert settings.statuses == ("Active",)
-    assert settings.source_path.name == "epa_scc_to_epa_emission_sector.csv"
+    assert settings.source_path.name == "epa_scc_to_epa_emission_sector.csv.gz"
 
 
 @pytest.mark.parametrize(

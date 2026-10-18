@@ -189,7 +189,10 @@ timeout_seconds = 30.0
 # with a NAICS (industry) description. The index is rebuilt automatically when the table,
 # the filters, the column mapping or the embedding model change.
 [scc_index]
-source_path = "data/epa_scc_to_epa_emission_sector.csv"
+# Compact table: only the columns below, only the categories below, gzip-compressed CSV (a
+# .gz path is decompressed on read). Rebuild it from the raw EPA download (kept in data/raw/,
+# not committed) with: uv run python -m scripts.compact_scc_table
+source_path = "data/epa_scc_to_epa_emission_sector.csv.gz"
 persist_dir = ".cache/scc_index"
 collection = "scc_point_active"
 # Rows kept: `data category` in categories and `status` in statuses.

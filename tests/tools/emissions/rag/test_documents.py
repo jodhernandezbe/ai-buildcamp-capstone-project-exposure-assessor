@@ -86,3 +86,41 @@ def test_real_table_is_indexable() -> None:
     sccs = [d.scc for d in documents]
     assert len(sccs) == len(set(sccs)) > 1000
     assert all(d.level_four for d in documents)
+
+
+def test_gzip_table_gives_the_same_documents(tmp_path: Path) -> None:
+    import gzip
+
+    plain = scc_settings(tmp_path)
+    packed = tmp_path / "scc.csv.gz"
+    packed.write_bytes(gzip.compress((HEADER + ROWS).encode("utf-8")))
+    assert load_documents(replace(plain, source_path=packed)) == load_documents(plain)
+
+
+def test_gzip_table_fingerprint_follows_its_bytes(tmp_path: Path) -> None:
+    import gzip
+
+    settings = scc_settings(tmp_path)
+    packed = tmp_path / "scc.csv.gz"
+    packed.write_bytes(gzip.compress((HEADER + ROWS).encode("utf-8")))
+    embedding = load_embedding_settings()
+    same = replace(settings, source_path=packed)
+    assert fingerprint(same, embedding) == fingerprint(same, embedding)
+    assert fingerprint(same, embedding) != fingerprint(settings, embedding)
+
+
+@pytest.mark.parametrize("content", [b"not gzip at all", b"\x1f\x8b\x08\x00truncated"])
+def test_bad_gzip_table_is_a_source_error(tmp_path: Path, content: bytes) -> None:
+    bad = tmp_path / "scc.csv.gz"
+    bad.write_bytes(content)
+    with pytest.raises(SourceError, match="could not be read"):
+        load_documents(replace(scc_settings(tmp_path), source_path=bad))
+
+
+@pytest.mark.parametrize("name", ["table.csv", "table.csv.gz"])
+def test_empty_table_lacks_columns_plain_or_gzip(tmp_path: Path, name: str) -> None:
+    settings = scc_settings(tmp_path)  # writes tmp_path/scc.csv: use another file for the test
+    empty = tmp_path / f"empty-{name}"
+    empty.write_bytes(b"")
+    with pytest.raises(ValueError, match="lacks configured columns"):
+        load_documents(replace(settings, source_path=empty))

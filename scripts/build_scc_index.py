@@ -4,7 +4,7 @@ The SCC tool builds the index on first use anyway; run this beforehand so the ag
 call is fast. It needs the embedding provider's API key (``[embeddings].api_key_env_var``,
 e.g. in ``.env``) and calls the provider once per ``[scc_index].batch_size`` documents.
 
-Usage: ``uv run python scripts/build_scc_index.py ["industry description"]``
+Usage: ``uv run python -m scripts.build_scc_index ["industry description"]``
 """
 
 from __future__ import annotations

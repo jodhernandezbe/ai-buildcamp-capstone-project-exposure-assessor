@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
+from typing import TextIO
 
 from config.retrieval import EmbeddingSettings, SccIndexSettings
 from tools.emissions.rag.errors import SourceError
@@ -120,6 +123,13 @@ def _check_columns(header: Sequence[str], settings: SccIndexSettings) -> None:
         raise ValueError(f"SCC table {source} lacks configured columns: {', '.join(missing)}")
 
 
+def _open_table(path: Path) -> TextIO:
+    """Open the table as text; a ``.gz`` file is decompressed on the fly."""
+    if path.suffix == ".gz":
+        return gzip.open(path, "rt", newline="", encoding="utf-8-sig")
+    return path.open(newline="", encoding="utf-8-sig")
+
+
 def load_documents(settings: SccIndexSettings) -> tuple[SccDocument, ...]:
     """Read the SCC table and return the documents to index, one per SCC.
 
@@ -134,11 +144,11 @@ def load_documents(settings: SccIndexSettings) -> tuple[SccDocument, ...]:
         ValueError: If the table lacks a configured column.
     """
     try:
-        with settings.source_path.open(newline="", encoding="utf-8-sig") as handle:
+        with _open_table(settings.source_path) as handle:
             reader = csv.DictReader(handle)
             _check_columns(list(reader.fieldnames or []), settings)
             documents = _collect(reader, settings)
-    except (OSError, csv.Error, UnicodeDecodeError) as exc:
+    except (OSError, EOFError, csv.Error, UnicodeDecodeError) as exc:
         raise SourceError(f"SCC table {settings.source_path} could not be read: {exc}") from exc
     if not documents:
         raise SourceError("no SCC rows match the configured categories and statuses")
