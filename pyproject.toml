@@ -49,6 +49,7 @@ addopts = '-m "not smoke"'
 markers = [
     "smoke: live-network checks against real services (run with: pytest -m smoke)",
     "comptox: smoke test that needs the CompTox API key (skipped when it is not set)",
+    "census: smoke test that needs the Census API key (skipped when it is not set)",
 ]
 
 [tool.pyright]

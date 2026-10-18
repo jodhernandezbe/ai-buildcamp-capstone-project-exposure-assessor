@@ -117,3 +117,29 @@ def test_other_client_errors_are_not_retried(status: int) -> None:
     with pytest.raises(HttpRequestError, match=str(status)):
         run.get()
     assert len(run.requests) == 1
+
+
+def test_a_final_error_status_is_on_the_exception() -> None:
+    run = Run(httpx.Response(302, headers={"Location": "https://x.test/missing_key.html"}))
+    with pytest.raises(HttpRequestError) as caught:
+        run.get()
+    assert caught.value.status_code == 302
+    assert len(run.requests) == 1
+
+
+def test_exhausted_retries_carry_the_last_status() -> None:
+    run = Run(*[httpx.Response(503)] * 3)
+    with pytest.raises(HttpRequestError) as caught:
+        run.get()
+    assert caught.value.status_code == 503
+
+
+def test_no_status_when_nothing_answered() -> None:
+    run = Run(*[httpx.ReadTimeout("slow")] * 3)
+    with pytest.raises(HttpRequestError) as caught:
+        run.get()
+    assert caught.value.status_code is None
+
+
+def test_the_message_alone_is_enough_to_build_the_error() -> None:
+    assert HttpRequestError("boom").status_code is None

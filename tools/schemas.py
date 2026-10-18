@@ -126,10 +126,15 @@ class Meteorology(TypedDict):
 
 
 class Population(TypedDict):
-    """Population living within a search radius."""
+    """Residents living within a search radius, from census estimates or a labelled default.
 
-    total_population: int
-    age_distribution: dict[str, float]  # age band, e.g. "0-4", -> percent of total
+    ``source`` is "screening default" when no census data could be used.
+    """
+
+    total_population: int  # residents within the radius
+    age_distribution: dict[str, float]  # age band "0-4", "5-17", "18-64", "65+" -> percent
+    source: str  # data source and vintage, or "screening default"
+    warnings: list[str]  # tracts left out, or why the default was used
 
 
 class Toxicity(TypedDict):

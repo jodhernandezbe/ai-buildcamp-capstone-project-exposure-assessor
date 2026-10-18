@@ -9,13 +9,12 @@ from datetime import date, timedelta
 from commons.units import convert
 from config.meteorology import MeteorologySettings, YearWindow
 from models.meteorology import HourlyInputs, HourlySummary, summarize_hours
+from tools.exposure.helpers.inputs import point_problem
 from tools.exposure.helpers.openmeteo import ArchiveError, fetch_hourly
 from tools.http import RetryingClient
 from tools.schemas import Meteorology
 
 DEFAULT_SOURCE = "screening default"
-_MAX_LATITUDE = 90.0
-_MAX_LONGITUDE = 180.0
 
 
 def screening_default(settings: MeteorologySettings, reason: str) -> Meteorology:
@@ -29,13 +28,6 @@ def screening_default(settings: MeteorologySettings, reason: str) -> Meteorology
         source=DEFAULT_SOURCE,
         warnings=[f"{reason}; using the {DEFAULT_SOURCE} (generic, not site-specific)"],
     )
-
-
-def _coordinate_problem(value: object, name: str, limit: float) -> str | None:
-    ok = isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
-    if ok and -limit <= float(value) <= limit:  # type: ignore[arg-type]
-        return None
-    return f"{name} {value!r} is invalid: it must be a finite number from -{limit:g} to {limit:g}"
 
 
 def _year_problem(year: object, window: YearWindow, today: date) -> str | None:
@@ -56,11 +48,7 @@ def input_problem(
     latitude: object, longitude: object, year: object, window: YearWindow, today: date
 ) -> str | None:
     """Return why the request cannot be made, or None when the inputs are valid."""
-    return (
-        _coordinate_problem(latitude, "latitude", _MAX_LATITUDE)
-        or _coordinate_problem(longitude, "longitude", _MAX_LONGITUDE)
-        or _year_problem(year, window, today)
-    )
+    return point_problem(latitude, longitude) or _year_problem(year, window, today)
 
 
 def meteorology_for(

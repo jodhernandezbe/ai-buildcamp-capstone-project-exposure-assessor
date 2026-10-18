@@ -320,6 +320,57 @@ wind_direction = 270.0
 stability_class = "D"
 ambient_temperature = 293.0
 
+# Population around a point: Census tracts that intersect a circle (TIGERweb, no key), then ACS
+# 5-year Data Profile counts per county (Census Data API). The Census Data API REQUIRES a free
+# API key (https://api.census.gov/data/key_signup.html): without one it redirects every request to a
+# "Missing Key" page. Put the key in .env as the variable named by `api_key_env_var`.
+# TIGERweb layer 8 is "Census Tracts" (up to 100,000 records per query). A 50 km circle around New
+# York City reaches 19 counties, so up to `max_counties` ACS requests are made per call.
+[population]
+tract_url = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current/MapServer/8/query"
+acs_base_url = "https://api.census.gov"
+# {year} is the ACS 5-year vintage below.
+acs_path = "/data/{year}/acs/acs5/profile"
+acs_year = 2023
+api_key_env_var = "CENSUS_API_KEY"  # pragma: allowlist secret
+# Search radius (km): the default is one mile; requests outside [min, max] are refused.
+default_radius_km = 1.609
+min_radius_km = 0.1
+max_radius_km = 50.0
+max_counties = 25
+delay_seconds = 0.2
+timeout_seconds = 60.0
+max_retries = 2
+backoff_seconds = 5.0
+
+# Meaning -> TIGERweb tract field.
+[population.fields]
+state = "STATE"
+county = "COUNTY"
+tract = "TRACT"
+land_area = "AREALAND"
+
+# Meaning -> ACS DP05 variable (labels checked for the 2023 vintage: total population, under 5
+# years, under 18 years, 65 years and over).
+[population.variables]
+total = "DP05_0001E"
+under_5 = "DP05_0005E"
+under_18 = "DP05_0019E"
+over_65 = "DP05_0024E"
+
+# Returned, labelled "screening default", when no census data can be used. The age mix is the
+# United States row of the ACS 2023 5-year profile (5.7, 16.5, 61.0, 16.8 percent). The density
+# has no source: it is a suburban-scale assumption (the US average is about 36 people per km2,
+# dense cities exceed 1,000).
+[population.screening_default]
+residents_per_km2 = 300.0
+
+[population.screening_default.age_distribution]
+"0-4" = 5.7
+"5-17" = 16.5
+"18-64" = 61.0
+"65+" = 16.8
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]

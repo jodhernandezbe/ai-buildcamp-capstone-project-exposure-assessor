@@ -25,7 +25,7 @@ from pathlib import Path
 
 from config.stack import STACK_QUANTITIES, NeiSettings, get_stack_settings
 from scripts.compact_scc_table import to_gzip
-from tools.emissions.helpers.digits import digit_string
+from tools.digits import digit_string
 
 Combinations = dict[str, set[tuple[str, ...]]]
 

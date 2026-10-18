@@ -17,6 +17,7 @@ from config.parsing import (
     section,
     subtable,
 )
+from config.policy import RequestPolicy, parse_policy
 
 HOURLY_QUANTITIES = (
     "temperature",
@@ -77,23 +78,6 @@ class ArchiveRequest:
     def url(self) -> str:
         """Full URL of the archive endpoint."""
         return self.base_url.rstrip("/") + self.archive_path
-
-
-@dataclass(frozen=True)
-class RequestPolicy:
-    """How politely the archive is called.
-
-    Attributes:
-        delay_seconds: Wait before each request, in seconds.
-        timeout_seconds: Per-request timeout, in seconds.
-        max_retries: Retries after a throttled, failed or timed-out request.
-        backoff_seconds: First retry wait in seconds; doubles on each further retry.
-    """
-
-    delay_seconds: float
-    timeout_seconds: float
-    max_retries: int
-    backoff_seconds: float
 
 
 @dataclass(frozen=True)
@@ -216,16 +200,6 @@ def _request(table: dict[str, object]) -> ArchiveRequest:
     )
 
 
-def _policy(table: dict[str, object]) -> RequestPolicy:
-    name = "meteorology"
-    return RequestPolicy(
-        delay_seconds=require_number(table, "delay_seconds", minimum=0, name=name),
-        timeout_seconds=require_number(table, "timeout_seconds", minimum=0.001, name=name),
-        max_retries=require_int(table, "max_retries", minimum=0, name=name),
-        backoff_seconds=require_number(table, "backoff_seconds", minimum=0, name=name),
-    )
-
-
 def _summary(table: dict[str, object]) -> SummaryRules:
     minimum = require_number(table, "minimum_wind_speed", minimum=1e-9, name="meteorology")
     return SummaryRules(minimum_wind_speed=minimum, sector_width=_sector_width(table))
@@ -244,7 +218,7 @@ def load_meteorology_settings(path: Path | None = None) -> MeteorologySettings:
     table = section(read_toml(path), "meteorology")
     return MeteorologySettings(
         request=_request(table),
-        policy=_policy(table),
+        policy=parse_policy(table, "meteorology"),
         years=_years(table),
         summary=_summary(table),
         screening_default=_screening_default(table),

@@ -16,7 +16,17 @@ _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 class HttpRequestError(RuntimeError):
-    """A request could not be completed; no partial result should be used."""
+    """A request could not be completed; no partial result should be used.
+
+    Attributes:
+        status_code: HTTP status of the last answer, or None if there was none (a timeout or
+            a connection failure).
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        """Create the error with its message and, if known, the last HTTP status."""
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class RetryPolicy(Protocol):
@@ -49,6 +59,7 @@ class _Retry:
 
     reason: str
     wait: float | None = None
+    status: int | None = None
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -99,16 +110,17 @@ class RetryingClient:
         """
         retries = self._policy.max_retries
         reason = ""
+        status: int | None = None
         for attempt in range(retries + 1):
             self._sleep(self._policy.delay_seconds)
             outcome = self._attempt(url, params)
             if not isinstance(outcome, _Retry):
                 return outcome.payload
-            reason = outcome.reason
+            reason, status = outcome.reason, outcome.status
             logger.debug("request failed (%s), attempt %d", reason, attempt + 1)
             if attempt < retries:
                 self._sleep(self._wait(attempt, outcome))
-        raise HttpRequestError(f"request failed after {retries + 1} attempts: {reason}")
+        raise HttpRequestError(f"request failed after {retries + 1} attempts: {reason}", status)
 
     def _wait(self, attempt: int, retry: _Retry) -> float:
         backoff = self._policy.backoff_seconds * 2**attempt
@@ -122,9 +134,13 @@ class RetryingClient:
         except httpx.HTTPError as exc:
             return _Retry(f"{type(exc).__name__}")
         if response.status_code in _RETRYABLE_STATUS:
-            return _Retry(f"HTTP {response.status_code}", _retry_after(response))
+            return _Retry(
+                f"HTTP {response.status_code}", _retry_after(response), response.status_code
+            )
         if response.status_code != 200:
-            raise HttpRequestError(f"server returned HTTP {response.status_code}")
+            raise HttpRequestError(
+                f"server returned HTTP {response.status_code}", response.status_code
+            )
         try:
             return _Body(cast(object, response.json()))
         except ValueError:

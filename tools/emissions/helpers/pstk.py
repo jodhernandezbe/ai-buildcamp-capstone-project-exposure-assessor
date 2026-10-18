@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from config.stack import PstkSettings, StackSettings
-from tools.emissions.helpers.digits import digit_string
+from tools.digits import digit_string
 from tools.emissions.helpers.stack_values import StackRow, check_units_convertible, stack_values
 from tools.schemas import StackParameters, StackSource
 

@@ -8,28 +8,6 @@ from tools.schemas import ExposureMetrics, Meteorology, Population, StackParamet
 
 
 @tool
-def get_population_receptors(latitude: float, longitude: float, radius_km: float) -> Population:
-    """Count the people living around a point and describe their age makeup.
-
-    Purpose:
-        Identifies who may be exposed. The result is the `population` input of
-        `calculate_exposure_metrics`.
-
-    Args:
-        latitude: Center latitude, decimal degrees (WGS84).
-        longitude: Center longitude, decimal degrees (WGS84).
-        radius_km: Search radius in kilometers.
-
-    Returns:
-        A dict with:
-        - total_population: number of residents within the radius
-        - age_distribution: mapping of age band (e.g. "0-4", "65+") to percent of
-          the total population
-    """
-    raise NotImplementedError
-
-
-@tool
 def calculate_exposure_metrics(
     emission_rate: float,
     stack_params: StackParameters,

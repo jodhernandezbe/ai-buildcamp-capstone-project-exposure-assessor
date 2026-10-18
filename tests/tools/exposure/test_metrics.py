@@ -2,19 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from tools.exposure.metrics import calculate_exposure_metrics, get_population_receptors
-
-
-def test_population_schema() -> None:
-    assert get_population_receptors.name == "get_population_receptors"
-    assert set(get_population_receptors.args) == {"latitude", "longitude", "radius_km"}
-
-
-def test_population_stub_not_implemented() -> None:
-    with pytest.raises(NotImplementedError):
-        get_population_receptors.invoke({"latitude": 0.0, "longitude": 0.0, "radius_km": 1.0})
+from tools.exposure.metrics import calculate_exposure_metrics
 
 
 def test_exposure_metrics_schema() -> None:

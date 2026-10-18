@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from config.efservice import FrsSettings
-from tools.emissions.helpers.digits import digit_string
+from tools.digits import digit_string
 from tools.emissions.helpers.efservice import EfserviceClient, EfserviceError, Row
 
 logger = logging.getLogger(__name__)

@@ -1,10 +1,10 @@
-"""Tests for tools.emissions.helpers.digits."""
+"""Tests for tools.digits."""
 
 from __future__ import annotations
 
 import pytest
 
-from tools.emissions.helpers.digits import digit_string
+from tools.digits import digit_string
 
 
 @pytest.mark.parametrize(
