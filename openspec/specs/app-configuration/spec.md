@@ -7,6 +7,7 @@ so they can change without editing code.
 
 ## Requirements
 
+
 ### Requirement: Externalized service settings
 The system SHALL read the CompTox base URL, endpoint path templates (CAS search, chemical detail, property summary and ToxVal), request delay and request timeout from a configuration file, and SHALL NOT embed them in Python code. The configuration SHALL also name the CompTox API-key header and the environment variable holding the key, SHALL name where molecular weight is read from (response field, the unit the service reports it in, target unit), SHALL list the CompTox properties to extract (CompTox property name, result key, target unit), and SHALL list the CompTox toxicity values to extract (result key, accepted ToxVal type labels, accepted exposure routes, preference for the lowest or highest value, target unit) together with the ordered source-priority list used to choose among records. The configuration SHALL also hold a table of unit-spelling aliases used before unit conversion.
 
@@ -73,11 +74,11 @@ The configuration file SHALL NOT contain API keys; it SHALL only name the enviro
 - **THEN** they expose the environment variable name, not a key value
 
 ### Requirement: Externalized TRI settings
-The system SHALL read the EPA Envirofacts TRI base URL, the release-query path template, page size, delay between requests, request timeout, maximum retries, retry backoff, maximum pages, and the list of environmental media to keep from the configuration file, and SHALL NOT embed them in Python code. The configuration SHALL also name the TRI field names used for the kept records so a renamed column needs only a configuration change, and the list of states whose longitudes are east of Greenwich. The configuration SHALL also hold the operating hours per year used to turn an annual release into a rate (an `[emissions]` table, default 8,760), validated on load.
+The system SHALL read the EPA Envirofacts TRI release-query path template, page size, maximum pages, and the list of environmental media to keep from the configuration file, and SHALL NOT embed them in Python code; the base URL, delay between requests, request timeout, maximum retries and retry backoff come from the shared `[efservice]` table. The configuration SHALL also name the TRI field names used for the kept records so a renamed column needs only a configuration change, and the list of states whose longitudes are east of Greenwich. The configuration SHALL also hold the operating hours per year used to turn an annual release into a rate (an `[emissions]` table, default 8,760), validated on load.
 
 #### Scenario: Settings loaded
 - **WHEN** the loader is asked for the TRI settings
-- **THEN** it returns the base URL, path template, paging, timing and retry values, and the media list from the file
+- **THEN** it returns the path template, paging values and the media list from the file
 
 #### Scenario: Changing the media
 - **WHEN** a medium is added to or removed from the configured list
@@ -92,7 +93,7 @@ The system SHALL read the EPA Envirofacts TRI base URL, the release-query path t
 - **THEN** the loader raises a `ValueError` naming the key
 
 #### Scenario: Invalid value
-- **WHEN** the page size or page cap is not a positive integer, the delay, timeout or backoff is negative or non-numeric, the retries are negative, the media list is empty, or the path lacks the CAS placeholder
+- **WHEN** the page size or page cap is not a positive integer, the media list is empty, or the path lacks the CAS placeholder
 - **THEN** the loader raises a `ValueError` naming the offending key
 
 ### Requirement: Stack parameter settings
@@ -120,3 +121,29 @@ The configuration SHALL hold, for the SCC retrieval tool: the source table path,
 #### Scenario: Invalid SCC index settings
 - **WHEN** the result count, batch size or timeout is not a positive number, the category or status list is empty, a column name is missing, the provider is not a supported one, or the model name or collection name is blank
 - **THEN** the loader raises an error naming the offending entry
+
+### Requirement: Shared Envirofacts settings
+The system SHALL read the Envirofacts base URL, delay between requests, request timeout, maximum retries and retry backoff from an `[efservice]` table, validated on load, and SHALL read the FRS-to-EIS query (path template containing `{frs_id}`, program name and the response field names) from a `[frs]` table.
+
+#### Scenario: Loaded
+- **WHEN** the loaders are asked for the Envirofacts and FRS settings
+- **THEN** they return the values from the file
+
+#### Scenario: Invalid entry
+- **WHEN** a key is missing, a number is negative, non-numeric or a boolean, a timeout is zero, or the FRS path lacks `{frs_id}`
+- **THEN** the loader raises a `ValueError` naming the key
+
+### Requirement: NEI stack table settings
+The system SHALL read from a `[stack.nei]` table: the shard directory, the shard filename template (containing `{prefix}`), the number of leading ID digits that name a shard, the ID column, the columns holding stack height, stack diameter, exit velocity and exit temperature, the unit each is reported in, the maximum number of candidates, the number of significant digits used to merge near-identical candidates, the raw NEI file location and the raw column names, and SHALL NOT embed them in Python code. Plausible ranges and target units SHALL be the ones configured for stack parameters. A relative path SHALL be resolved against the project root.
+
+#### Scenario: Settings loaded
+- **WHEN** the loader is asked for the stack settings
+- **THEN** it returns the NEI shard location, column mapping, reported units, candidate cap and merge precision
+
+#### Scenario: Changing a column or unit
+- **WHEN** a column name or reported unit is edited
+- **THEN** subsequent lookups use it with no code change
+
+#### Scenario: Invalid NEI entry
+- **WHEN** a key is missing, a unit is not a string, the filename template lacks `{prefix}`, the prefix digits or candidate cap is not a positive integer, or the merge precision is not between 1 and 15
+- **THEN** the loader raises a `ValueError` naming the offending key
