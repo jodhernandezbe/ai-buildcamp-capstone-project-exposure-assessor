@@ -232,7 +232,9 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
         used directly (pass `rfc` and `iur` to `calculate_exposure_metrics` as they are).
 
     Args:
-        cas_number: CAS registry number, e.g. "71-43-2" for benzene (hyphens optional).
+        cas_number: CAS registry number as the user gave it, e.g. "71-43-2" for benzene
+            (hyphens optional). Never a number recalled from a chemical's name: if the user
+            gave only a name, ask for the CAS number instead of calling this tool.
 
     Returns:
         A dict with:

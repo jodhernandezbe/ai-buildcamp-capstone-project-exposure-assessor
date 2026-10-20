@@ -35,7 +35,7 @@ TOX: dict[str, object] = {"rfc": 0.01, "iur": 1e-5}
 def _args(**changes: object) -> dict[str, object]:
     base: dict[str, object] = {
         "emission_rate": 0.5,
-        "stack_params": STACK,
+        "stacks": [STACK],
         "meteorology": MET,
         "population": POP,
         "toxicity": TOX,
@@ -48,7 +48,7 @@ def test_schema() -> None:
     assert calculate_exposure_metrics.name == "calculate_exposure_metrics"
     assert set(calculate_exposure_metrics.args) == {
         "emission_rate",
-        "stack_params",
+        "stacks",
         "meteorology",
         "population",
         "toxicity",
@@ -64,9 +64,10 @@ def test_description_carries_the_decisions() -> None:
         "no mixing-height limit",
         "54 combinations",
         "100 m to 10 km",
-        "ONE stack",
-        "once per stack",
-        "report the range",
+        "ALL of a facility's candidate stacks",
+        "never a subset, never one call per stack",
+        "report the `range`",
+        "One call per facility",
         "WORST CASE",
         "REPRESENTATIVE",
         "annual average",
@@ -84,7 +85,11 @@ def test_description_carries_the_decisions() -> None:
 
 
 def test_returns_the_documented_fields() -> None:
-    result = calculate_exposure_metrics.invoke(_args())
+    facility = calculate_exposure_metrics.invoke(_args())
+    for key in ("results", "range", "stacks_given", "stacks_evaluated", "warnings"):
+        assert key in facility
+    (result,) = facility["results"]
+    assert result["stack_number"] == 1 and result["stack_height"] == STACK["stack_height"]
     for key in (
         "max_concentration",
         "max_concentration_1h",
@@ -104,13 +109,22 @@ def test_returns_the_documented_fields() -> None:
     assert result["max_concentration"] > 0 and result["hq"] > 0 and result["cancer_risk"] > 0
     assert result["representative"]["max_concentration"] <= result["max_concentration"]
     assert result["add"] == max(result["add_by_band"].values())
+    assert facility["range"]["hq"]["low"] == facility["range"]["hq"]["high"] == result["hq"]
+
+
+def test_evaluates_every_stack_given_in_one_call() -> None:
+    tall = {**STACK, "stack_height": 60.0}
+    facility = calculate_exposure_metrics.invoke(_args(stacks=[STACK, tall, STACK]))
+    assert (facility["stacks_given"], facility["stacks_evaluated"]) == (3, 3)
+    assert [r["stack_number"] for r in facility["results"]] == [1, 2, 3]
+    assert facility["range"]["max_concentration"]["low_stack"] == 2
 
 
 def test_accepts_the_shapes_the_other_tools_return() -> None:
     """A stack candidate, Meteorology, Population and a Toxicity built from chemical properties."""
     properties = {"rfc": 0.02, "iur": None, "rfd": 0.1, "sf": None}
     toxicity = {"rfc": properties["rfc"], "iur": properties["iur"]}
-    result = calculate_exposure_metrics.invoke(_args(toxicity=toxicity))
+    (result,) = calculate_exposure_metrics.invoke(_args(toxicity=toxicity))["results"]
     assert result["hq"] is not None
     assert result["cancer_risk"] is None
     assert any("IUR" in w for w in result["warnings"])
@@ -125,13 +139,16 @@ def test_a_stack_without_values_gives_nulls_and_says_why() -> None:
         "exit_temperature": None,
         "source": None,
     }
-    result = calculate_exposure_metrics.invoke(_args(stack_params=empty))
+    facility = calculate_exposure_metrics.invoke(_args(stacks=[empty, STACK]))
+    result = facility["results"][0]
     assert result["max_concentration"] is None and result["hq"] is None
     assert "stack has no value" in result["warnings"][0]
+    assert facility["results"][1]["max_concentration"] is not None
+    assert facility["stacks_evaluated"] == 1
 
 
 @pytest.mark.parametrize("rate", [-1.0])
 def test_an_invalid_emission_rate_gives_nulls(rate: float) -> None:
-    result = calculate_exposure_metrics.invoke(_args(emission_rate=rate))
+    (result,) = calculate_exposure_metrics.invoke(_args(emission_rate=rate))["results"]
     assert result["max_concentration"] is None
     assert "emission rate" in result["warnings"][0]

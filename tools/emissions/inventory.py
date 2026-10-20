@@ -53,7 +53,9 @@ def query_emissions_inventory(cas_number: str) -> list[EmissionRecord]:
         thresholds.
 
     Args:
-        cas_number: CAS registry number, e.g. "50-00-0" (hyphens optional).
+        cas_number: CAS registry number as the user gave it, e.g. "50-00-0" (hyphens
+            optional). Never a number recalled from a chemical's name: if the user gave only a
+            name, ask for the CAS number instead of calling this tool.
 
     Returns:
         A list of dicts, one per facility (empty if none, if the CAS number is invalid, or

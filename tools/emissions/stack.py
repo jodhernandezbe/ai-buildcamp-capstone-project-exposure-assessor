@@ -27,10 +27,14 @@ def fetch_stack_parameters_from_nei(frs_id: str | int) -> NeiStackResult:
         Plume rise and dispersion depend on stack geometry. This is the first choice for
         stack parameters: call it after identifying a facility. A facility usually has
         several stacks, so it returns several distinct CANDIDATE stacks (real records,
-        never averaged), lowest stack first, at most a configured number. Evaluate the
-        exposure for EVERY candidate and report the range of results rather than picking
-        one. If `candidates` is empty (the facility has no NEI stack data), call
-        `fetch_stack_parameters_from_scc` instead.
+        never averaged), lowest stack first, at most a configured number.
+        Pass ALL candidates together, exactly as returned, as the `stacks` of one
+        `calculate_exposure_metrics` call (never a subset, never one call per stack); it
+        evaluates each and returns the range, then report the range of results rather than
+        picking one. When
+        `total_candidates` exceeds the number returned, taller stacks were omitted; the
+        `warnings` say so and that belongs in the report. If `candidates` is empty (the
+        facility has no NEI stack data), call `fetch_stack_parameters_from_scc` instead.
 
     Args:
         frs_id: EPA Facility Registry Service identifier of the facility (12 digits, as

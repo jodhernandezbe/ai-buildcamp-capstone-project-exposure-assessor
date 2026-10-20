@@ -22,7 +22,7 @@ def test_nei_schema_and_description() -> None:
     description = tool.description
     assert "fetch_stack_parameters_from_scc" in description
     assert "first choice" in description
-    assert "EVERY candidate" in description
+    assert "ALL candidates together" in description
     for text in ("m above ground", "m/s", "(K)", "never averaged"):
         assert text in description
 

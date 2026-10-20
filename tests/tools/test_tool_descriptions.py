@@ -28,11 +28,13 @@ REQUIRED = {
         "toxicity benchmarks",
         "null means no usable value",
         "must be reported, not replaced by a guess",
+        "Never a number recalled from a chemical's name",
     ),
     "query_emissions_inventory": (
         "decide which to assess",
         "says nothing about a facility's industry or process",
         "not evidence that nobody emits it",
+        "Never a number recalled from a chemical's name",
         "location",
     ),
     "lookup_scc_process_description": (
@@ -46,7 +48,9 @@ REQUIRED = {
     ),
     "fetch_stack_parameters_from_nei": (
         "first choice",
-        "EVERY candidate",
+        "ALL candidates together",
+        "never a subset",
+        "taller stacks were omitted",
         "report the range",
         "call `fetch_stack_parameters_from_scc` instead",
     ),
@@ -71,8 +75,9 @@ REQUIRED = {
     "calculate_exposure_metrics": (
         "`stack_source` echoes where the stack came from",
         "can be far higher than for the facility's real stack",
-        "ONE stack",
-        "once per stack",
+        "ALL of a facility's candidate stacks",
+        "never a subset, never one call per stack",
+        "report the `range`",
         "A null number means it could not be computed",
         "must be reported, not filled in",
         "may fall where nobody lives",

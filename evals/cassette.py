@@ -85,6 +85,32 @@ def _replayer(tool: BaseTool, cassette: Cassette) -> Callable[..., object]:
     return replay
 
 
+class Recorder:
+    """Collects live outputs of network tools while a scenario runs in recording mode."""
+
+    def __init__(self) -> None:
+        self._rows: dict[str, dict[str, dict[str, object]]] = {}
+
+    def _recorder(self, tool: BaseTool) -> Callable[..., object]:
+        def record(**kwargs: object) -> object:
+            output = tool.invoke(dict(kwargs))
+            row: dict[str, object] = {"args": _canonical(kwargs), "output": output}
+            self._rows.setdefault(tool.name, {})[call_key(kwargs)] = row
+            return output
+
+        return record
+
+    def wrap(self, tools: Sequence[BaseTool], live_tools: Collection[str]) -> list[BaseTool]:
+        """Return the tools with each network tool recording its live outputs."""
+        return [t if t.name in live_tools else _clone(t, self._recorder(t)) for t in tools]
+
+    def save(self, path: Path) -> None:
+        """Write everything recorded as a cassette file (replaces an existing one)."""
+        rows = {tool: list(calls.values()) for tool, calls in sorted(self._rows.items())}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rows, indent=1, ensure_ascii=False, default=str) + "\n")
+
+
 def replay_tools(
     tools: Sequence[BaseTool], cassette: Cassette, live_tools: Collection[str]
 ) -> list[BaseTool]:

@@ -182,11 +182,60 @@ class ExposureMetrics(ScenarioResult):
     warnings: list[str]  # null results, defaults used and the method's limits
 
 
+class StackExposure(ExposureMetrics):
+    """The screening result for one of the stacks given, numbered from 1 in the order given.
+
+    The four stack values are echoed so a result can be tied to its stack.
+    """
+
+    stack_number: int  # 1-based position of the stack in the list given
+    stack_height: float | None  # m above ground
+    stack_diameter: float | None  # m
+    exit_velocity: float | None  # m/s
+    exit_temperature: float | None  # K
+
+
+class RangeEntry(TypedDict):
+    """Lowest and highest value of one quantity over the stacks, and the stack behind each."""
+
+    low: float
+    high: float
+    low_stack: int  # stack_number giving the lowest value
+    high_stack: int  # stack_number giving the highest value
+
+
+class RepresentativeRange(TypedDict):
+    """Range over the stacks for the representative weather; None entries as in the worst case."""
+
+    max_concentration: RangeEntry | None  # ug/m3, annual-average maximum, representative weather
+    hq: RangeEntry | None
+    cancer_risk: RangeEntry | None
+
+
+class ExposureRange(TypedDict):
+    """Range over the evaluated stacks; an entry is None when no stack has the quantity."""
+
+    max_concentration: RangeEntry | None  # ug/m3, worst-case annual-average maximum
+    hq: RangeEntry | None  # unitless hazard quotient, worst case
+    cancer_risk: RangeEntry | None  # unitless lifetime excess cancer risk, worst case
+    representative: RepresentativeRange  # the same three ranges for the representative weather
+
+
+class FacilityExposure(TypedDict):
+    """Screening results for every candidate stack of one facility, and their range."""
+
+    results: list[StackExposure]  # one per stack given, in the order given
+    range: ExposureRange | None  # None when no stack could be evaluated
+    stacks_given: int
+    stacks_evaluated: int  # stacks with a computed concentration
+    warnings: list[str]  # facility-level notes (stacks not evaluated, no stack given)
+
+
 class NeiStackResult(TypedDict):
     """Tier 1 stack candidates of a facility, from the NEI.
 
     ``candidates`` are distinct real stacks (never averaged), lowest stack first, each a
-    ``StackParameters`` with source "NEI"; evaluate the exposure for every one.
+    ``StackParameters`` with source "NEI"; pass them all to one exposure calculation.
     """
 
     eis_ids: list[str]  # NEI facility IDs found for the FRS ID

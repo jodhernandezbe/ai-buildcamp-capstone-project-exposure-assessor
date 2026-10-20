@@ -36,5 +36,13 @@ def test_prescribes_no_call_order() -> None:
 
 
 def test_requires_visible_quality_signals_and_limits() -> None:
-    for text in ("source", "warnings", "Limitations", "screening default", "never invent"):
+    for text in (
+        "source",
+        "warnings",
+        "Limitations",
+        "screening default",
+        "never invent",
+        "ask for the CAS number",
+        "evaluate every one",
+    ):
         assert text.lower() in PROMPT.lower()

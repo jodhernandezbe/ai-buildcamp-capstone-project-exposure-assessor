@@ -15,15 +15,10 @@ import re
 
 import pytest
 
-from app.chat_model import build_chat_model
-from config.agent import get_agent_settings
-from config.evaluation import get_evaluation_settings
-from evals.cassette import Cassette, replay_tools
 from evals.record import RunRecord
-from evals.runner import run_scenario
 from evals.scenarios import CHEMICAL_NAME_ONLY
-from evals.scoring import judge_records
-from tools.registry import get_all_tools
+from evals.scoring import ScenarioScore
+from evals.suite import evaluate
 
 pytestmark = pytest.mark.eval
 
@@ -31,14 +26,13 @@ CAS_PATTERN = re.compile(r"\b\d{2,7}-\d{2}-\d\b")
 
 
 @pytest.fixture(scope="module")
-def record() -> RunRecord:
-    settings = get_evaluation_settings()
-    cassette = Cassette.load(settings.cassette_dir / f"{CHEMICAL_NAME_ONLY.id}.json")
-    tools = replay_tools(get_all_tools(), cassette, settings.live_tools)
-    agent_settings = get_agent_settings()
-    model = build_chat_model(agent_settings)
-    scenario = (CHEMICAL_NAME_ONLY.id, CHEMICAL_NAME_ONLY.query)
-    return run_scenario(model, tools, scenario, agent_settings)
+def scored() -> tuple[RunRecord, ScenarioScore]:
+    return evaluate(CHEMICAL_NAME_ONLY)
+
+
+@pytest.fixture(scope="module")
+def record(scored: tuple[RunRecord, ScenarioScore]) -> RunRecord:
+    return scored[0]
 
 
 def test_run_completes(record: RunRecord) -> None:
@@ -54,7 +48,11 @@ def test_no_cas_number_is_invented(record: RunRecord) -> None:
     assert not CAS_PATTERN.search(record.report), f"report states a CAS number:\n{record.report}"
 
 
-def test_llm_judge_reply_asks_for_cas(record: RunRecord) -> None:
-    (verdicts,) = judge_records([record], CHEMICAL_NAME_ONLY.judges, get_evaluation_settings())
-    failed = [f"{v.judge}: {v.reasoning}" for v in verdicts if not v.passed]
-    assert not failed, f"LLM judge failed the reply:\n{record.report}\n\n" + "\n".join(failed)
+def test_llm_judge_reply_asks_for_cas(scored: tuple[RunRecord, ScenarioScore]) -> None:
+    record, score = scored
+    failed = [f for f in score.failures() if f.startswith("judge: ")]
+    assert not failed, (
+        f"LLM judge failed the reply:\n{record.report}\n\n"
+        + "\n".join(failed)
+        + f"\n\nreport: {score.report_path}"
+    )
