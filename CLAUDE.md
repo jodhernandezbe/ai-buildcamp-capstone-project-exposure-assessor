@@ -10,8 +10,9 @@ assessments. Python 3.13, managed with uv.
     uv run ruff format .   # format (run before every commit)
     uv run ruff check .    # lint
     uv run pyright         # strict type check
-    uv run bandit -c pyproject.toml -r agent commons config models prompts tools   # security lint
-    uv run python scripts/check_function_length.py --max 18 $(git ls-files 'agent/*.py' 'commons/*.py' 'config/*.py' 'models/*.py' 'prompts/*.py' 'tools/*.py')   # function length
+    uv run bandit -c pyproject.toml -r agent app commons config evals models prompts tools   # security lint
+    uv run python scripts/check_function_length.py --max 18 $(git ls-files 'agent/*.py' 'app/*.py' 'commons/*.py' 'config/*.py' 'evals/*.py' 'models/*.py' 'prompts/*.py' 'tools/*.py')   # function length
+    uv run pytest -m eval  # agent evaluations (OpenAI key, costs tokens; not in pre-commit)
 
 Test, format, lint, pyright, bandit and the function-length check must pass before work is considered done.
 Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass with
@@ -30,11 +31,13 @@ Pre-commit enforces them (`uv run pre-commit run --all-files`). Never bypass wit
   data paths, columns, units and model names. Never hard-code these in Python; add them here.
 - `commons/` small, generic, pure utilities used across layers (e.g. `units.py`, Pint-based
   unit conversion). No project knowledge, no I/O, no config reads: callers pass in what they need.
+- `app/`     the program: builds the `[agent]` chat model (only here) and runs the agent.
+- `evals/`   agent evaluation (outer edge): real chat model, recorded tool outputs, Evidently.
 - `tests/`   pytest suite mirroring the package layout (`tests/tools/emissions/test_stack.py` tests `tools/emissions/stack.py`). Every test directory needs an `__init__.py`.
 
 Dependency direction: `agent` -> `tools` -> `models`; `agent` -> `prompts`;
-`agent`/`tools`/`models` -> `commons`; `agent`/`tools` -> `config`. `commons` and `config`
-import nothing from the project. Never the reverse.
+`agent`/`tools`/`models` -> `commons`; `agent`/`tools` -> `config`; `app` -> `agent`/`config`; `evals` -> `app`/`agent`/`tools`/`config`. `commons` and `config`
+import nothing from the project, and nothing imports `evals`. Never the reverse.
 
 ## Folder-specific rules
 
@@ -48,6 +51,8 @@ editing there:
 - `tools/emissions/rag/CLAUDE.md` SCC retrieval (RAG); the one place a provider is imported.
 - `prompts/CLAUDE.md` prompt files, XML structure, loading through the registry.
 - `tools/CLAUDE.md`   `@tool` conventions, registry and test requirements.
+- `app/CLAUDE.md`     the program and the one chat model factory.
+- `evals/CLAUDE.md`   agent evaluation harness, cassettes and scenarios.
 
 When a new layer needs rules of its own, add a `CLAUDE.md` in its folder and list it here.
 Keep this root file under 80 lines (checked by `tests/test_claude_md.py`); put detail in

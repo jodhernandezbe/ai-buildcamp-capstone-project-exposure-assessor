@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.9",
+    "evidently>=0.7.23,<0.8",
     "httpx>=0.28.1",
     "jupyter>=1.0.0",
     "langchain-core>=0.3.0",
@@ -45,17 +46,18 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = '-m "not smoke"'
+addopts = '-m "not smoke and not eval"'
 markers = [
     "smoke: live-network checks against real services (run with: pytest -m smoke)",
     "comptox: smoke test that needs the CompTox API key (skipped when it is not set)",
     "census: smoke test that needs the Census API key (skipped when it is not set)",
+    "eval: agent evaluation with a real chat model (run with: pytest -m eval)",
 ]
 
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["agent", "commons", "config", "models", "prompts", "scripts", "tools", "tests"]
+include = ["agent", "app", "commons", "config", "evals", "models", "prompts", "scripts", "tools", "tests"]
 venvPath = "."
 venv = ".venv"
 # langgraph ships partial typing; keep strict for our code, tolerate its gaps.

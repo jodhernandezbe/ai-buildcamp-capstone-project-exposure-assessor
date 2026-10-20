@@ -25,5 +25,8 @@ dist/
 # Local caches (e.g. the persisted SCC vector index)
 .cache/
 
+# Generated agent-evaluation reports (cassettes in evals/cassettes/ are committed)
+evals/reports/
+
 # Raw downloads: only the compact derived files in data/ are committed
 data/raw/

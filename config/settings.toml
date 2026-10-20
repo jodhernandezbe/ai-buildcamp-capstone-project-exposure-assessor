@@ -493,3 +493,26 @@ placeholder_codes = ["999999"]
 "(mg/m3)-1" = "1/(mg/m^3)"
 "(mg/L)-1" = "1/(mg/L)"
 "Pounds" = "pound"
+
+# The chat model that drives the agent, used by the program (`uv run python -m app`) and by the
+# evaluations alike, so both always run the same model. `provider` selects the factory in
+# app/chat_model.py; the API key is read from the environment variable named here.
+# `recursion_limit` is the LangGraph step limit of one run.
+[agent]
+provider = "openai"
+model = "gpt-4.1"
+api_key_env_var = "OPENAI_API_KEY"  # pragma: allowlist secret
+timeout_seconds = 120.0
+recursion_limit = 80
+
+# Agent evaluation (evals/). The agent model comes from [agent]; the judge is a different,
+# stronger model that scores report wording, pinned so runs are repeatable. Network tools are
+# replayed from recordings in `cassette_dir`; the tools in `live_tools` need no network and run
+# for real.
+[evaluation]
+judge_provider = "openai"
+judge_model = "gpt-5.5-2026-04-23"
+judge_api_key_env_var = "OPENAI_API_KEY"  # pragma: allowlist secret
+live_tools = ["calculate_exposure_metrics"]
+cassette_dir = "evals/cassettes"
+report_dir = "evals/reports"
