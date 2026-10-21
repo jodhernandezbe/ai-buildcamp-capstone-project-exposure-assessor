@@ -82,7 +82,7 @@ design.md Decision 0 (`api/` Router → Service → Domain; feature-driven `fron
 - [x] 8.2 README: build and launch, key setup, what the workspace does and does not show (schematic sector, three stack tiers, doc control number, no queried-chemical name)
 - [x] 8.3 Full gates via `uv run pre-commit run --all-files`
 - [x] 8.4 Manual end-to-end check in the browser with a real key (needs the user's go-ahead): save the key in Settings, a suggestion chip, streamed answer, pills, ribbon, map fit, inspector, usage meter, off-topic redirect
-- [ ] 8.5 Ask the user before running `uv run pytest -m eval` once to confirm the CLI/eval path is unchanged (costs tokens)
+- [x] 8.5 Ask the user before running `uv run pytest -m eval` once to confirm the CLI/eval path is unchanged (costs tokens)
 
 ## 9. Service keys (Census, CompTox) through Settings
 
@@ -106,7 +106,7 @@ facilities by eye and got the top five wrong).
 - [x] 10.1 FRS coordinates in one bulk request per `batch_size` IDs from the `dmapservice` best-pick lookup (`[frs_point]`), replacing one request per facility; reducer asks once; tests incl. batching, duplicates, one failed batch, rows for IDs not asked
 - [x] 10.2 TRI window: last 2 published years (`recent_years = 2`, `publication_lag_years = 1`); tests
 - [x] 10.3 Inventory tool tells the model the largest `[tri] max_listed` facilities (highest rate first) with `total_found`, `matching`, `shown`, `note`, optional `state` and `city`, and returns the complete list as an artifact; workspace reads the artifact; evals checks accept the new shape; tests
-- [ ] 10.4 Re-record the inventory output of the evaluation cassette (it still holds the old list shape; replay works but does not exercise the new contract) — needs the live services and a model run, so only with the user's go-ahead
+- [x] 10.4 Re-record the inventory output of the evaluation cassette (it still holds the old list shape; replay works but does not exercise the new contract) — needs the live services and a model run, so only with the user's go-ahead
 - [x] 10.5 Provider failures explained: `api/services/provider_errors.py` maps no credits, rejected key, rate limit, unreachable and server errors to fixed messages (the provider package is not imported); the scope check logs a provider refusal without a traceback; tests
 - [x] 10.6 No part of any key is shown: the status of every key (OpenAI, Census, CompTox) is only `configured` (the masked last-four hint is removed from the vault, API, contract and Settings sheet); log redaction also covers the provider's masked-key echo (`sk-proj-****p8UA`), bearer tokens, key-like assignments and `?key=` URL query strings; keys from the environment (`.env`) are protected for the life of the server; tests
 - [x] 10.7 Map actually draws: point MapLibre at its bundled worker (`setWorkerUrl`; the default URL 404s once Vite bundles the app, so nothing rendered); the camera fit keeps clear of the legend; the map starts on the contiguous US (`[ui.map.initial_view]`, sent in the client config); map errors logged to the console; verified in headless Chrome against the dev page and the production build
