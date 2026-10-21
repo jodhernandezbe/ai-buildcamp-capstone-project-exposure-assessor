@@ -62,6 +62,9 @@ class EmissionRecord(TypedDict):
     doc_ctrl_num: (
         str | None
     )  # TRI control number of that year's submission (its highest, if several)
+    naics_code: (
+        str | None
+    )  # primary NAICS code of that submission (2-6 digits); None if TRI has none
     total_release: float  # annual quantity, in `unit`, exactly as reported
     unit: str  # unit of `total_release` as reported, e.g. "Pounds"
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`

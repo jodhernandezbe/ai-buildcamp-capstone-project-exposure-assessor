@@ -51,6 +51,7 @@ class Report:
     unit: str | None
     place: Place
     location: Location | None
+    naics_code: str | None = None
 
 
 @dataclass
@@ -59,6 +60,7 @@ class Slot:
 
     year: int
     doc_ctrl_num: str | None  # control number of the kept year's submission (highest, if several)
+    naics_code: str | None  # primary NAICS code of that same submission
     quantity: float | None
     unit: str | None
     summed: int  # number of usable quantities added into `quantity`
@@ -80,6 +82,7 @@ class Stats:
     """Counts of what was dropped or combined, for warnings."""
 
     skipped_rows: int = 0
+    secondary_naics: int = 0
     outside_window: int = 0
     no_quantity: int = 0
     no_location: int = 0
@@ -92,6 +95,7 @@ class Stats:
         """Return one message per non-zero count."""
         labels = (
             ("skipped_rows", "rows skipped (no facility ID or year, or a medium not configured)"),
+            ("secondary_naics", "rows ignored: a secondary NAICS code of a submission kept once"),
             ("outside_window", "rows ignored: reported before the window of recent years"),
             ("no_quantity", "facilities omitted: no usable release quantity in their latest year"),
             ("no_location", "facilities omitted: no usable coordinates in any row"),
@@ -185,6 +189,24 @@ def _place(row: Row, settings: TriSettings) -> Place:
     )
 
 
+def _naics(row: Row, settings: TriSettings) -> str | None:
+    """The row's NAICS code: 2 to 6 digits (sector to industry level), else None."""
+    value = row.get(settings.fields["naics_code"])
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = str(value)
+    code = _text(value)
+    return code if code is not None and code.isdigit() and 2 <= len(code) <= 6 else None
+
+
+def is_secondary_naics(row: Row, settings: TriSettings) -> bool:
+    """Whether the row repeats a submission for one of its secondary NAICS codes.
+
+    A row without the indicator (no NAICS row joined) is not secondary and is kept.
+    """
+    flag = row.get(settings.fields["naics_primary"])
+    return flag is not None and str(flag).strip() not in ("1", "")
+
+
 def parse_report(row: Row, settings: TriSettings) -> Report | None:
     """Validate one TRI row.
 
@@ -211,6 +233,7 @@ def parse_report(row: Row, settings: TriSettings) -> Report | None:
         unit,
         _place(row, settings),
         _location(row, settings),
+        _naics(row, settings),
     )
 
 
@@ -218,6 +241,7 @@ def _new_slot(report: Report) -> Slot:
     return Slot(
         year=report.year,
         doc_ctrl_num=report.doc_ctrl_num,
+        naics_code=report.naics_code,
         quantity=report.quantity,
         unit=report.unit,
         summed=0 if report.quantity is None else 1,
@@ -231,10 +255,21 @@ def _take_year(slot: Slot, report: Report) -> None:
     """Make ``report`` (a later year) the slot's year-level data."""
     slot.year = report.year
     slot.doc_ctrl_num = report.doc_ctrl_num
+    slot.naics_code = report.naics_code
     slot.quantity = report.quantity
     slot.unit = report.unit
     slot.summed = 0 if report.quantity is None else 1
     slot.place = report.place
+
+
+def _keep_highest_submission(slot: Slot, report: Report) -> None:
+    """Keep the highest control number of the year's reports, and that submission's NAICS."""
+    if report.doc_ctrl_num is not None and (
+        slot.doc_ctrl_num is None or report.doc_ctrl_num > slot.doc_ctrl_num
+    ):
+        slot.doc_ctrl_num, slot.naics_code = report.doc_ctrl_num, report.naics_code
+    elif slot.naics_code is None:
+        slot.naics_code = report.naics_code
 
 
 class LatestReports:
@@ -258,6 +293,9 @@ class LatestReports:
             self._add(row)
 
     def _add(self, row: Row) -> None:
+        if is_secondary_naics(row, self._settings):
+            self.stats.secondary_naics += 1
+            return
         report = parse_report(row, self._settings)
         if report is None or report.medium not in self._settings.media:
             self.stats.skipped_rows += 1
@@ -287,15 +325,13 @@ class LatestReports:
             return
         if slot.quantity is None:
             slot.quantity, slot.unit, slot.summed = report.quantity, report.unit, 1
-            slot.doc_ctrl_num = report.doc_ctrl_num
+            slot.doc_ctrl_num, slot.naics_code = report.doc_ctrl_num, report.naics_code
         elif slot.unit != report.unit:
             self.stats.mixed_units += 1
         else:
             slot.quantity += report.quantity
             slot.summed += 1
-            slot.doc_ctrl_num = max(
-                filter(None, (slot.doc_ctrl_num, report.doc_ctrl_num)), default=None
-            )
+            _keep_highest_submission(slot, report)
 
     def records(
         self,
@@ -385,6 +421,7 @@ class _Reported(TypedDict):
     environmental_medium: str
     reporting_year: int
     doc_ctrl_num: str | None
+    naics_code: str | None
     total_release: float
     unit: str
     emission_rate: float
@@ -411,6 +448,7 @@ def _reported(
         "environmental_medium": medium,
         "reporting_year": slot.year,
         "doc_ctrl_num": slot.doc_ctrl_num,
+        "naics_code": slot.naics_code,
         "total_release": amount.quantity,
         "unit": amount.unit,
         "emission_rate": rate,

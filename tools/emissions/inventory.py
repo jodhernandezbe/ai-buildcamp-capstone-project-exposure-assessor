@@ -60,9 +60,10 @@ def query_emissions_inventory(
         facilities listed are the largest sources; `total_found`, `matching` and `note` say how
         many more there are. Never present a list as complete when `note` says it is partial.
         To look at a place, call again with `state` and/or `city`: the largest facilities there
-        are listed. Decide which facilities to assess rather than assessing all. TRI says
-        nothing about a facility's industry or process; `fetch_facility_industry` gives the
-        industry of a facility you choose, and the process is only a candidate derived from it.
+        are listed. Decide which facilities to assess rather than assessing all. TRI gives
+        only each facility's primary NAICS code, nothing about its process;
+        `fetch_facility_industry` gives that industry in words for a facility you choose, and
+        the process is only a candidate derived from it.
         Zero facilities means no stack air release was found for this CAS number (and place) in
         TRI, which is not evidence that nobody emits it: TRI covers only facilities above its
         reporting thresholds.
@@ -92,6 +93,9 @@ def query_emissions_inventory(
             absent)
           - doc_ctrl_num: TRI control number of that year's submission; pass it to
             `fetch_facility_industry` to learn the facility's industry (null if TRI gave none)
+          - naics_code: primary NAICS code of that submission, digits only (null if TRI gave
+            none); `fetch_facility_industry` gives its title in words, which the SCC process
+            search needs, and whether the facility reported it or EPA assigned it
           - total_release: quantity released in that year, in `unit` per year, as reported
           - unit: unit of `total_release` as reported by TRI, e.g. "Pounds"
           - emission_rate: average emission rate, g/s, assuming the facility operates

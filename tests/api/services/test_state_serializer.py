@@ -564,3 +564,36 @@ def test_an_artifact_that_is_not_a_list_falls_back_to_the_text() -> None:
         "query_emissions_inventory", {"cas_number": "1-1-1"}, [record("A")], artifact="junk"
     )
     assert [f.frs_id for f in build(messages).facilities] == ["A"]
+
+
+# --- NAICS from the inventory ------------------------------------------------------------------
+
+
+def test_the_inventory_naics_code_shows_until_the_industry_tool_answers() -> None:
+    state = build(inventory(record(naics_code="311224")))
+    industry = state.facilities[0].industry
+    assert industry is not None
+    assert (industry.naics_code, industry.naics_title, industry.source) == (
+        "311224",
+        None,
+        "TRI inventory",
+    )
+
+
+def test_the_industry_tool_answer_replaces_the_bare_code() -> None:
+    body = {
+        "naics_code": "311224",
+        "naics_title": "Synthetic milling",
+        "code_origin": "reported",
+        "source": "TRI",
+    }
+    state = build(
+        inventory(record(naics_code="311224")),
+        exchange("fetch_facility_industry", {"doc_ctrl_num": "DOCF1"}, body),
+    )
+    industry = state.facilities[0].industry
+    assert industry is not None and industry.naics_title == "Synthetic milling"
+
+
+def test_a_facility_without_a_naics_code_has_no_industry() -> None:
+    assert build(inventory(record())).facilities[0].industry is None

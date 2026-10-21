@@ -41,6 +41,8 @@ city = "c"
 county = "co"
 state = "s"
 zip_code = "z"
+naics_code = "nc"
+naics_primary = "np"
 """
 
 

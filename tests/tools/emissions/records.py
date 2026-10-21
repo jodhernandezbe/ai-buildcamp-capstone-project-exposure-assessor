@@ -14,6 +14,7 @@ def emission_record(
         "environmental_medium": "AIR STACK",
         "reporting_year": 2020,
         "doc_ctrl_num": None,
+        "naics_code": None,
         "total_release": 1.0,
         "unit": "Pounds",
         "emission_rate": rate,

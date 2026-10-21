@@ -427,3 +427,68 @@ def test_a_facility_frs_cannot_locate_is_still_omitted() -> None:
     reducer.add_rows([_no_coordinates()])
     assert reducer.records(EMISSIONS, ALIASES, lambda _: {}) == []
     assert reducer.stats.no_location == 1 and reducer.stats.from_frs == 0
+
+
+# --- the primary NAICS code joined into every row ----------------------------------------------
+
+
+def _naics(code: str | None, primary: object = "1", **over: object) -> dict[str, object]:
+    return _row(naics_code=code, primary_ind=primary, **over)
+
+
+def test_the_record_carries_the_primary_naics_code() -> None:
+    assert _only([_naics("311224")])["naics_code"] == "311224"
+
+
+def test_a_submission_repeated_for_its_secondary_codes_is_counted_once() -> None:
+    rows = [_naics("311224", "1"), _naics("424510", "0"), _naics("325199", "0")]
+    records, reducer = _run(rows)
+    (record,) = records
+    assert record["total_release"] == 1000  # not 3000
+    assert record["naics_code"] == "311224"
+    assert reducer.stats.secondary_naics == 2
+    assert any("secondary NAICS" in w for w in reducer.stats.warnings())
+
+
+def test_a_secondary_row_arriving_first_does_not_win() -> None:
+    (record,) = _run([_naics("424510", 0), _naics("311224", 1)])[0]
+    assert record["naics_code"] == "311224"
+    assert record["total_release"] == 1000
+
+
+def test_a_row_without_a_naics_join_is_kept_without_a_code() -> None:
+    (record,) = _run([_row()])[0]
+    assert record["naics_code"] is None
+
+
+@pytest.mark.parametrize("bad", ["", "abc", "1", "1234567", "31-12", 311224.5, True])
+def test_an_implausible_naics_code_is_left_out(bad: object) -> None:
+    assert _only([_naics(bad)])["naics_code"] is None  # type: ignore[arg-type]
+
+
+def test_a_numeric_code_is_accepted_as_text() -> None:
+    assert _only([_naics(311224)])["naics_code"] == "311224"  # type: ignore[arg-type]
+
+
+def test_the_naics_of_the_latest_year_wins() -> None:
+    rows = [_naics("111111", reporting_year="2019"), _naics("222222", reporting_year="2020")]
+    assert _only(rows)["naics_code"] == "222222"
+
+
+def test_same_year_reports_keep_the_naics_of_the_highest_control_number() -> None:
+    rows = [
+        _naics("111111", doc_ctrl_num="1320000000002"),
+        _naics("222222", doc_ctrl_num="1320000000009"),
+        _naics("333333", doc_ctrl_num="1320000000005"),
+    ]
+    record = _only(rows)
+    assert (record["doc_ctrl_num"], record["naics_code"]) == ("1320000000009", "222222")
+    assert record["total_release"] == 3000  # three separate forms are still added
+
+
+def test_a_missing_code_on_the_kept_submission_is_filled_from_another_same_year_form() -> None:
+    rows = [
+        _naics(None, doc_ctrl_num="1320000000009"),
+        _naics("222222", doc_ctrl_num="1320000000002"),
+    ]
+    assert _only(rows)["naics_code"] == "222222"

@@ -29,6 +29,7 @@ class EmissionPayload(Payload):
     environmental_medium: str
     reporting_year: int
     doc_ctrl_num: str | None = None
+    naics_code: str | None = None
     total_release: Num
     unit: str
     emission_rate: Num

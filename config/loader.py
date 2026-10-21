@@ -156,6 +156,8 @@ TRI_FIELD_KEYS = (
     "county",
     "state",
     "zip_code",
+    "naics_code",
+    "naics_primary",
 )
 _MAX_HOURS_PER_YEAR = 8784  # 366 days x 24 h
 

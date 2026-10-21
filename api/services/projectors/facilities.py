@@ -127,8 +127,18 @@ def _status(ranges: ExposureRanges | None, rules: WorkspaceRules) -> Status | No
     )
 
 
-def _industry(entry: tuple[str, IndustryPayload] | None) -> Industry | None:
-    return Industry(**entry[1].model_dump()) if entry else None
+INVENTORY_SOURCE = "TRI inventory"
+
+
+def _industry(
+    entry: tuple[str, IndustryPayload] | None, record: EmissionPayload
+) -> Industry | None:
+    """The industry tool's answer; else the bare NAICS code the inventory reported, if any."""
+    if entry is not None:
+        return Industry(**entry[1].model_dump())
+    if record.naics_code is None:
+        return None
+    return Industry(naics_code=record.naics_code, source=INVENTORY_SOURCE)
 
 
 def _identity(record: EmissionPayload) -> dict[str, object]:
@@ -185,7 +195,7 @@ def _attached(
     receptor, weather = found.receptors.get(frs_id), found.weather.get(frs_id)
     ranges = _ranges(exposure[1]) if exposure else None
     return {
-        "industry": _industry(found.industries.get(frs_id)),
+        "industry": _industry(found.industries.get(frs_id), record),
         "stacks": facility_stacks(nei[1] if nei else [], exposure[1] if exposure else None, ledger),
         "receptors": _receptors(receptor) if receptor else None,
         "meteorology": meteorology_view(weather) if weather else None,

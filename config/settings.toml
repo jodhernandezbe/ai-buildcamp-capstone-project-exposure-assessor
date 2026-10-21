@@ -111,14 +111,17 @@ latitude_field = "latitude"
 longitude_field = "longitude"
 batch_size = 100
 
-# EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility and
-# release tables and filters on CAS number and environmental medium (the medium segment has
+# EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility,
+# release and submission-NAICS tables (so every row carries its NAICS code) and filters on CAS number and environmental medium (the medium segment has
 # no "/equals/": that form returns nothing). {casrn} is the hyphenated CAS number, {medium} the
 # URL-encoded medium, {after_year} the year after which reports are wanted and {start}:{end} an inclusive row range, so a page of N rows is
 # start .. start+N-1. Rows are not ordered by year and the end of data is signalled by a page
 # shorter than page_size (probing past the end hangs), so the whole result is read.
+# A submission with secondary NAICS codes comes back once per code; only its primary row
+# (`naics_primary` = 1) is kept, so its release is never counted twice. Filtering on the primary
+# indicator in the URL instead gives the same rows but was about 3 times slower.
 [tri]
-release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
+release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/tri_submission_naics/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
 # Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
 media = ["AIR STACK"]
 # A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
@@ -160,6 +163,9 @@ city = "city_name"
 county = "county_name"
 state = "state_abbr"
 zip_code = "zip_code"
+# Primary NAICS code of the submission, and the indicator that marks the primary code's row.
+naics_code = "naics_code"
+naics_primary = "primary_ind"
 
 # Operating hours per year used to turn an annual release into an average rate. 8760 is
 # continuous operation (24 h x 365 d), a conservative screening assumption.

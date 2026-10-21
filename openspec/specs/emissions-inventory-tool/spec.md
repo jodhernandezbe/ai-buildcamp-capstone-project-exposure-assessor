@@ -74,7 +74,7 @@ The system SHALL keep only rows whose environmental medium is in the configured 
 - **THEN** its records are returned with no code change
 
 ### Requirement: Returned facility record
-Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, the TRI submission control number (`doc_ctrl_num`, null if TRI gave none), `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
+Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, the TRI submission control number (`doc_ctrl_num`, null if TRI gave none), the primary NAICS code of that submission (`naics_code`, 2 to 6 digits, null if TRI gave none or an implausible value), `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
 
 #### Scenario: Complete record
 - **WHEN** a facility record is returned
@@ -171,3 +171,18 @@ When none of a facility's TRI rows in the window has valid coordinates, and the 
 #### Scenario: One batch fails
 - **WHEN** one of several batches fails
 - **THEN** only its facilities are left without coordinates
+
+### Requirement: Primary NAICS code from the submission
+The TRI request SHALL join the submission-NAICS table so every row carries a NAICS code and its primary indicator. A submission with secondary NAICS codes is returned once per code; the system SHALL keep only its primary row (indicator `1`), counting the others in a warning, so that no release is added more than once. A row without the indicator (no NAICS joined) SHALL be kept with no code. The record's NAICS code SHALL be that of the submission whose control number the record carries (the highest of the latest year's reports), or, when that submission has none, of another report of the same year. Only the code is returned; its title in words comes from the facility industry tool.
+
+#### Scenario: Secondary codes
+- **WHEN** a submission comes back three times, for its primary and two secondary NAICS codes
+- **THEN** its release is counted once, the record carries the primary code and a warning counts two ignored rows
+
+#### Scenario: No NAICS joined
+- **WHEN** a row has no primary indicator
+- **THEN** it is kept and the record's `naics_code` is null
+
+#### Scenario: Same totals as without the join
+- **WHEN** the inventory of a chemical is read with and without the NAICS join
+- **THEN** the same facilities are returned with the same releases

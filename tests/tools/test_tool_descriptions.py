@@ -42,7 +42,7 @@ REQUIRED = {
     ),
     "query_emissions_inventory": (
         "Decide which facilities to assess",
-        "says nothing about a facility's industry or process",
+        "nothing about its process",
         "not evidence that nobody emits it",
         "Never a number recalled from a chemical's name",
         "location",
