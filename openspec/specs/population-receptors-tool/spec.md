@@ -6,7 +6,6 @@ Tells the agent how many people live around a facility and how old they are, the
 
 ## Requirements
 
-
 ### Requirement: Residents and age mix around a point
 The system SHALL provide a tool that, given a latitude, longitude and an optional radius in kilometres, returns the estimated number of residents within that radius of the point and their age mix as percent of the total in the bands 0-4, 5-17, 18-64 and 65 and over (summing to 100), using the most recent configured Census ACS 5-year estimates of the census tracts that intersect the circle. The count SHALL be scaled by the ratio of the circle's area to the land area of those tracts, never above the tracts' full count. The result SHALL name its data source and vintage and carry a list of warnings. When no radius is given the configured default SHALL be used.
 
@@ -50,11 +49,15 @@ The system SHALL treat an ACS estimate that is missing, not numeric, or negative
 - **THEN** the screening default is returned with a warning that the estimates were inconsistent
 
 ### Requirement: Census API key handling
-The system SHALL read the Census API key from the environment variable named in the configuration and send it with every Census Data API request, and SHALL NOT embed, log or return it. When the variable is unset or empty it SHALL make no Census Data API request and SHALL return the screening default with a warning that names the variable. When the service rejects the key (it answers with a redirect to a missing-key page or an authorization error) the warning SHALL say the key was rejected.
+The system SHALL send the Census API key with every Census Data API request, and SHALL NOT embed, log or return it. The key SHALL be the one made available to the current request when there is one (the web program supplies the key stored in the OS keychain for the duration of a turn), and otherwise the one in the environment variable named in the configuration. When neither is available it SHALL make no Census Data API request and SHALL return the screening default with a warning that names the variable. When the service rejects the key (it answers with a redirect to a missing-key page or an authorization error) the warning SHALL say the key was rejected.
 
 #### Scenario: No key configured
-- **WHEN** the variable is not set
+- **WHEN** no request key is available and the variable is not set
 - **THEN** no Census Data API request is made and the screening default is returned with a warning naming the variable
+
+#### Scenario: Request key preferred
+- **WHEN** a request key is available and the environment variable is also set
+- **THEN** the Census Data API request carries the request key
 
 #### Scenario: Key rejected
 - **WHEN** the service redirects to its missing-key page

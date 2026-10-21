@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -13,72 +14,109 @@ from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.inventory.frs_point import FrsLocator
 from tools.emissions.helpers.inventory.reduce import Location
 
-SETTINGS = FrsPointSettings("/p/{frs_id}/JSON", "lat", "lon", "ts")
-EF = EfserviceSettings("https://ef.test/api", 0.0, 5.0, 0, 0.0)
+SETTINGS = FrsPointSettings("https://frs.test", "/p/{frs_ids}", "id", "lat", "lon", 2)
+EF = EfserviceSettings("https://frs.test", 0.0, 5.0, 0, 0.0)
+A, B, C = "110000000001", "110000000002", "110000000003"
 
 
-def _locator(payload: object, status: int = 200) -> tuple[FrsLocator, list[httpx.Request]]:
-    seen: list[httpx.Request] = []
+def _row(frs_id: str, lat: object = 1.0, lon: object = -1.0) -> dict[str, object]:
+    return {"id": frs_id, "lat": lat, "lon": lon}
+
+
+def _locator(
+    answer: Callable[[list[str]], object] | object, status: int = 200
+) -> tuple[FrsLocator, list[list[str]]]:
+    asked: list[list[str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(status, json=payload)
+        ids = request.url.path.removeprefix("/p/").split(",")
+        asked.append(ids)
+        return httpx.Response(status, json=answer(ids) if callable(answer) else answer)
 
     client = EfserviceClient(
         EF, httpx.Client(transport=httpx.MockTransport(handler)), lambda _: None
     )
-    return FrsLocator(client, SETTINGS), seen
+    return FrsLocator(client, SETTINGS), asked
 
 
-def test_a_point_is_returned() -> None:
-    locator, seen = _locator([{"lat": 10.5, "lon": -20.25, "ts": "2020"}])
-    assert locator("110000000001") == Location(10.5, -20.25)
-    assert str(seen[0].url).endswith("/p/110000000001/JSON")
+def test_a_point_is_returned_for_each_facility_asked() -> None:
+    locator, asked = _locator([_row(A, 10.5, -20.25), _row(B, 3.0, -4.0)])
+    assert locator([A, B]) == {A: Location(10.5, -20.25), B: Location(3.0, -4.0)}
+    assert asked == [[A, B]]
 
 
-def test_the_newest_valid_point_wins() -> None:
-    rows = [
-        {"lat": 1.0, "lon": -1.0, "ts": "2019-01-01"},
-        {"lat": 2.0, "lon": -2.0, "ts": "2024-01-01"},
-        {"lat": None, "lon": None, "ts": "2025-01-01"},
-    ]
-    assert _locator(rows)[0]("110000000001") == Location(2.0, -2.0)
+def test_many_facilities_share_a_request_up_to_the_batch_size() -> None:
+    locator, asked = _locator(lambda ids: [_row(i) for i in ids])
+    assert set(locator([A, B, C])) == {A, B, C}
+    assert asked == [[A, B], [C]]
 
 
-def test_answers_are_remembered() -> None:
-    locator, seen = _locator([{"lat": 1.0, "lon": -1.0, "ts": "x"}])
-    locator("110000000001")
-    locator("110000000001")
-    assert len(seen) == 1
+def test_duplicates_are_asked_once() -> None:
+    locator, asked = _locator(lambda ids: [_row(i) for i in ids])
+    locator([A, A, B])
+    assert asked == [[A, B]]
+
+
+def test_answers_are_remembered_across_calls() -> None:
+    locator, asked = _locator(lambda ids: [_row(i) for i in ids])
+    locator([A])
+    locator([A, B])
+    assert asked == [[A], [B]]
+
+
+def test_a_facility_the_service_does_not_know_is_left_out_and_not_asked_again() -> None:
+    locator, asked = _locator([_row(A)])
+    assert locator([A, B]) == {A: Location(1.0, -1.0)}
+    locator([B])
+    assert len(asked) == 1
+
+
+def test_a_row_for_a_facility_that_was_not_asked_is_ignored() -> None:
+    locator, _ = _locator([_row(C)])
+    assert locator([A]) == {}
+
+
+def test_the_first_usable_point_of_a_facility_wins() -> None:
+    locator, _ = _locator([_row(A, None, None), _row(A, 2.0, -2.0), _row(A, 9.0, -9.0)])
+    assert locator([A]) == {A: Location(2.0, -2.0)}
 
 
 @pytest.mark.parametrize(
-    "row",
-    [
-        {"lat": 91.0, "lon": -1.0},
-        {"lat": 1.0, "lon": 181.0},
-        {"lat": True, "lon": -1.0},
-        {"lat": "1", "lon": "-1"},
-        {"lat": 1.0},
-    ],
+    ("lat", "lon"), [(91.0, -1.0), (1.0, 181.0), (True, -1.0), ("1", "-1"), (1.0, None)]
 )
-def test_unusable_points_give_none(row: dict[str, object]) -> None:
-    assert _locator([row])[0]("110000000001") is None
-
-
-def test_no_point_gives_none() -> None:
-    assert _locator([])[0]("110000000001") is None
+def test_unusable_points_are_left_out(lat: object, lon: object) -> None:
+    locator, _ = _locator([_row(A, lat, lon)])
+    assert locator([A]) == {}
 
 
 @pytest.mark.parametrize("bad", ["", "abc", "11-00"])
 def test_an_invalid_id_makes_no_request(bad: str) -> None:
-    locator, seen = _locator([])
-    assert locator(bad) is None
-    assert seen == []
+    locator, asked = _locator([])
+    assert locator([bad]) == {}
+    assert asked == []
 
 
-def test_a_failed_request_gives_none_and_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+def test_a_failed_request_leaves_its_facilities_out_with_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     locator, _ = _locator({"error": "x"}, status=500)
     with caplog.at_level(logging.WARNING):
-        assert locator("110000000001") is None
+        assert locator([A, B]) == {}
     assert "could not be read" in caplog.text
+
+
+def test_one_failed_batch_does_not_lose_the_others() -> None:
+    def answer(ids: list[str]) -> object:
+        return [_row(i) for i in ids]
+
+    calls: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        ids = request.url.path.removeprefix("/p/").split(",")
+        calls.append(ids)
+        return httpx.Response(500) if A in ids else httpx.Response(200, json=answer(ids))
+
+    client = EfserviceClient(
+        EF, httpx.Client(transport=httpx.MockTransport(handler)), lambda _: None
+    )
+    assert set(FrsLocator(client, SETTINGS)([A, B, C])) == {C}

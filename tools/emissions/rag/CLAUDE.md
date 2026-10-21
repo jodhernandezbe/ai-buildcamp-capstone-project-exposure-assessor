@@ -13,6 +13,9 @@ work in `tools/emissions/rag/`.
 - Embeddings are injected as `langchain_core.embeddings.Embeddings`. Only `embeddings.py`
   may import a provider package (lazily, chosen by `[embeddings].provider`); a new provider
   is an entry there plus `config.retrieval.SUPPORTED_EMBEDDING_PROVIDERS`.
+- Embeddings resolve their API key at every call (`tools.credentials.PROVIDER_KEY`, else the
+  `[embeddings]` environment variable) and never keep it, so the cached retriever is safe
+  to reuse across requests with different keys.
 - Only `vectorstore.py` imports `chromadb`.
 - Paths, columns, filters, model, top-k and batch size come from `[embeddings]` and
   `[scc_index]` in `config/settings.toml`; never hard-code them.

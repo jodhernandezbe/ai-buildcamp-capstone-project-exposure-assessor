@@ -170,7 +170,9 @@ class TriSettings:
         media: Environmental media to keep, e.g. ``("AIR STACK",)``; one query per medium.
         page_size: Rows requested per page.
         max_pages: Most pages fetched per medium.
-        recent_years: Reporting years that count, ending with the current year.
+        recent_years: Reporting years that count, ending with the newest that can be published.
+        publication_lag_years: Years TRI lags the calendar (year N is released in N + 1).
+        max_listed: Most facilities the inventory tool lists to the model, largest rate first.
         east_longitude_states: State codes whose longitudes are east of Greenwich.
         facility_id_fields: TRI columns holding the FRS ID, first one set wins.
         fields: Result key (see ``TRI_FIELD_KEYS``) -> TRI column name.
@@ -181,13 +183,15 @@ class TriSettings:
     page_size: int
     max_pages: int
     recent_years: int
+    publication_lag_years: int
+    max_listed: int
     east_longitude_states: tuple[str, ...]
     facility_id_fields: tuple[str, ...]
     fields: Mapping[str, str]
 
     def after_year(self, current_year: int) -> int:
         """Return the year after which reports count (the window starts the year after it)."""
-        return current_year - self.recent_years
+        return current_year - self.publication_lag_years - self.recent_years
 
     def first_year(self, current_year: int) -> int:
         """Return the first reporting year inside the window."""
@@ -421,6 +425,8 @@ def load_tri_settings(path: Path | None = None) -> TriSettings:
         page_size=_require_int(section, "page_size", minimum=1, name="tri"),
         max_pages=_require_int(section, "max_pages", minimum=1, name="tri"),
         recent_years=_require_int(section, "recent_years", minimum=1, name="tri"),
+        publication_lag_years=_require_int(section, "publication_lag_years", minimum=0, name="tri"),
+        max_listed=_require_int(section, "max_listed", minimum=1, name="tri"),
         east_longitude_states=_names(section, "east_longitude_states", "tri", allow_empty=True),
         facility_id_fields=_names(section, "facility_id_fields", "tri", allow_empty=False),
         fields=_parse_tri_fields(section),

@@ -1,9 +1,10 @@
-"""Recover a facility's coordinates from its FRS record when TRI has none."""
+"""Recover facility coordinates from the FRS best-pick lookup when TRI has none."""
 
 from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Mapping, Sequence
 
 from config.frs_point import FrsPointSettings
 from tools.digits import digit_string
@@ -30,33 +31,43 @@ def _point(row: Row, settings: FrsPointSettings) -> Location | None:
 
 
 class FrsLocator:
-    """Looks up the coordinates of FRS facilities, one request each, remembering answers.
+    """Looks up the coordinates of FRS facilities in bulk, remembering answers.
 
-    A failure or an unusable answer gives None (and is remembered), never an exception, so
-    the facility is simply reported as without coordinates.
+    One request answers up to ``batch_size`` facilities. A failed request or an unusable
+    answer leaves those facilities out of the result (and remembered as unknown), never an
+    exception, so they are simply reported as without coordinates.
     """
 
     def __init__(self, client: EfserviceClient, settings: FrsPointSettings) -> None:
-        """Args: Envirofacts client (injected); the ``[frs_point]`` settings."""
+        """Args: client for the FRS service (injected); the ``[frs_point]`` settings."""
         self._client = client
         self._settings = settings
         self._known: dict[str, Location | None] = {}
 
-    def __call__(self, frs_id: str) -> Location | None:
-        """Return the newest valid point of ``frs_id``, or None."""
-        digits = digit_string(frs_id)
-        if digits is None:
-            return None
-        if digits not in self._known:
-            self._known[digits] = self._fetch(digits)
-        return self._known[digits]
+    def __call__(self, frs_ids: Sequence[str]) -> Mapping[str, Location]:
+        """Return the coordinates found, keyed by the FRS IDs as given."""
+        digits = {frs_id: digit_string(frs_id) for frs_id in frs_ids}
+        unknown = [d for d in dict.fromkeys(digits.values()) if d and d not in self._known]
+        size = self._settings.batch_size
+        for start in range(0, len(unknown), size):
+            self._fetch(unknown[start : start + size])
+        found = {frs_id: self._known.get(d or "") for frs_id, d in digits.items()}
+        return {frs_id: point for frs_id, point in found.items() if point is not None}
 
-    def _fetch(self, digits: str) -> Location | None:
+    def _fetch(self, batch: list[str]) -> None:
+        self._known.update(dict.fromkeys(batch))  # unknown until an answer says otherwise
+        path = self._settings.path.format(frs_ids=",".join(batch))
         try:
-            rows = self._client.get_rows(self._settings.path.format(frs_id=digits))
+            rows = self._client.get_rows(path)
         except EfserviceError as exc:
-            logger.warning("FRS coordinates for %s could not be read: %s", digits, exc)
-            return None
-        newest = sorted(rows, key=lambda row: str(row.get(self._settings.timestamp_field) or ""))
-        points = (_point(row, self._settings) for row in reversed(newest))
-        return next((point for point in points if point is not None), None)
+            logger.warning(
+                "FRS coordinates for %d facilities could not be read: %s", len(batch), exc
+            )
+            return
+        for row in rows:
+            raw = row.get(self._settings.registry_field)
+            registry = digit_string(raw) if isinstance(raw, str | int) else None
+            point = _point(row, self._settings)
+            # Only an ID that was asked for, and only the first usable point of it, is kept.
+            if registry is not None and registry in self._known and point is not None:
+                self._known[registry] = self._known[registry] or point

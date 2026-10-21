@@ -29,7 +29,10 @@ def records() -> list[EmissionRecord]:
     patch = pytest.MonkeyPatch()
     patch.setattr(inventory, "get_tri_settings", lambda: settings)
     try:
-        return query_emissions_inventory.invoke({"cas_number": "50-00-0"})
+        call = {"type": "tool_call", "id": "c1", "name": "query_emissions_inventory"}
+        return query_emissions_inventory.invoke(
+            {**call, "args": {"cas_number": "50-00-0"}}
+        ).artifact
     finally:
         patch.undo()
 

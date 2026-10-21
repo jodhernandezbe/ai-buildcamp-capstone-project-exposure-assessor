@@ -7,8 +7,10 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from config.population import load_population_settings
+from tools.credentials import CENSUS_KEY
 from tools.exposure import population
 from tools.exposure.population import get_population_receptors
 
@@ -112,3 +114,33 @@ def test_invalid_input_returns_the_default_without_a_request(
     assert result["source"] == "screening default"
     assert "radius" in result["warnings"][0]
     assert requests_seen == []
+
+
+def test_the_request_key_is_preferred_over_the_environment(
+    requests_seen: list[httpx.Request],
+) -> None:
+    with CENSUS_KEY.provide(SecretStr("turn-census-key")):  # pragma: allowlist secret
+        get_population_receptors.invoke({"latitude": 41.5, "longitude": -71.2})
+    assert requests_seen[1].url.params["key"] == "turn-census-key"  # pragma: allowlist secret
+
+
+def test_a_request_key_alone_is_enough(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(SETTINGS.api_key_env_var)
+    with CENSUS_KEY.provide(SecretStr("turn-census-key")):  # pragma: allowlist secret
+        result = get_population_receptors.invoke({"latitude": 41.5, "longitude": -71.2})
+    assert result["source"] != "screening default"
+    assert requests_seen[1].url.params["key"] == "turn-census-key"  # pragma: allowlist secret
+
+
+def test_the_key_of_one_request_is_not_used_by_the_next(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(SETTINGS.api_key_env_var)
+    with CENSUS_KEY.provide(SecretStr("first-turn-key")):  # pragma: allowlist secret
+        get_population_receptors.invoke({"latitude": 41.5, "longitude": -71.2})
+    seen_during_first = len(requests_seen)
+    result = get_population_receptors.invoke({"latitude": 41.5, "longitude": -71.2})
+    assert result["source"] == "screening default"  # no key left over from the first request
+    assert len(requests_seen) == seen_during_first

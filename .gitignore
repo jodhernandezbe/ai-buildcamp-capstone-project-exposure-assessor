@@ -28,5 +28,10 @@ dist/
 # Generated agent-evaluation reports (cassettes in evals/cassettes/ are committed)
 evals/reports/
 
+# Frontend toolchain and build output (the backend serves frontend/dist/)
+frontend/node_modules/
+frontend/dist/
+
 # Raw downloads: only the compact derived files in data/ are committed
 data/raw/
+frontend/*.tsbuildinfo

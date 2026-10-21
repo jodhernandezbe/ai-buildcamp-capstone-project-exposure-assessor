@@ -75,6 +75,20 @@ class EmissionRecord(TypedDict):
     zip_code: str | None
 
 
+class InventoryResult(TypedDict):
+    """What the model is told about an inventory: the largest facilities and how many there are.
+
+    The complete list is not part of it; a widely reported chemical has over a thousand
+    facilities, too many to read or rank, so only the largest are listed.
+    """
+
+    total_found: int  # facilities found for the chemical, before any filter
+    matching: int  # facilities that match the filters given (all of them without filters)
+    shown: int  # facilities listed below
+    facilities: list[EmissionRecord]  # the largest ``emission_rate`` first
+    note: str | None  # says when the list is partial and how to see others; None when complete
+
+
 StackSource = Literal["NEI", "PSTK", "AirToxScreen global default"]
 
 

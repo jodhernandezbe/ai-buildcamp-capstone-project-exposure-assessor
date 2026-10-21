@@ -8,6 +8,7 @@ import httpx
 from langchain_core.tools import tool
 
 from config.population import PopulationSettings, get_population_settings
+from tools.credentials import CENSUS_KEY
 from tools.exposure.helpers.population.receptors import population_around
 from tools.http import RetryingClient
 from tools.schemas import Population
@@ -19,7 +20,10 @@ def _open_client() -> httpx.Client:
 
 
 def _api_key(settings: PopulationSettings) -> str:
-    """Read the Census API key from the environment (the edge where it is read)."""
+    """The Census API key of this request, else the environment's (the edge where it is read)."""
+    provided = CENSUS_KEY.get()
+    if provided is not None:
+        return provided.get_secret_value()
     return os.environ.get(settings.api_key_env_var, "")
 
 

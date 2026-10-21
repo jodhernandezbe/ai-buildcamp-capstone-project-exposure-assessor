@@ -8,8 +8,10 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from config.loader import ComptoxSettings, MolecularWeightSpec, PropertySpec, ToxicityValueSpec
+from tools.credentials import COMPTOX_KEY
 from tools.informatics.helpers.comptox import ComptoxLookup
 
 CAS = "71-43-2"  # valid CAS format and check digit; the data below is synthetic
@@ -683,3 +685,36 @@ def test_context_survives_caching_as_copies() -> None:
     first["rfd"]["route"] = "changed"
     again = lookup.get_toxicity_values(CAS)["rfd"]
     assert (again["endpoint"], again["route"]) == ("leukemia", "oral")
+
+
+# --- the key of the current request ---------------------------------------------------------
+
+
+def test_the_request_key_is_sent_instead_of_the_environment_key() -> None:
+    lookup, requests = _lookup(detail=_detail(78.5))
+    with COMPTOX_KEY.provide(SecretStr("turn-comptox-key")):  # pragma: allowlist secret
+        lookup.get_molecular_weight(CAS)
+    assert {r.headers["x-test-key"] for r in requests} == {"turn-comptox-key"}
+
+
+def test_a_request_key_alone_is_enough() -> None:
+    lookup, requests = _lookup(detail=_detail(78.5), env={})
+    with COMPTOX_KEY.provide(SecretStr("turn-comptox-key")):  # pragma: allowlist secret
+        assert lookup.get_molecular_weight(CAS) == 78.5
+    assert requests
+
+
+def test_the_environment_key_is_the_fallback_without_a_request_key() -> None:
+    lookup, requests = _lookup(detail=_detail(78.5))
+    lookup.get_molecular_weight(CAS)
+    assert {r.headers["x-test-key"] for r in requests} == {"test-key"}
+
+
+def test_the_key_of_one_request_is_not_kept_for_the_next() -> None:
+    lookup, requests = _lookup(detail=_detail(78.5), env={})
+    with COMPTOX_KEY.provide(SecretStr("first-turn-key")):  # pragma: allowlist secret
+        lookup.get_molecular_weight(CAS)
+    sent = len(requests)
+    with pytest.raises(RuntimeError, match="TEST_KEY_VAR"):
+        lookup.get_properties(CAS)
+    assert len(requests) == sent

@@ -1,0 +1,190 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { FakeMap } from "../../test/fakeMaplibre";
+import { facility, workspace } from "../../test/fixtures";
+import type { Facility, Stack } from "../../types/workspace";
+import { ExposureMapCanvas } from "./ExposureMapCanvas";
+
+const config = {
+  light_style: "https://example.test/light.json",
+  dark_style: "https://example.test/dark.json",
+  marker_min_px: 6,
+  marker_max_px: 22,
+  initial_view: { west: -125, south: 24.5, east: -66.9, north: 49.5 },
+};
+
+const stack = (over: Partial<Stack> = {}): Stack => ({
+  stack_number: null,
+  height_m: 10,
+  diameter_m: 1,
+  exit_velocity_m_s: 2,
+  exit_temperature_k: 300,
+  source: "NEI",
+  tier: 1,
+  tier_label: "Tier 1: Empirical NEI",
+  scc: null,
+  scc_description: null,
+  scc_score: null,
+  worst_case: null,
+  representative: null,
+  warnings: [],
+  ...over,
+});
+
+const extreme = (low: number, high: number) => ({ low, high, low_stack: 1, high_stack: 3 });
+
+function show(...facilities: Facility[]) {
+  FakeMap.reset();
+  return render(
+    <ExposureMapCanvas
+      digits={2}
+      workspace={workspace({ framing_version: 1, facilities })}
+      config={config}
+    />,
+  );
+}
+
+const marker = (name: RegExp) => screen.getByRole("button", { name });
+
+describe("markers", () => {
+  it("are reachable by keyboard and announce the facility name", () => {
+    show(facility({ name: "Plant F1", status: "above" }));
+    expect(marker(/Plant F1, above/)).toBeInTheDocument();
+  });
+
+  it("say when no risk is computed", () => {
+    show(facility({ name: "Plant F1" }));
+    expect(marker(/Plant F1, risk not computed/)).toBeInTheDocument();
+  });
+});
+
+describe("opening and closing", () => {
+  it("opens for keyboard focus and closes on Escape", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.tab();
+    expect(marker(/Plant F1/)).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Plant F1");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("opens on hover and closes when the pointer leaves", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.hover(marker(/Plant F1/));
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    await user.unhover(marker(/Plant F1/));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("closes on blur", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.tab();
+    await user.tab();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("is described by the card while open", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.tab();
+    const id = screen.getByRole("tooltip").id;
+    expect(marker(/Plant F1/)).toHaveAttribute("aria-describedby", id);
+  });
+
+  it("shows only the facility that is hovered", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "A", name: "Alpha", longitude: -20 }), facility({ frs_id: "B", name: "Beta", longitude: -10 }));
+    await user.hover(marker(/Beta/));
+    expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Beta");
+  });
+});
+
+describe("card content", () => {
+  it("shows the identifiers, industry, release and schedule", async () => {
+    const user = userEvent.setup();
+    show(
+      facility({
+        industry: { naics_code: "111111", naics_title: "Synthetic industry", code_origin: "reported", source: "s" },
+      }),
+    );
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("FRS F1");
+    expect(card).toHaveTextContent("TRI doc. control no. DOC1");
+    expect(card).toHaveTextContent("NAICS 111111 · Synthetic industry");
+    expect(card).toHaveTextContent("100 Pounds/yr");
+    expect(card).toHaveTextContent("1 g/s");
+    expect(card).toHaveTextContent("8760 h/yr");
+    expect(card).toHaveTextContent("1-1-1");
+  });
+
+  it("lists every stack with its tier pill", async () => {
+    const user = userEvent.setup();
+    show(facility({ stacks: [stack({ height_m: 5 }), stack({ height_m: 10 }), stack({ height_m: 15 })] }));
+    await user.tab();
+    expect(screen.getAllByText("Tier 1: Empirical NEI")).toHaveLength(3);
+    expect(screen.getByText("5 m")).toBeInTheDocument();
+    expect(screen.getByText("15 m")).toBeInTheDocument();
+  });
+
+  it("shows absent values as not reported", async () => {
+    const user = userEvent.setup();
+    show(facility({ stacks: [stack({ exit_temperature_k: null, tier: null, tier_label: null })] }));
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("Exit temperaturenot reported");
+    expect(card).toHaveTextContent("No source reported");
+    expect(card).toHaveTextContent("NAICS not reported · not reported");
+  });
+
+  it("shows the SCC and its description for a PSTK stack", async () => {
+    const user = userEvent.setup();
+    show(facility({ stacks: [stack({ tier_label: "Tier 2: PSTK by SCC", scc: "30600101", scc_description: "Synthetic process", scc_score: 0.5 })] }));
+    await user.tab();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("SCC 30600101 · Synthetic process (score 0.5)");
+  });
+
+  it("shows the risk ranges across the stacks and the population", async () => {
+    const user = userEvent.setup();
+    show(
+      facility({
+        status: "above",
+        receptors: { total_population: 1234, radius_km: 3, age_distribution: {}, source: "s", screening_default: false, warnings: [] },
+        exposure: {
+          stacks_given: 3,
+          stacks_evaluated: 3,
+          hq_worst: extreme(0.2, 2.5),
+          hq_representative: extreme(0.1, 0.5),
+          cancer_risk_worst: extreme(0.000001, 0.00002),
+          cancer_risk_representative: null,
+          concentration_worst: extreme(4, 8),
+          concentration_representative: null,
+          warnings: [],
+        },
+      }),
+    );
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("HQ, worst case0.2 – 2.5");
+    expect(card).toHaveTextContent("HQ, representative0.1 – 0.5");
+    expect(card).toHaveTextContent("1 × 10⁻⁶ – 2 × 10⁻⁵");
+    expect(card).toHaveTextContent("4 – 8 µg/m³");
+    expect(card).toHaveTextContent("Residents within 3 km1,234");
+    expect(card).toHaveTextContent("Above concern");
+  });
+
+  it("says risk is not reported before an exposure is computed", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("HQ, worst casenot reported");
+    expect(card).toHaveTextContent("Not computed");
+    expect(card).toHaveTextContent("Stack parameters not reported yet.");
+  });
+});

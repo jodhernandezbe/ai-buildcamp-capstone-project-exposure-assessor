@@ -33,8 +33,9 @@ def lookup_emissions(
         fetcher: Source of TRI rows (injected).
         current_year: The current calendar year; only the last ``tri.recent_years`` reporting
             years ending with it are used.
-        locate: Gives the coordinates of a facility from its FRS ID (injected); used only for
-            facilities whose TRI rows have none. Without it such facilities are omitted.
+        locate: Gives the coordinates of many facilities from their FRS IDs in one call
+            (injected); used only for facilities whose TRI rows have none. Without it such
+            facilities are omitted.
 
     Returns:
         One record per (medium, facility); empty if nothing was reported or if retrieval

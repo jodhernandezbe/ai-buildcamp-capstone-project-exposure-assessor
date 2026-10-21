@@ -66,6 +66,8 @@ def _mapping(value: object) -> Facility:
 
 
 def _dicts(value: object) -> list[Facility]:
+    if isinstance(value, dict):  # the inventory's {"facilities": [...], ...} shape
+        value = cast(dict[str, object], value).get("facilities")
     items = cast(list[object], value) if isinstance(value, list) else []
     return [cast(Facility, item) for item in items if isinstance(item, dict)]
 

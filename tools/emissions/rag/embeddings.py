@@ -18,6 +18,7 @@ from langchain_core.embeddings import Embeddings
 from pydantic import SecretStr
 
 from config.retrieval import EmbeddingSettings
+from tools.credentials import PROVIDER_KEY
 from tools.emissions.rag.errors import EmbeddingError
 
 
@@ -25,16 +26,16 @@ from tools.emissions.rag.errors import EmbeddingError
 class _Provider:
     """How to build one provider's embeddings and which of its exceptions are expected."""
 
-    build: Callable[[EmbeddingSettings, str], Embeddings]
+    build: Callable[[EmbeddingSettings, SecretStr], Embeddings]
     errors: Callable[[], tuple[type[Exception], ...]]
 
 
-def _openai_embeddings(settings: EmbeddingSettings, api_key: str) -> Embeddings:
+def _openai_embeddings(settings: EmbeddingSettings, api_key: SecretStr) -> Embeddings:
     from langchain_openai import OpenAIEmbeddings  # provider package: imported only here
 
     return OpenAIEmbeddings(
         model=settings.model,
-        api_key=SecretStr(api_key),
+        api_key=api_key,
         timeout=settings.timeout_seconds,
         max_retries=1,
         # Inputs are short descriptions; skip tiktoken length checks (and their download).
@@ -98,10 +99,43 @@ class GuardedEmbeddings(Embeddings):
         return _check_vectors([vector], 1)[0]
 
 
+def _resolve_key(settings: EmbeddingSettings, environ: Mapping[str, str] | None) -> SecretStr:
+    """The key for this request (see ``tools.credentials``), else the environment variable's."""
+    provided = PROVIDER_KEY.get()
+    if provided is not None:
+        return provided
+    env = os.environ if environ is None else environ
+    value = env.get(settings.api_key_env_var, "").strip()
+    if not value:
+        raise EmbeddingError(f"{settings.api_key_env_var} is not set")
+    return SecretStr(value)
+
+
+class _PerCallKey(Embeddings):
+    """Builds the provider embeddings with the key current at each call; holds no key itself."""
+
+    def __init__(
+        self, build: Callable[[SecretStr], Embeddings], resolve: Callable[[], SecretStr]
+    ) -> None:
+        self._build = build
+        self._resolve = resolve
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed ``texts`` with the current key."""
+        return self._build(self._resolve()).embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed one query with the current key."""
+        return self._build(self._resolve()).embed_query(text)
+
+
 def build_embeddings(
     settings: EmbeddingSettings, environ: Mapping[str, str] | None = None
 ) -> Embeddings:
     """Build the configured provider's embeddings (the outer edge for this collaborator).
+
+    The key is resolved at every embedding call, not stored: the one provided to the current
+    request (the web program's keychain key) wins, else the environment variable's.
 
     Args:
         settings: Provider, model, API-key variable name and timeout (seconds).
@@ -111,17 +145,19 @@ def build_embeddings(
         Guarded embeddings: provider failures surface as ``EmbeddingError``.
 
     Raises:
-        EmbeddingError: If the API-key environment variable is unset or blank.
+        EmbeddingError: If no key is available now (none provided and the variable unset).
         ValueError: If the provider is not supported (a configuration error).
     """
-    env = os.environ if environ is None else environ
-    api_key = env.get(settings.api_key_env_var, "").strip()
-    if not api_key:
-        raise EmbeddingError(f"{settings.api_key_env_var} is not set")
+
+    def resolve() -> SecretStr:
+        return _resolve_key(settings, environ)
+
+    resolve()  # fail at build time when no key is available, as before
     provider = _PROVIDERS.get(settings.provider)
     if provider is None:
         raise ValueError(f"unsupported embedding provider: {settings.provider}")
-    return GuardedEmbeddings(provider.build(settings, api_key), provider.errors())
+    lazy = _PerCallKey(lambda key: provider.build(settings, key), resolve)
+    return GuardedEmbeddings(lazy, provider.errors())
 
 
 def supported_providers() -> tuple[str, ...]:

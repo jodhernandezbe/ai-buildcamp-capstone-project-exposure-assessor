@@ -23,8 +23,8 @@ class Location:
     longitude: float
 
 
-Locator = Callable[[str], Location | None]
-"""Gives the coordinates of an FRS ID, or None when they cannot be found."""
+Locator = Callable[[Sequence[str]], Mapping[str, Location]]
+"""Gives the coordinates of many FRS IDs at once; an ID it cannot locate is left out."""
 
 
 @dataclass(frozen=True)
@@ -308,38 +308,54 @@ class LatestReports:
         Args:
             emissions: Emission-rate assumptions (operating hours per year).
             aliases: Source unit spelling -> Pint-parsable unit string.
-            locate: Gives the coordinates of an FRS ID (or None); asked only for facilities
-                that have a usable quantity but no coordinates in any TRI row.
+            locate: Gives the coordinates of many FRS IDs in one call; asked once, and only for
+                facilities that have a usable quantity but no coordinates in any TRI row.
 
         Returns:
             One record per (medium, facility) with a usable latest-year quantity and
             coordinates; the others are counted in ``stats``.
         """
         hours = operating_hours_per_year(emissions)
+        located = self._locate_missing(locate)
         found = (
-            self._record(key, slot, hours, aliases, locate) for key, slot in self._slots.items()
+            self._record(key, slot, hours, aliases, located) for key, slot in self._slots.items()
         )
         records = [record for record in found if record is not None]
         self.stats.combined = sum(slot.summed > 1 for slot in self._slots.values())
         return records
 
-    def _located(self, facility_id: str, slot: Slot, locate: Locator | None) -> Location | None:
-        """Return the slot's coordinates, asking ``locate`` when TRI gave none."""
+    def _locate_missing(self, locate: Locator | None) -> Mapping[str, Location]:
+        """Ask ``locate`` once for every facility with a usable quantity but no coordinates."""
+        missing = list(
+            dict.fromkeys(
+                key[1]
+                for key, slot in self._slots.items()
+                if slot.location is None and slot.quantity is not None and slot.unit is not None
+            )
+        )
+        return locate(missing) if locate is not None and missing else {}
+
+    def _located(
+        self, facility_id: str, slot: Slot, located: Mapping[str, Location]
+    ) -> Location | None:
+        """Return the slot's coordinates, or those ``locate`` found when TRI gave none."""
         if slot.location is not None:
             return slot.location
-        found = locate(facility_id) if locate is not None else None
+        found = located.get(facility_id)
         if found is None:
             self.stats.no_location += 1
         else:
             self.stats.from_frs += 1
         return found
 
-    def _amount(self, facility_id: str, slot: Slot, locate: Locator | None) -> _Amount | None:
+    def _amount(
+        self, facility_id: str, slot: Slot, located: Mapping[str, Location]
+    ) -> _Amount | None:
         """Return the slot's quantity, unit and location, or count why it is unusable."""
         if slot.quantity is None or slot.unit is None:
             self.stats.no_quantity += 1
             return None
-        location = self._located(facility_id, slot, locate)
+        location = self._located(facility_id, slot, located)
         return None if location is None else _Amount(slot.quantity, slot.unit, location)
 
     def _record(
@@ -348,9 +364,9 @@ class LatestReports:
         slot: Slot,
         hours: float,
         aliases: Mapping[str, str] | None,
-        locate: Locator | None,
+        located: Mapping[str, Location],
     ) -> EmissionRecord | None:
-        amount = self._amount(key[1], slot, locate)
+        amount = self._amount(key[1], slot, located)
         if amount is None:
             return None
         try:

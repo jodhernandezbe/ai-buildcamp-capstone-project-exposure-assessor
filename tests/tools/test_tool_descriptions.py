@@ -41,7 +41,7 @@ REQUIRED = {
         "Never a number recalled from a chemical's name",
     ),
     "query_emissions_inventory": (
-        "decide which to assess",
+        "Decide which facilities to assess",
         "says nothing about a facility's industry or process",
         "not evidence that nobody emits it",
         "Never a number recalled from a chemical's name",

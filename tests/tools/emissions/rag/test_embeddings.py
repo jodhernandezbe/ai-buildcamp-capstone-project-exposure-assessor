@@ -5,8 +5,10 @@ from __future__ import annotations
 import openai
 import pytest
 from langchain_core.embeddings import Embeddings
+from pydantic import SecretStr
 
 from config.retrieval import SUPPORTED_EMBEDDING_PROVIDERS, load_embedding_settings
+from tools.credentials import PROVIDER_KEY
 from tools.emissions.rag.embeddings import GuardedEmbeddings, build_embeddings, supported_providers
 from tools.emissions.rag.errors import EmbeddingError
 
@@ -98,3 +100,55 @@ def test_malformed_query_vector_rejected() -> None:
     guarded = GuardedEmbeddings(_Stub(query=[]), ERRORS)
     with pytest.raises(EmbeddingError):
         guarded.embed_query("a")
+
+
+KEYS_SEEN: list[str] = []
+
+
+class _RecordingEmbeddings(Embeddings):
+    """Stand-in for the provider class: records the key each instance was built with."""
+
+    def __init__(self, *, api_key: SecretStr, **kwargs: object) -> None:
+        KEYS_SEEN.append(api_key.get_secret_value())
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0] for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return [1.0]
+
+
+@pytest.fixture
+def recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    KEYS_SEEN.clear()
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", _RecordingEmbeddings)
+    return KEYS_SEEN
+
+
+def test_request_key_is_preferred_over_the_environment(recorder: list[str]) -> None:
+    embeddings = build_embeddings(load_embedding_settings(), {"OPENAI_API_KEY": "env-key"})
+    with PROVIDER_KEY.provide(SecretStr("turn-key")):
+        embeddings.embed_query("a")
+    embeddings.embed_query("a")
+    assert recorder == ["turn-key", "env-key"]
+
+
+def test_each_call_uses_the_key_of_its_own_request(recorder: list[str]) -> None:
+    embeddings = build_embeddings(load_embedding_settings(), {"OPENAI_API_KEY": "env-key"})
+    for key in ("first", "second"):
+        with PROVIDER_KEY.provide(SecretStr(key)):
+            embeddings.embed_documents(["a"])
+    assert recorder == ["first", "second"]
+
+
+def test_no_key_is_retained_between_requests(recorder: list[str]) -> None:
+    with PROVIDER_KEY.provide(SecretStr("turn-key")):
+        embeddings = build_embeddings(load_embedding_settings(), {})
+    with pytest.raises(EmbeddingError, match="OPENAI_API_KEY is not set"):
+        embeddings.embed_query("a")
+    assert recorder == []
+
+
+def test_request_key_alone_satisfies_the_build(recorder: list[str]) -> None:
+    with PROVIDER_KEY.provide(SecretStr("turn-key")):
+        assert isinstance(build_embeddings(load_embedding_settings(), {}), GuardedEmbeddings)

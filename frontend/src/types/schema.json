@@ -1,0 +1,1846 @@
+{
+  "$defs": {
+    "AssistantMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "assistant_message",
+          "default": "assistant_message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "text"
+      ],
+      "title": "AssistantMessage",
+      "type": "object"
+    },
+    "BoundingBox": {
+      "additionalProperties": false,
+      "description": "Extent of the placed facilities and buffers, decimal degrees (WGS84).",
+      "properties": {
+        "east": {
+          "type": "number"
+        },
+        "north": {
+          "type": "number"
+        },
+        "south": {
+          "type": "number"
+        },
+        "west": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "west",
+        "south",
+        "east",
+        "north"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "ChatRequest": {
+      "additionalProperties": false,
+      "description": "Body of ``POST /api/v1/chat/stream``.",
+      "properties": {
+        "message": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "thread_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "thread_id",
+        "message"
+      ],
+      "title": "ChatRequest",
+      "type": "object"
+    },
+    "Chemical": {
+      "additionalProperties": false,
+      "description": "The chemical as queried, with its properties and read-across provenance.\n\nAttributes:\n    cas_number: CAS number as queried.\n    molecular_weight_g_mol: Molecular weight, g/mol.\n    rfc_mg_m3: Inhalation reference concentration, mg/m\u00b3.\n    iur_per_ug_m3: Inhalation unit risk, (\u00b5g/m\u00b3)\u207b\u00b9.\n    sources: Field name -> source the value came from.",
+      "properties": {
+        "cas_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "iur_per_ug_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "molecular_weight_g_mol": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "read_across": {
+          "$ref": "#/$defs/ReadAcross"
+        },
+        "rfc_mg_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cas_number",
+        "molecular_weight_g_mol",
+        "rfc_mg_m3",
+        "iur_per_ug_m3",
+        "sources",
+        "read_across",
+        "warnings"
+      ],
+      "title": "Chemical",
+      "type": "object"
+    },
+    "ClientConfig": {
+      "additionalProperties": false,
+      "description": "Display settings the frontend needs (``GET /api/v1/settings/client``).",
+      "properties": {
+        "map": {
+          "$ref": "#/$defs/MapConfig"
+        },
+        "model": {
+          "description": "Chat model that drives the agent.",
+          "type": "string"
+        },
+        "narrow_breakpoint_px": {
+          "type": "integer"
+        },
+        "significant_digits": {
+          "type": "integer"
+        },
+        "suggestions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/Thresholds"
+        }
+      },
+      "required": [
+        "model",
+        "thresholds",
+        "map",
+        "significant_digits",
+        "narrow_breakpoint_px",
+        "suggestions"
+      ],
+      "title": "ClientConfig",
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "additionalProperties": false,
+      "description": "A user-safe message and the id under which the details were logged.",
+      "properties": {
+        "correlation_id": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "message",
+        "correlation_id"
+      ],
+      "title": "ErrorEvent",
+      "type": "object"
+    },
+    "ExposureRanges": {
+      "additionalProperties": false,
+      "description": "Ranges over the evaluated stacks of one facility; None when no stack has the quantity.",
+      "properties": {
+        "cancer_risk_representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cancer_risk_worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "concentration_representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "concentration_worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq_representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq_worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extreme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stacks_evaluated": {
+          "type": "integer"
+        },
+        "stacks_given": {
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "stacks_given",
+        "stacks_evaluated",
+        "hq_worst",
+        "cancer_risk_worst",
+        "concentration_worst",
+        "hq_representative",
+        "cancer_risk_representative",
+        "concentration_representative",
+        "warnings"
+      ],
+      "title": "ExposureRanges",
+      "type": "object"
+    },
+    "Extreme": {
+      "additionalProperties": false,
+      "description": "The lowest and highest value of one quantity over a facility's stacks.",
+      "properties": {
+        "high": {
+          "type": "number"
+        },
+        "high_stack": {
+          "type": "integer"
+        },
+        "low": {
+          "type": "number"
+        },
+        "low_stack": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "low",
+        "high",
+        "low_stack",
+        "high_stack"
+      ],
+      "title": "Extreme",
+      "type": "object"
+    },
+    "Extremum": {
+      "additionalProperties": false,
+      "description": "The highest value of one risk quantity over every attributed facility.\n\nAttributes:\n    value: The value (HQ and cancer risk are unitless).\n    frs_id: Facility whose stack gave it.\n    facility_name: That facility's name, as reported.\n    stack_number: The stack that gave it.\n    status: Position against the configured thresholds of concern.",
+      "properties": {
+        "facility_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frs_id": {
+          "type": "string"
+        },
+        "stack_number": {
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "below",
+            "near",
+            "above"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "frs_id",
+        "facility_name",
+        "stack_number",
+        "status"
+      ],
+      "title": "Extremum",
+      "type": "object"
+    },
+    "Facility": {
+      "additionalProperties": false,
+      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status; None while no risk is computed.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
+      "properties": {
+        "address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "buffer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Polygon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cas_number": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "county": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doc_ctrl_num": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "emission_rate_g_s": {
+          "type": "number"
+        },
+        "exposure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExposureRanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frs_id": {
+          "type": "string"
+        },
+        "industry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Industry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "medium": {
+          "type": "string"
+        },
+        "meteorology": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Meteorology"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operating_hours_per_year": {
+          "type": "number"
+        },
+        "receptors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Receptors"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "release_unit": {
+          "type": "string"
+        },
+        "reporting_year": {
+          "type": "integer"
+        },
+        "sector": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Polygon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stacks": {
+          "items": {
+            "$ref": "#/$defs/Stack"
+          },
+          "type": "array"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "below",
+                "near",
+                "above"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "total_release": {
+          "type": "number"
+        },
+        "zip_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "frs_id",
+        "name",
+        "address",
+        "city",
+        "county",
+        "state",
+        "zip_code",
+        "latitude",
+        "longitude",
+        "cas_number",
+        "doc_ctrl_num",
+        "medium",
+        "reporting_year",
+        "total_release",
+        "release_unit",
+        "emission_rate_g_s",
+        "operating_hours_per_year",
+        "industry",
+        "stacks",
+        "receptors",
+        "meteorology",
+        "exposure",
+        "status",
+        "buffer",
+        "sector"
+      ],
+      "title": "Facility",
+      "type": "object"
+    },
+    "GuardrailPivotResponse": {
+      "additionalProperties": false,
+      "description": "The in-character redirect sent instead of running the agent on an off-topic turn.",
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "guardrail_pivot",
+          "default": "guardrail_pivot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "text"
+      ],
+      "title": "GuardrailPivotResponse",
+      "type": "object"
+    },
+    "Industry": {
+      "additionalProperties": false,
+      "description": "Primary industry of the TRI submission; origin is reported, assigned or None.",
+      "properties": {
+        "code_origin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "naics_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "naics_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "naics_code",
+        "naics_title",
+        "code_origin",
+        "source"
+      ],
+      "title": "Industry",
+      "type": "object"
+    },
+    "InitialView": {
+      "additionalProperties": false,
+      "description": "A box on the map, decimal degrees (WGS84, west negative).",
+      "properties": {
+        "east": {
+          "type": "number"
+        },
+        "north": {
+          "type": "number"
+        },
+        "south": {
+          "type": "number"
+        },
+        "west": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "west",
+        "south",
+        "east",
+        "north"
+      ],
+      "title": "InitialView",
+      "type": "object"
+    },
+    "KeyStatusResponse": {
+      "additionalProperties": false,
+      "description": "Whether a key is stored; never the key or any part of it.",
+      "properties": {
+        "configured": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "configured"
+      ],
+      "title": "KeyStatusResponse",
+      "type": "object"
+    },
+    "KeyUpdatePayload": {
+      "additionalProperties": false,
+      "description": "Body of ``POST /api/v1/settings/openai-key``; the key is never echoed or logged.",
+      "properties": {
+        "api_key": {
+          "description": "OpenAI API key to store in the OS keychain.",
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "api_key"
+      ],
+      "title": "KeyUpdatePayload",
+      "type": "object"
+    },
+    "KeysStatusResponse": {
+      "additionalProperties": false,
+      "description": "The status of every key the interface stores, in one response.",
+      "properties": {
+        "census": {
+          "$ref": "#/$defs/KeyStatusResponse"
+        },
+        "comptox": {
+          "$ref": "#/$defs/KeyStatusResponse"
+        },
+        "openai": {
+          "$ref": "#/$defs/KeyStatusResponse"
+        }
+      },
+      "required": [
+        "openai",
+        "census",
+        "comptox"
+      ],
+      "title": "KeysStatusResponse",
+      "type": "object"
+    },
+    "MapConfig": {
+      "additionalProperties": false,
+      "description": "Basemap style URLs and the marker radii (px) for the smallest and largest emission rate.",
+      "properties": {
+        "dark_style": {
+          "type": "string"
+        },
+        "initial_view": {
+          "$ref": "#/$defs/InitialView",
+          "description": "What the map shows before any facility."
+        },
+        "light_style": {
+          "type": "string"
+        },
+        "marker_max_px": {
+          "type": "number"
+        },
+        "marker_min_px": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "light_style",
+        "dark_style",
+        "marker_min_px",
+        "marker_max_px",
+        "initial_view"
+      ],
+      "title": "MapConfig",
+      "type": "object"
+    },
+    "Meteorology": {
+      "additionalProperties": false,
+      "description": "Annual representative conditions at a point: m/s, degrees clockwise from north, K.",
+      "properties": {
+        "ambient_temperature_k": {
+          "type": "number"
+        },
+        "screening_default": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "stability_class": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wind_from_deg": {
+          "description": "Direction the wind blows from.",
+          "type": "number"
+        },
+        "wind_speed_m_s": {
+          "type": "number"
+        },
+        "wind_toward_deg": {
+          "description": "Downwind direction, ``(from + 180) % 360``.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wind_speed_m_s",
+        "wind_from_deg",
+        "wind_toward_deg",
+        "ambient_temperature_k",
+        "stability_class",
+        "source",
+        "screening_default",
+        "warnings"
+      ],
+      "title": "Meteorology",
+      "type": "object"
+    },
+    "Polygon": {
+      "additionalProperties": false,
+      "description": "A GeoJSON polygon: one closed ring of ``[longitude, latitude]`` positions (WGS84).",
+      "properties": {
+        "coordinates": {
+          "items": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "type": {
+          "const": "Polygon",
+          "default": "Polygon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "title": "Polygon",
+      "type": "object"
+    },
+    "ReadAcross": {
+      "additionalProperties": false,
+      "description": "The read-across outcome for the queried chemical (surrogate values are scores 0-1).",
+      "properties": {
+        "cosine_similarity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hybrid_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "default": "not_evaluated",
+          "enum": [
+            "not_evaluated",
+            "direct_tri_match",
+            "read_across",
+            "unresolved"
+          ],
+          "type": "string"
+        },
+        "surrogate_cas": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "surrogate_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tanimoto_similarity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "within_applicability_domain": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "surrogate_cas",
+        "surrogate_name",
+        "hybrid_score",
+        "cosine_similarity",
+        "tanimoto_similarity",
+        "within_applicability_domain",
+        "warnings"
+      ],
+      "title": "ReadAcross",
+      "type": "object"
+    },
+    "Receptors": {
+      "additionalProperties": false,
+      "description": "Residents within ``radius_km`` of a point; ``age_distribution`` is percent per band.",
+      "properties": {
+        "age_distribution": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "radius_km": {
+          "type": "number"
+        },
+        "screening_default": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "total_population": {
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "total_population",
+        "radius_km",
+        "age_distribution",
+        "source",
+        "screening_default",
+        "warnings"
+      ],
+      "title": "Receptors",
+      "type": "object"
+    },
+    "RiskSummary": {
+      "additionalProperties": false,
+      "description": "Highest worst-case and representative HQ and cancer risk; ``reason`` when none exists.",
+      "properties": {
+        "cancer_risk_representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cancer_risk_worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq_representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq_worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Extremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why no value yet, e.g. not computed."
+        }
+      },
+      "required": [
+        "hq_worst",
+        "cancer_risk_worst",
+        "hq_representative",
+        "cancer_risk_representative",
+        "reason"
+      ],
+      "title": "RiskSummary",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "description": "Screening result for one set of weather: concentration \u00b5g/m\u00b3, HQ and cancer risk unitless.",
+      "properties": {
+        "cancer_risk": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "distance_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Downwind distance of the maximum."
+        },
+        "hq": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "max_concentration_ug_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "max_concentration_ug_m3",
+        "distance_m",
+        "hq",
+        "cancer_risk"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "ScopeDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "in_scope": {
+          "type": "boolean"
+        },
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "scope",
+          "default": "scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "in_scope"
+      ],
+      "title": "ScopeDecision",
+      "type": "object"
+    },
+    "Stack": {
+      "additionalProperties": false,
+      "description": "One release point with its provenance tier and, when computed, its results.\n\nAttributes:\n    stack_number: 1-based position in the exposure call that evaluated it, else None.\n    tier: 1 Empirical NEI, 2 PSTK by SCC, 3 EPA global default; None without a source.\n    tier_label: ``Tier 1: Empirical NEI`` and so on.\n    scc: SCC behind a PSTK stack, when reported.\n    scc_description: Most specific process description of that SCC, from an SCC lookup\n        in the same thread; None when no lookup returned it.\n    scc_score: Match score (0-1) of that lookup.",
+      "properties": {
+        "diameter_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exit_temperature_k": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exit_velocity_m_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "representative": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scenario"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scc_description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scc_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stack_number": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "enum": [
+                1,
+                2,
+                3
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tier_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "worst_case": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scenario"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "stack_number",
+        "height_m",
+        "diameter_m",
+        "exit_velocity_m_s",
+        "exit_temperature_k",
+        "source",
+        "tier",
+        "tier_label",
+        "scc",
+        "scc_description",
+        "scc_score",
+        "worst_case",
+        "representative",
+        "warnings"
+      ],
+      "title": "Stack",
+      "type": "object"
+    },
+    "StreamEventSchema": {
+      "description": "Any one event of the stream (used to export the event union).",
+      "discriminator": {
+        "mapping": {
+          "assistant_message": "#/$defs/AssistantMessage",
+          "error": "#/$defs/ErrorEvent",
+          "guardrail_pivot": "#/$defs/GuardrailPivotResponse",
+          "scope": "#/$defs/ScopeDecision",
+          "token": "#/$defs/Token",
+          "tool_status": "#/$defs/ToolStatus",
+          "turn_finished": "#/$defs/TurnFinished",
+          "turn_started": "#/$defs/TurnStarted",
+          "usage": "#/$defs/Usage",
+          "workspace_update": "#/$defs/WorkspaceUpdate"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TurnStarted"
+        },
+        {
+          "$ref": "#/$defs/ScopeDecision"
+        },
+        {
+          "$ref": "#/$defs/GuardrailPivotResponse"
+        },
+        {
+          "$ref": "#/$defs/ToolStatus"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceUpdate"
+        },
+        {
+          "$ref": "#/$defs/Token"
+        },
+        {
+          "$ref": "#/$defs/AssistantMessage"
+        },
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "$ref": "#/$defs/ErrorEvent"
+        },
+        {
+          "$ref": "#/$defs/TurnFinished"
+        }
+      ],
+      "title": "StreamEventSchema"
+    },
+    "Thresholds": {
+      "additionalProperties": false,
+      "description": "Status thresholds (unitless HQ and lifetime cancer risk).",
+      "properties": {
+        "cancer_lower": {
+          "type": "number"
+        },
+        "cancer_upper": {
+          "type": "number"
+        },
+        "hq_concern": {
+          "type": "number"
+        },
+        "hq_near_lower": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "hq_concern",
+        "hq_near_lower",
+        "cancer_lower",
+        "cancer_upper"
+      ],
+      "title": "Thresholds",
+      "type": "object"
+    },
+    "Token": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "token",
+          "default": "token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "text"
+      ],
+      "title": "Token",
+      "type": "object"
+    },
+    "ToolStatus": {
+      "additionalProperties": false,
+      "description": "A tool step: ``started`` carries the label; ``finished`` adds the outcome.",
+      "properties": {
+        "call_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "started",
+            "finished"
+          ],
+          "type": "string"
+        },
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "ok",
+                "error"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "type": {
+          "const": "tool_status",
+          "default": "tool_status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "phase",
+        "call_id",
+        "tool_name",
+        "label",
+        "status"
+      ],
+      "title": "ToolStatus",
+      "type": "object"
+    },
+    "TurnFinished": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "turn_finished",
+          "default": "turn_finished",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type"
+      ],
+      "title": "TurnFinished",
+      "type": "object"
+    },
+    "TurnStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "turn_id": {
+          "type": "string"
+        },
+        "type": {
+          "const": "turn_started",
+          "default": "turn_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "thread_id",
+        "turn_id"
+      ],
+      "title": "TurnStarted",
+      "type": "object"
+    },
+    "Unattributed": {
+      "additionalProperties": false,
+      "description": "A result that could not be tied to exactly one facility, and why.",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "reason"
+      ],
+      "title": "Unattributed",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "turn": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "type": {
+          "const": "usage",
+          "default": "usage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "turn",
+        "session"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "UsageTotals": {
+      "additionalProperties": false,
+      "description": "Token counts and estimated cost (USD) of a turn or a session.\n\n``cost_status`` is ``estimate`` when every call was priced, ``lower_bound`` when some call\nreported no usage, and ``unpriced`` (``cost_usd`` null) when the model has no price.",
+      "properties": {
+        "cached_input_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "calls": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "cost_status": {
+          "enum": [
+            "estimate",
+            "lower_bound",
+            "unpriced"
+          ],
+          "type": "string"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "priced_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "calls",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "complete",
+        "cost_usd",
+        "cost_status",
+        "priced_on"
+      ],
+      "title": "UsageTotals",
+      "type": "object"
+    },
+    "WorkspaceState": {
+      "additionalProperties": false,
+      "description": "The current workspace of one thread.\n\nAttributes:\n    framing_version: Increases only when the set of placed facilities or buffers changes.\n    bounds: Extent of the placed facilities and buffers; None when none is placed.\n    facilities: One per FRS ID, in the order first reported.\n    selected_frs_id: Facility whose receptors the ribbon shows (the highest risk, or the\n        only one); None when no single facility stands out.\n    chemical: The queried chemical and its provenance.\n    risk: Highest risk values across the attributed facilities.\n    receptors: Receptors of the selected facility.\n    meteorology: Meteorology of the selected facility, else the latest result.\n    unattributed: Results not attached to any facility.\n    warnings: Results left out (malformed, unattributable) and why.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "chemical": {
+          "$ref": "#/$defs/Chemical"
+        },
+        "facilities": {
+          "items": {
+            "$ref": "#/$defs/Facility"
+          },
+          "type": "array"
+        },
+        "framing_version": {
+          "default": 0,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "meteorology": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Meteorology"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "receptors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Receptors"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskSummary"
+        },
+        "selected_frs_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unattributed": {
+          "items": {
+            "$ref": "#/$defs/Unattributed"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "framing_version",
+        "bounds",
+        "facilities",
+        "selected_frs_id",
+        "chemical",
+        "risk",
+        "receptors",
+        "meteorology",
+        "unattributed",
+        "warnings"
+      ],
+      "title": "WorkspaceState",
+      "type": "object"
+    },
+    "WorkspaceUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/WorkspaceState"
+        },
+        "type": {
+          "const": "workspace_update",
+          "default": "workspace_update",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "state"
+      ],
+      "title": "WorkspaceUpdate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "ChatRequest": {
+      "$ref": "#/$defs/ChatRequest"
+    },
+    "ClientConfig": {
+      "$ref": "#/$defs/ClientConfig"
+    },
+    "KeyStatusResponse": {
+      "$ref": "#/$defs/KeyStatusResponse"
+    },
+    "KeyUpdatePayload": {
+      "$ref": "#/$defs/KeyUpdatePayload"
+    },
+    "KeysStatusResponse": {
+      "$ref": "#/$defs/KeysStatusResponse"
+    },
+    "StreamEventSchema": {
+      "$ref": "#/$defs/StreamEventSchema"
+    },
+    "UsageTotals": {
+      "$ref": "#/$defs/UsageTotals"
+    },
+    "WorkspaceState": {
+      "$ref": "#/$defs/WorkspaceState"
+    }
+  },
+  "required": [
+    "ChatRequest",
+    "ClientConfig",
+    "KeyStatusResponse",
+    "KeyUpdatePayload",
+    "KeysStatusResponse",
+    "StreamEventSchema",
+    "UsageTotals",
+    "WorkspaceState"
+  ],
+  "title": "ApiContract",
+  "type": "object"
+}

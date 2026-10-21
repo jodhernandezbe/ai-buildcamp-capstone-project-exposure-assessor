@@ -11,10 +11,12 @@ from collections.abc import Sequence
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agent.guardrails import ScopeGuard, build_scope_node, route_after_scope
 from agent.state import AgentState
 from prompts.registry import load_prompt
 from tools.registry import get_all_tools
@@ -22,10 +24,26 @@ from tools.registry import get_all_tools
 DEFAULT_SYSTEM_PROMPT = "agent_system"
 
 
+def _add_entry(
+    graph: StateGraph[AgentState],
+    model: BaseChatModel,
+    scope_guard: ScopeGuard | None,
+) -> None:
+    """Connect START to the agent, through the scope check when there is one."""
+    if scope_guard is None:
+        graph.add_edge(START, "model")
+        return
+    graph.add_node("scope", build_scope_node(model, scope_guard))
+    graph.add_edge(START, "scope")
+    graph.add_conditional_edges("scope", route_after_scope, {"model": "model", END: END})
+
+
 def build_agent(
     model: BaseChatModel,
     tools: Sequence[BaseTool] | None = None,
     system_prompt: str | None = None,
+    checkpointer: BaseCheckpointSaver[str] | None = None,
+    scope_guard: ScopeGuard | None = None,
 ) -> CompiledStateGraph[AgentState, None, AgentState, AgentState]:
     """Compile a tool-calling agent graph around an injected chat model.
 
@@ -34,6 +52,11 @@ def build_agent(
             by the caller so the provider can be swapped without touching this module.
         tools: Tools to bind. Defaults to everything in the tool registry.
         system_prompt: System prompt text. Defaults to ``prompts/agent_system.md``.
+        checkpointer: Keeps each thread's history between invocations (pass a ``thread_id``
+            in the run config). None, the default, keeps no history between calls.
+        scope_guard: When given, every user turn is first classified by ``model`` and an
+            off-topic one is answered with a redirect without running the agent or its tools.
+            None, the default, leaves the graph exactly as without the check.
 
     Returns:
         A compiled graph; invoke it with ``{"messages": [...]}``.
@@ -48,11 +71,11 @@ def build_agent(
 
     graph = StateGraph(AgentState)
     graph.add_node("model", call_model)
-    graph.add_edge(START, "model")
+    _add_entry(graph, model, scope_guard)
     if bound_tools:
         graph.add_node("tools", ToolNode(bound_tools))
         graph.add_conditional_edges("model", tools_condition)
         graph.add_edge("tools", "model")
     else:
         graph.add_edge("model", END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

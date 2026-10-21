@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -369,23 +370,42 @@ def _no_coordinates(**over: object) -> dict[str, object]:
 
 
 def test_a_facility_without_coordinates_is_located_from_frs() -> None:
-    asked: list[str] = []
+    asked: list[list[str]] = []
 
-    def locate(frs_id: str) -> Location | None:
-        asked.append(frs_id)
-        return Location(12.5, -70.5)
+    def locate(frs_ids: Sequence[str]) -> Mapping[str, Location]:
+        asked.append(list(frs_ids))
+        return {frs_id: Location(12.5, -70.5) for frs_id in frs_ids}
 
     reducer = LatestReports(load_tri_settings(), first_year=0)
     reducer.add_rows([_no_coordinates()])
     (record,) = reducer.records(EMISSIONS, ALIASES, locate)
-    assert asked == ["110000000001"]
+    assert asked == [["110000000001"]]
     assert (record["latitude"], record["longitude"]) == (12.5, -70.5)
     assert reducer.stats.from_frs == 1 and reducer.stats.no_location == 0
     assert any("located from their FRS record" in w for w in reducer.stats.warnings())
 
 
+def test_every_facility_without_coordinates_is_located_in_one_call() -> None:
+    asked: list[list[str]] = []
+
+    def locate(frs_ids: Sequence[str]) -> Mapping[str, Location]:
+        asked.append(list(frs_ids))
+        return {frs_id: Location(1.0, -1.0) for frs_id in frs_ids}
+
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows(
+        [
+            _no_coordinates(epa_registry_id="110000000001"),
+            _no_coordinates(epa_registry_id="110000000002"),
+            _row(epa_registry_id="110000000003"),  # TRI has its coordinates
+        ]
+    )
+    assert len(reducer.records(EMISSIONS, ALIASES, locate)) == 3
+    assert asked == [["110000000001", "110000000002"]]
+
+
 def test_tri_coordinates_are_preferred_and_frs_is_not_asked() -> None:
-    def locate(frs_id: str) -> Location | None:
+    def locate(frs_ids: Sequence[str]) -> Mapping[str, Location]:
         raise AssertionError("FRS must not be asked when TRI has coordinates")
 
     reducer = LatestReports(load_tri_settings(), first_year=0)
@@ -394,7 +414,7 @@ def test_tri_coordinates_are_preferred_and_frs_is_not_asked() -> None:
 
 
 def test_frs_is_not_asked_for_a_facility_without_a_quantity() -> None:
-    def locate(frs_id: str) -> Location | None:
+    def locate(frs_ids: Sequence[str]) -> Mapping[str, Location]:
         raise AssertionError("no quantity, so no coordinates are needed")
 
     reducer = LatestReports(load_tri_settings(), first_year=0)
@@ -405,5 +425,5 @@ def test_frs_is_not_asked_for_a_facility_without_a_quantity() -> None:
 def test_a_facility_frs_cannot_locate_is_still_omitted() -> None:
     reducer = LatestReports(load_tri_settings(), first_year=0)
     reducer.add_rows([_no_coordinates()])
-    assert reducer.records(EMISSIONS, ALIASES, lambda _: None) == []
+    assert reducer.records(EMISSIONS, ALIASES, lambda _: {}) == []
     assert reducer.stats.no_location == 1 and reducer.stats.from_frs == 0

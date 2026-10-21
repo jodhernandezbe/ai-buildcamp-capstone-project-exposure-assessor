@@ -1,0 +1,148 @@
+"""Log redaction: scrub anything shaped like an OpenAI key before a handler emits it."""
+
+from __future__ import annotations
+
+import copy
+import logging
+import re
+import threading
+from collections import Counter
+from collections.abc import Generator, Iterable, Mapping
+from contextlib import contextmanager
+from typing import Any
+
+SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
+REDACTED = "sk-***REDACTED***"
+# The provider echoes a key back in its error messages with the middle starred out
+# ("sk-proj-****p8UA"), which still shows its end; that is scrubbed too.
+# (The lookahead keeps it from re-matching its own replacement, so redacting twice is harmless.)
+MASKED_KEY_PATTERN = re.compile(r"sk-(?!\*\*\*REDACTED)[A-Za-z0-9_-]*\*+[A-Za-z0-9]*")
+# A bearer token or a key-like assignment of any shape ("Authorization: Bearer ...",
+# "api_key=...", "'x-api-key': '...'"): the value goes, the name stays.
+BEARER_PATTERN = re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}")
+# A key in a URL's query string, as the Census Data API takes it ("...&key=...").
+QUERY_PATTERN = re.compile(r"(?i)([?&](?:key|api_?key|access_token|token)=)[^&\s'\")]+")
+ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)\b((?:x-)?api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)"
+    r"(['\"]?\s*[:=]\s*['\"]?)[^\s'\",})]{8,}"
+)
+# Loggers whose records (and handlers) get the filter: the root, the server and the HTTP client.
+REDACTED_LOGGERS = ("", "uvicorn", "uvicorn.error", "uvicorn.access", "httpx", "httpcore")
+_PLAIN = (int, float, bool, type(None))
+_FORMATTER = logging.Formatter()
+
+
+LITERAL_REDACTED = "***REDACTED***"
+MIN_LITERAL_LENGTH = 8  # shorter values would mangle ordinary log text
+_LITERALS: Counter[str] = Counter()
+_LITERALS_LOCK = threading.Lock()
+
+
+@contextmanager
+def protect_secrets(values: Iterable[str]) -> Generator[None]:
+    """Redact these exact values, wherever they appear in a log record, until the block exits.
+
+    For keys with no recognisable shape (Census, CompTox). Counted, so concurrent turns that
+    share a value do not unprotect each other.
+    """
+    items = [value for value in values if len(value) >= MIN_LITERAL_LENGTH]
+    with _LITERALS_LOCK:
+        _LITERALS.update(items)
+    try:
+        yield
+    finally:
+        with _LITERALS_LOCK:
+            _LITERALS.subtract(items)
+            for value in [v for v, count in _LITERALS.items() if count <= 0]:
+                del _LITERALS[value]
+
+
+def redact(text: str) -> str:
+    """Return ``text`` with key-shaped substrings and protected values replaced."""
+    text = BEARER_PATTERN.sub(rf"\1{LITERAL_REDACTED}", text)
+    text = QUERY_PATTERN.sub(rf"\1{LITERAL_REDACTED}", text)
+    text = ASSIGNMENT_PATTERN.sub(rf"\1\2{LITERAL_REDACTED}", text)
+    text = SECRET_PATTERN.sub(REDACTED, MASKED_KEY_PATTERN.sub(REDACTED, text))
+    with _LITERALS_LOCK:
+        literals = sorted(_LITERALS, key=len, reverse=True)
+    for value in literals:
+        text = text.replace(value, LITERAL_REDACTED)
+    return text
+
+
+def _redact_arg(value: object) -> object:
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, _PLAIN):
+        return value
+    text = str(value)
+    return redact(text) if redact(text) != text else value
+
+
+LogArgs = tuple[object, ...] | Mapping[str, object]
+
+
+def _redact_args(args: LogArgs) -> LogArgs:
+    if isinstance(args, tuple):
+        return tuple(_redact_arg(value) for value in args)
+    return {key: _redact_arg(value) for key, value in args.items()}
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Redact key-shaped strings in a record's message, arguments, exception and stack.
+
+    Arguments are redacted one by one (not collapsed into the message) so formatters that read
+    ``record.args``, such as the server's access log, keep working. The exception traceback is
+    rendered once, redacted into ``exc_text``, and ``exc_info`` dropped so no handler can
+    re-render the raw text. Never drops a record.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact(record.msg)
+        elif redact(str(record.msg)) != str(record.msg):
+            record.msg = redact(str(record.msg))
+        if record.args:
+            record.args = _redact_args(record.args)
+        if record.exc_info:
+            record.exc_text = redact(_FORMATTER.formatException(record.exc_info))
+            record.exc_info = None
+        elif record.exc_text:
+            record.exc_text = redact(record.exc_text)
+        if record.stack_info:
+            record.stack_info = redact(record.stack_info)
+        return True
+
+
+def _attach(target: logging.Logger | logging.Handler, flt: SecretRedactionFilter) -> None:
+    if not any(isinstance(existing, SecretRedactionFilter) for existing in target.filters):
+        target.addFilter(flt)
+
+
+def install_redaction(names: Iterable[str] = REDACTED_LOGGERS) -> None:
+    """Attach the filter to each named logger and to all of their handlers (idempotent).
+
+    Logger filters do not see records propagated from child loggers, so the handlers get
+    the filter too.
+    """
+    flt = SecretRedactionFilter()
+    for name in names:
+        logger = logging.getLogger(name)
+        _attach(logger, flt)
+        for handler in logger.handlers:
+            _attach(handler, flt)
+
+
+def uvicorn_log_config(base: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a copy of uvicorn's ``log_config`` with the filter on every handler.
+
+    The root logger is routed through uvicorn's default (stderr) handler too, so application
+    loggers such as ``api.agent_runner`` are shown, and redacted, instead of falling through
+    to Python's unfiltered last-resort handler.
+    """
+    config: dict[str, Any] = copy.deepcopy(dict(base))
+    config.setdefault("filters", {})["redact_secrets"] = {"()": SecretRedactionFilter}
+    for handler in config.get("handlers", {}).values():
+        handler.setdefault("filters", []).append("redact_secrets")
+    config["root"] = {"handlers": ["default"], "level": "INFO"}
+    return config

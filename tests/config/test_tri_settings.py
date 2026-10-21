@@ -21,6 +21,8 @@ release_path = "/r/{casrn}/{medium}/{after_year}/{start}:{end}"
 media = ["AIR STACK", " AIR FUGITIVE "]
 page_size = 50
 recent_years = 7
+publication_lag_years = 1
+max_listed = 5
 max_pages = 3
 east_longitude_states = ["GU"]
 facility_id_fields = ["reg", "frs"]
@@ -56,6 +58,7 @@ def test_tri_explicit_values(tmp_path: Path) -> None:
     settings = _tri(tmp_path)
     assert settings.release_path == "/r/{casrn}/{medium}/{after_year}/{start}:{end}"
     assert settings.recent_years == 7
+    assert settings.max_listed == 5
     assert settings.fields["doc_ctrl_num"] == "dc"
     assert settings.media == ("AIR STACK", "AIR FUGITIVE")
     assert (settings.page_size, settings.max_pages) == (50, 3)
@@ -71,7 +74,9 @@ def test_tri_default_file_loads() -> None:
     assert settings.facility_id_fields[0] == "epa_registry_id"
     assert settings.page_size > 0
     assert settings.max_pages > 0
-    assert settings.recent_years == 10
+    assert settings.recent_years == 2
+    assert settings.publication_lag_years == 1
+    assert settings.max_listed == 25
     for slot in ("{casrn}", "{medium}", "{after_year}", "{start}", "{end}"):
         assert slot in settings.release_path
 
@@ -94,6 +99,12 @@ def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
         ("recent_years = 7", "recent_years = 1.5", "recent_years"),
         ("recent_years = 7", "recent_years = true", "recent_years"),
         ("recent_years = 7", "", "recent_years"),
+        ("publication_lag_years = 1", "publication_lag_years = -1", "publication_lag_years"),
+        ("publication_lag_years = 1", "publication_lag_years = true", "publication_lag_years"),
+        ("publication_lag_years = 1", "", "publication_lag_years"),
+        ("max_listed = 5", "max_listed = 0", "max_listed"),
+        ("max_listed = 5", "max_listed = true", "max_listed"),
+        ("max_listed = 5", "", "max_listed"),
         ("page_size = 50", "page_size = 0", "page_size"),
         ("page_size = 50", "page_size = 1.5", "page_size"),
         ("page_size = 50", "page_size = true", "page_size"),
@@ -161,14 +172,15 @@ def test_pounds_alias_converts_to_grams() -> None:
     assert convert(1.0, "Pounds", "g", aliases) == pytest.approx(453.59237)
 
 
-def test_the_window_starts_the_year_after_the_cut(tmp_path: Path) -> None:
-    settings = _tri(tmp_path)  # recent_years = 7
-    assert settings.after_year(2026) == 2019
-    assert settings.first_year(2026) == 2020  # 2020..2026 are seven reporting years
-    assert load_tri_settings().first_year(2026) == 2017  # the default: ten years
+def test_the_window_ends_with_the_newest_year_that_can_be_published(tmp_path: Path) -> None:
+    settings = _tri(tmp_path)  # recent_years = 7, publication lag 1
+    assert settings.after_year(2026) == 2018
+    assert settings.first_year(2026) == 2019  # 2019..2025 are seven reporting years
 
 
-def test_the_default_window_covers_exactly_ten_reporting_years() -> None:
+def test_the_default_window_is_the_last_two_published_years() -> None:
+    """TRI for 2025 is released by June 2026, so in 2026 the window is 2024 and 2025."""
     settings = load_tri_settings()
-    years = range(settings.first_year(2026), 2027)
-    assert len(years) == settings.recent_years == 10
+    assert settings.after_year(2026) == 2023
+    assert settings.first_year(2026) == 2024
+    assert range(settings.first_year(2026), 2026) == range(2024, 2026)

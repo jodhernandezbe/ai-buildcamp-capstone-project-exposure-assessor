@@ -97,14 +97,19 @@ registry_field = "registry_id"
 program_field = "pgm_sys_acrnm"
 eis_id_field = "pgm_sys_id"
 
-# A facility's coordinates from FRS, used when TRI has none (TRI stopped collecting them for most
-# facilities; FRS holds them). {frs_id} is the 12-digit FRS ID; the response lists points in decimal
-# degrees (WGS84, west negative), the newest by `timestamp_field` wins.
+# Facility coordinates from the EPA FRS "best pick" lookup (data.epa.gov dmapservice, a separate
+# service from efservice), used when TRI has none (TRI stopped collecting them for most
+# facilities). One request answers many facilities: {frs_ids} is a comma-separated list of
+# 12-digit FRS IDs, `registry_field` names the ID in each answer row and the coordinates are in
+# decimal degrees (WGS84, west negative). Lists of 200 IDs were answered and 400 were refused
+# (HTTP 400), so `batch_size` stays well below that.
 [frs_point]
-path = "/GEO_FACILITY_POINT/REGISTRY_ID/{frs_id}/JSON"
-latitude_field = "latitude83"
-longitude_field = "longitude83"
-timestamp_field = "timestamp"
+base_url = "https://data.epa.gov/dmapservice"
+path = "/lookups.mv_new_geo_best_picks/registry_id/in/{frs_ids}"
+registry_field = "registry_id"
+latitude_field = "latitude"
+longitude_field = "longitude"
+batch_size = 100
 
 # EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility and
 # release tables and filters on CAS number and environmental medium (the medium segment has
@@ -121,10 +126,17 @@ page_size = 1000
 max_pages = 40
 # Only the most recent reporting years count: a facility whose latest report is older has probably
 # stopped (a 1988 record would be assessed as if it were current). The window is the last
-# `recent_years` reporting years ending with the current year, so the URL asks for
-# `reporting_year > current year - recent_years` and rows outside it are dropped again on arrival.
-# TRI is published with a lag, so the newest year with data is usually the previous one.
-recent_years = 10
+# `recent_years` reporting years ending with the newest one that can be published, so the URL asks
+# for `reporting_year > current year - publication_lag_years - recent_years` and rows outside the
+# window are dropped again on arrival. TRI for year N is released annually by June of N + 1 (2025
+# data in 2026), so the newest year that can exist is the current year minus the lag; two years
+# keep a facility that has not filed the newest year yet.
+recent_years = 2
+publication_lag_years = 1
+# The inventory tool lists at most this many facilities to the model, the largest emission rates
+# first (a widely reported chemical has over a thousand, far too many for the model to rank by
+# eye); the complete result goes to the interface, and the model is told how many were left out.
+max_listed = 25
 # TRI sends longitudes as positive numbers for the western hemisphere; these states and
 # territories lie east of Greenwich, so their longitudes stay positive.
 east_longitude_states = ["GU", "MP"]
@@ -601,3 +613,104 @@ judge_api_key_env_var = "OPENAI_API_KEY"  # pragma: allowlist secret
 live_tools = ["calculate_exposure_metrics"]
 cassette_dir = "evals/cassettes"
 report_dir = "evals/reports"
+
+# Local web interface (api/ + frontend/). The backend binds only to a loopback host and
+# serves the built frontend from `frontend_dist` (`npm --prefix frontend run build`).
+# `max_key_length` bounds the API key accepted by the settings sheet (characters).
+[ui]
+host = "127.0.0.1"
+port = 8000
+frontend_dist = "frontend/dist"
+max_key_length = 512
+
+# OS credential store entries holding the API keys (macOS Keychain, Secret Service, Windows
+# Credential Locker): one service name and one account per key. Names only; a key itself never
+# appears in this file.
+[ui.keyring]
+service = "epa-chemical-risk-agent"
+
+[ui.keyring.accounts]
+openai = "openai_api_key"
+census = "census_api_key"
+comptox = "comptox_api_key"
+
+# Scope guardrail prompts (prompts/<name>.md) and how many earlier messages, besides the
+# latest user message, the classifier sees so follow-ups are judged in context.
+[ui.prompts]
+scope_classifier = "scope_classifier"
+scope_addendum = "scope_addendum"
+scope_fallback = "scope_redirect_fallback"
+history_window = 6
+
+# Human-readable step label shown for each tool call, keyed by tool name.
+[ui.step_labels]
+fetch_chemical_properties = "Looked up chemical properties (CompTox)"
+find_tri_read_across_surrogate = "Resolved read-across surrogate (MolDeBERTa + ECFP4)"
+query_emissions_inventory = "Queried EPA TRI releases"
+fetch_facility_industry = "Identified facility industry (NAICS)"
+lookup_scc_process_description = "Matched process to SCC"
+fetch_stack_parameters_from_nei = "Queried NEI stack parameters"
+fetch_stack_parameters_from_scc = "Looked up PSTK stack parameters"
+get_meteorological_boundary = "Retrieved meteorology"
+get_population_receptors = "Counted Census receptors"
+calculate_exposure_metrics = "Computed screening dispersion and risk"
+
+# Basemap vector styles (CARTO Positron / Dark Matter), the half-angle of the schematic
+# downwind sector drawn on the map (degrees; a drawing choice, not a modelled plume width),
+# the angular spacing of the vertices of the drawn circle and sector arc (degrees; smaller
+# is smoother),
+# marker radii (px) for the smallest and largest emission rate on screen (square-root scale),
+# and the tolerance (decimal degrees) when matching a receptor query to a facility's
+# coordinates (the agent passes the inventory's coordinates through unchanged).
+[ui.map]
+light_style = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+dark_style = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+sector_half_angle_deg = 22.5
+vertex_spacing_deg = 5.0
+marker_min_px = 6.0
+marker_max_px = 22.0
+coordinate_tolerance_deg = 0.000001
+
+# What the map shows before any facility is placed: the contiguous United States (TRI covers US
+# facilities), as a box in decimal degrees (WGS84, west negative).
+[ui.map.initial_view]
+west = -125.0
+south = 24.5
+east = -66.9
+north = 49.5
+
+# Status thresholds for the summary ribbon and markers.
+# HQ: `hq_concern` 1.0 is EPA's non-cancer threshold of concern (exposure equals the RfC);
+# `hq_near_lower` is a display choice for the amber "near" band, not a regulatory value.
+# Cancer risk: EPA's acceptable lifetime-risk range is 1e-6 to 1e-4; below it is "below",
+# inside it "near", above it "above".
+[ui.thresholds]
+hq_concern = 1.0
+hq_near_lower = 0.5
+cancer_lower = 1e-6
+cancer_upper = 1e-4
+
+# Display: significant digits for metrics, the viewport width (px) below which the two panes
+# stack, and the onboarding suggestion chips.
+[ui.display]
+significant_digits = 3
+narrow_breakpoint_px = 900
+suggestions = [
+    "Map hexane (CAS 110-54-3) releases and compute exposure metrics",
+    "Find a TRI read-across surrogate for isohexane (107-83-5)",
+    "Assess benzene (CAS 71-43-2) releases from the largest emitting facility",
+    "How does the screening dispersion model pick the worst case?",
+]
+
+# Token prices per chat model, USD per million tokens, with the date and page they were taken
+# from. A model without an entry is shown as "unpriced"; never fill these from memory.
+[ui.pricing]
+
+# "Standard pricing data" table (not batch, not fast/priority): Input, Output, Cached input.
+# The model page https://platform.openai.com/docs/models/gpt-4.1 lists the same three prices.
+[ui.pricing."gpt-4.1"]
+input_usd_per_mtok = 2.00
+cached_input_usd_per_mtok = 0.50
+output_usd_per_mtok = 8.00
+priced_on = 2026-10-20
+source_url = "https://platform.openai.com/docs/pricing"

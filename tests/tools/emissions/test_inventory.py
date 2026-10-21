@@ -9,13 +9,16 @@ from pathlib import Path
 
 import httpx
 import pytest
+from langchain_core.messages import ToolMessage
 
 from config.efservice import get_efservice_settings
+from tests.tools.emissions.records import emission_record
 from tools.emissions import inventory
 from tools.emissions.inventory import query_emissions_inventory
 from tools.registry import get_all_tools
+from tools.schemas import EmissionRecord, InventoryResult
 
-CURRENT_YEAR = 2012  # the fixture rows are real and run from 1988 to 2009
+CURRENT_YEAR = 2011  # the fixture rows are real and run from 1988 to 2009; 2009-2010 count
 ROWS = json.loads((Path(__file__).parent / "helpers" / "inventory" / "tri_rows.json").read_text())
 
 
@@ -24,7 +27,7 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if "GEO_FACILITY_POINT" in str(request.url):
+        if "mv_new_geo_best_picks" in str(request.url):
             return httpx.Response(200, json=[])  # FRS has no point either
         seen.append(request)
         return httpx.Response(200, json=ROWS)
@@ -38,9 +41,25 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     return seen
 
 
+def _call(args: dict[str, object]) -> ToolMessage:
+    return query_emissions_inventory.invoke(
+        {"type": "tool_call", "id": "c1", "name": "query_emissions_inventory", "args": args}
+    )
+
+
+def _view(args: dict[str, object]) -> InventoryResult:
+    """What the model is told."""
+    return json.loads(str(_call(args).content))
+
+
+def _all(args: dict[str, object]) -> list[EmissionRecord]:
+    """What the program gets beside it: every matching facility."""
+    return _call(args).artifact
+
+
 def test_schema() -> None:
     assert query_emissions_inventory.name == "query_emissions_inventory"
-    assert set(query_emissions_inventory.args) == {"cas_number"}
+    assert set(query_emissions_inventory.args) == {"cas_number", "state", "city"}
     assert query_emissions_inventory.description
     assert query_emissions_inventory in get_all_tools()
 
@@ -60,11 +79,11 @@ def test_docstring_describes_every_returned_field() -> None:
 
 
 def test_returns_latest_records_with_rates(requests_seen: list[httpx.Request]) -> None:
-    records = query_emissions_inventory.invoke({"cas_number": "50-00-0"})
+    records = _all({"cas_number": "50-00-0"})
     assert len(requests_seen) == 1
     url = str(requests_seen[0].url)
     assert "/cas_registry_number/50-00-0/environmental_medium/AIR%20STACK/" in url
-    assert "/reporting_year/%3E/2002/rows/0:" in url  # the last ten years ending in 2012
+    assert "/reporting_year/%3E/2008/rows/0:" in url  # the last two years ending in 2010
     by_id = {r["frs_id"]: r for r in records}
     assert by_id["110000307864"]["reporting_year"] == 2009
     assert by_id["110000307864"]["unit"] == "Pounds"
@@ -75,7 +94,7 @@ def test_returns_latest_records_with_rates(requests_seen: list[httpx.Request]) -
 
 
 def test_bare_cas_is_accepted(requests_seen: list[httpx.Request]) -> None:
-    query_emissions_inventory.invoke({"cas_number": " 50000 "})
+    _view({"cas_number": " 50000 "})
     assert "/cas_registry_number/50-00-0/" in str(requests_seen[0].url)
 
 
@@ -84,7 +103,7 @@ def test_invalid_cas_makes_no_request(
     requests_seen: list[httpx.Request], caplog: pytest.LogCaptureFixture, bad: str
 ) -> None:
     with caplog.at_level(logging.WARNING):
-        assert query_emissions_inventory.invoke({"cas_number": bad}) == []
+        assert _view({"cas_number": bad})["facilities"] == []
     assert requests_seen == []
     assert "not a valid CAS" in caplog.text
 
@@ -92,20 +111,93 @@ def test_invalid_cas_makes_no_request(
 def test_a_facility_that_stopped_reporting_long_ago_is_not_returned(
     requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """In 2026 only 2017 and later count; the fixture's last report is 2009."""
+    """In 2026 only 2024 and 2025 count; the fixture's last report is 2009."""
     monkeypatch.setattr(inventory, "_current_year", lambda: 2026)
-    assert query_emissions_inventory.invoke({"cas_number": "50-00-0"}) == []
+    assert _all({"cas_number": "50-00-0"}) == []
 
 
 def test_every_record_carries_its_submission_control_number(
     requests_seen: list[httpx.Request],
 ) -> None:
-    records = query_emissions_inventory.invoke({"cas_number": "50-00-0"})
+    records = _all({"cas_number": "50-00-0"})
     assert records and all("doc_ctrl_num" in record for record in records)
     assert any(record["doc_ctrl_num"] for record in records)
 
 
 def test_description_explains_the_window_and_the_control_number() -> None:
     text = " ".join(query_emissions_inventory.description.split())
-    for phrase in ("last 10 reporting years", "doc_ctrl_num", "fetch_facility_industry"):
+    for phrase in ("last 2 reporting years", "doc_ctrl_num", "fetch_facility_industry"):
         assert phrase in text, phrase
+
+
+def test_the_model_is_told_the_largest_facilities_and_how_many_there_are(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _list_at_most(monkeypatch, 3)
+    view = _view({"cas_number": "50-00-0"})
+    every = _all({"cas_number": "50-00-0"})
+    assert view["total_found"] == view["matching"] == len(every) > 3
+    assert view["shown"] == len(view["facilities"]) == 3
+    assert view["note"] and "must not be treated as complete" in view["note"]
+    rates = [f["emission_rate"] for f in view["facilities"]]
+    assert rates == sorted(rates, reverse=True)
+    assert rates == [f["emission_rate"] for f in every[:3]]  # the largest of all of them
+
+
+def test_the_program_gets_every_facility_even_when_the_model_sees_few(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _list_at_most(monkeypatch, 1)
+    every = _all({"cas_number": "50-00-0"})
+    assert len(every) == _view({"cas_number": "50-00-0"})["total_found"]
+    assert [f["emission_rate"] for f in every] == sorted(
+        (f["emission_rate"] for f in every), reverse=True
+    )
+
+
+def test_the_artifact_is_never_part_of_the_text_the_model_reads(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _list_at_most(monkeypatch, 2)
+    message = _call({"cas_number": "50-00-0"})
+    assert len(json.loads(str(message.content))["facilities"]) == 2
+    assert len(message.artifact) > 2
+
+
+def test_a_state_filter_lists_that_state_and_says_so(requests_seen: list[httpx.Request]) -> None:
+    every = _all({"cas_number": "50-00-0"})
+    state = next(f["state"] for f in every if f["state"])
+    view = _view({"cas_number": "50-00-0", "state": str(state).lower()})
+    assert view["total_found"] == len(every)
+    assert 0 < view["matching"] <= view["total_found"]
+    assert {f["state"] for f in view["facilities"]} == {state}
+    assert len(_all({"cas_number": "50-00-0", "state": state})) == view["matching"]
+
+
+def test_no_match_says_so_and_is_not_an_error(requests_seen: list[httpx.Request]) -> None:
+    view = _view({"cas_number": "50-00-0", "state": "ZZ"})
+    assert (view["matching"], view["shown"], view["facilities"]) == (0, 0, [])
+    assert view["note"] == "No facility matches the filters."
+
+
+def test_description_tells_the_model_the_list_is_the_largest_and_partial() -> None:
+    text = " ".join(query_emissions_inventory.description.split())
+    for phrase in (
+        "highest `emission_rate` first",
+        "total_found",
+        "Never present a list as complete",
+        "`state`",
+    ):
+        assert phrase in text
+
+
+def _list_at_most(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
+    """List at most ``count`` facilities to the model, from a result of six facilities."""
+    settings = replace(inventory.get_tri_settings(), max_listed=count)
+    monkeypatch.setattr(inventory, "get_tri_settings", lambda: settings)
+    many = [emission_record(f"F{i}", float(i), "TX" if i % 2 else "LA") for i in range(6)]
+
+    def fake_lookup(*args: object, **kwargs: object) -> list[EmissionRecord]:
+        return many
+
+    monkeypatch.setattr(inventory, "lookup_emissions", fake_lookup)

@@ -1,0 +1,1 @@
+I'm specialized in environmental chemical exposure, EPA emissions inventories, and dispersion modeling, so I can't help with that topic. We can explore the releases of a chemical in a region, find a similar-chemical estimate for one that lacks data, or look at the facilities on the map.

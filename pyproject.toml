@@ -7,8 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.5.9",
     "evidently>=0.7.23,<0.8",
+    "fastapi>=0.156.4",
     "httpx>=0.28.1",
     "jupyter>=1.0.0",
+    "keyring>=25.7.0",
     "langchain-core>=0.3.0",
     "langchain-openai>=1.7.0",
     "langgraph>=0.2.0",
@@ -21,6 +23,7 @@ dependencies = [
     "rdkit>=2026.9.1",
     "torch>=2.14.1",
     "transformers>=5.20.2",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
@@ -61,7 +64,7 @@ markers = [
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["agent", "app", "commons", "config", "evals", "models", "prompts", "scripts", "tools", "tests"]
+include = ["agent", "app", "api", "commons", "config", "evals", "models", "prompts", "scripts", "tools", "tests"]
 venvPath = "."
 venv = ".venv"
 # langgraph ships partial typing; keep strict for our code, tolerate its gaps.

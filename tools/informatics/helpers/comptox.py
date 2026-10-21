@@ -15,6 +15,7 @@ import httpx
 
 from commons.cas import format_cas
 from config.loader import ComptoxSettings, ToxicityValueSpec, get_comptox_settings
+from tools.credentials import COMPTOX_KEY
 from tools.schemas import PropertyValue, ToxicityValue
 
 logger = logging.getLogger(__name__)
@@ -313,6 +314,9 @@ class ComptoxLookup:
         return _copy_toxicity(result)
 
     def _headers(self) -> dict[str, str]:
+        provided = COMPTOX_KEY.get()
+        if provided is not None:  # the key of this request, resolved afresh and not kept
+            return {self._settings.api_key_header: provided.get_secret_value()}
         name = self._settings.api_key_env_var
         value = self._environ.get(name, "").strip()
         if not value:

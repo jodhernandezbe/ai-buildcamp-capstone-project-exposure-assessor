@@ -44,15 +44,23 @@ The system SHALL return the unit string supplied by CompTox with each value and 
 - **THEN** the result carries those exact unit strings
 
 ### Requirement: Authenticated requests
-The system SHALL send the CompTox API key, read from the environment, with every request, and SHALL NOT store the key in code or configuration files.
+The system SHALL send the CompTox API key with every request, and SHALL NOT store the key in code or configuration files. The key SHALL be the one made available to the current request when there is one (the web program supplies the key stored in the OS keychain for the duration of a turn), and otherwise the one read from the configured environment variable. The key SHALL be resolved afresh for every request and not held by the client between requests.
 
 #### Scenario: Key available
-- **WHEN** the configured environment variable is set
+- **WHEN** the configured environment variable is set and no request key is available
 - **THEN** its value is sent in the configured API-key header
 
+#### Scenario: Request key preferred
+- **WHEN** a request key is available and the environment variable is also set
+- **THEN** the request key is sent in the configured API-key header
+
 #### Scenario: Key missing
-- **WHEN** the configured environment variable is unset or blank
+- **WHEN** no request key is available and the configured environment variable is unset or blank
 - **THEN** the system raises an error naming the variable, without contacting CompTox
+
+#### Scenario: Key not retained
+- **WHEN** a request has been made under one request key and a later one under another
+- **THEN** each request sends its own key
 
 ### Requirement: Resilient to service failures
 The system SHALL return no properties, rather than raise, when CompTox is unreachable, times out, or answers with an error status or malformed body. A definitive "no match" answer (an empty result, HTTP 404, or HTTP 400 stating that zero results were found) MAY be cached; transient failures SHALL NOT be cached.
