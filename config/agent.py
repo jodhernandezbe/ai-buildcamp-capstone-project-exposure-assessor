@@ -11,6 +11,7 @@ from config.parsing import read_toml, require_int, require_number, require_str, 
 # Chat model providers the program can build (see ``app/chat_model.py``).
 SUPPORTED_CHAT_PROVIDERS = ("openai",)
 _NAME = "agent"
+_MAX_TEMPERATURE = 2.0  # the widest range the supported providers accept
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class AgentSettings:
         api_key_env_var: Environment variable holding the provider API key.
         timeout_seconds: Per-request timeout, in seconds.
         recursion_limit: LangGraph step limit of one agent run.
+        temperature: Sampling temperature, 0 (most reproducible) to 2.
     """
 
     provider: str
@@ -30,6 +32,7 @@ class AgentSettings:
     api_key_env_var: str
     timeout_seconds: float
     recursion_limit: int
+    temperature: float
 
 
 def chat_provider(table: dict[str, object], key: str, name: str) -> str:
@@ -39,6 +42,13 @@ def chat_provider(table: dict[str, object], key: str, name: str) -> str:
         supported = ", ".join(SUPPORTED_CHAT_PROVIDERS)
         raise ValueError(f"{name}.{key} must be one of: {supported}")
     return provider
+
+
+def _temperature(table: dict[str, object]) -> float:
+    value = require_number(table, "temperature", minimum=0, name=_NAME)
+    if value > _MAX_TEMPERATURE:
+        raise ValueError(f"{_NAME}.temperature must be between 0 and {_MAX_TEMPERATURE}")
+    return value
 
 
 def load_agent_settings(path: Path | None = None) -> AgentSettings:
@@ -61,6 +71,7 @@ def load_agent_settings(path: Path | None = None) -> AgentSettings:
         api_key_env_var=require_str(table, "api_key_env_var", _NAME).strip(),
         timeout_seconds=require_number(table, "timeout_seconds", minimum=0.001, name=_NAME),
         recursion_limit=require_int(table, "recursion_limit", minimum=1, name=_NAME),
+        temperature=_temperature(table),
     )
 
 

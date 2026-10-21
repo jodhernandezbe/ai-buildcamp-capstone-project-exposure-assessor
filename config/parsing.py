@@ -71,6 +71,22 @@ def require_int(section: dict[str, object], key: str, *, minimum: int, name: str
     return value
 
 
+def require_bool(section: dict[str, object], key: str, name: str) -> bool:
+    """Return a TOML boolean; never a number or string that looks like one."""
+    value = section.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"{name}.{key} must be true or false")
+    return value
+
+
+def require_fraction(section: dict[str, object], key: str, name: str) -> float:
+    """Return a finite number in [0, 1]; never a bool."""
+    value = require_number(section, key, minimum=0, name=name)
+    if value > 1:
+        raise ValueError(f"{name}.{key} must be between 0 and 1")
+    return value
+
+
 def names(section: dict[str, object], key: str, name: str, *, allow_empty: bool) -> tuple[str, ...]:
     """Return a list of non-empty strings, stripped."""
     value = section.get(key)

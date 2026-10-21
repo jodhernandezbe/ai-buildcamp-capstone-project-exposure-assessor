@@ -16,13 +16,19 @@ from pydantic import SecretStr
 from config.agent import AgentSettings
 
 
-def _openai_chat(model: str, api_key: str, timeout_seconds: float) -> BaseChatModel:
+def _openai_chat(
+    model: str, api_key: str, timeout_seconds: float, temperature: float | None
+) -> BaseChatModel:
     from langchain_openai import ChatOpenAI  # provider package: imported only here
 
-    return ChatOpenAI(model=model, api_key=SecretStr(api_key), timeout=timeout_seconds)
+    if temperature is None:  # the provider's own default
+        return ChatOpenAI(model=model, api_key=SecretStr(api_key), timeout=timeout_seconds)
+    return ChatOpenAI(
+        model=model, api_key=SecretStr(api_key), timeout=timeout_seconds, temperature=temperature
+    )
 
 
-_PROVIDERS: Mapping[str, Callable[[str, str, float], BaseChatModel]] = {
+_PROVIDERS: Mapping[str, Callable[[str, str, float, float | None], BaseChatModel]] = {
     "openai": _openai_chat,
 }
 
@@ -33,8 +39,12 @@ def build_named_chat_model(
     api_key_env_var: str,
     timeout_seconds: float,
     environ: Mapping[str, str] | None = None,
+    *,
+    temperature: float | None = None,
 ) -> BaseChatModel:
     """Build ``model`` of ``provider``, reading its API key from ``api_key_env_var``.
+
+    ``temperature`` None leaves the provider's default (some models accept no other value).
 
     Raises:
         RuntimeError: If the API-key environment variable is unset or blank.
@@ -47,7 +57,7 @@ def build_named_chat_model(
     build = _PROVIDERS.get(provider)
     if build is None:
         raise ValueError(f"unsupported chat provider: {provider}")
-    return build(model, api_key, timeout_seconds)
+    return build(model, api_key, timeout_seconds, temperature)
 
 
 def build_chat_model(
@@ -56,7 +66,7 @@ def build_chat_model(
     """Build the agent's chat model from the ``[agent]`` settings (the outer edge).
 
     Args:
-        settings: Provider, model, API-key variable name and timeout (seconds).
+        settings: Provider, model, API-key variable name, timeout (seconds) and temperature.
         environ: Environment the API key is read from; defaults to ``os.environ``.
 
     Raises:
@@ -69,4 +79,5 @@ def build_chat_model(
         settings.api_key_env_var,
         settings.timeout_seconds,
         environ,
+        temperature=settings.temperature,
     )

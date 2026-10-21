@@ -30,6 +30,16 @@ REQUIRED = {
         "must be reported, not replaced by a guess",
         "Never a number recalled from a chemical's name",
     ),
+    "find_tri_read_across_surrogate": (
+        "has no inhalation benchmark",
+        "report `hybrid_read_across_score` and `within_applicability_domain`",
+        "never identifies a chemical from its name",
+        "a read-across estimate, not a measured value",
+        "outside the applicability domain",
+        "It is reported, never applied",
+        "A null surrogate means none could be found",
+        "Never a number recalled from a chemical's name",
+    ),
     "query_emissions_inventory": (
         "decide which to assess",
         "says nothing about a facility's industry or process",

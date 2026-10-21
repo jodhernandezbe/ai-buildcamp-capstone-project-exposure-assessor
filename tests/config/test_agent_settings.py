@@ -15,6 +15,7 @@ model = "chat-test"
 api_key_env_var = "TEST_KEY_VAR"  # pragma: allowlist secret
 timeout_seconds = 5
 recursion_limit = 10
+temperature = 0.3
 """
 
 
@@ -35,12 +36,14 @@ def test_values(tmp_path: Path) -> None:
     assert settings.api_key_env_var == "TEST_KEY_VAR"  # pragma: allowlist secret
     assert settings.timeout_seconds == 5.0
     assert settings.recursion_limit == 10
+    assert settings.temperature == 0.3
 
 
 def test_shipped_settings_load() -> None:
     settings = get_agent_settings()
     assert settings.provider == "openai"
     assert settings.model
+    assert settings.temperature == 0.0  # reproducible screening runs
 
 
 @pytest.mark.parametrize(
@@ -54,6 +57,10 @@ def test_shipped_settings_load() -> None:
         ("timeout_seconds", "timeout_seconds = true", "agent.timeout_seconds"),
         ("recursion_limit", "recursion_limit = 0", "agent.recursion_limit"),
         ("recursion_limit", "recursion_limit = 2.5", "agent.recursion_limit"),
+        ("temperature", "temperature = -0.1", "agent.temperature"),
+        ("temperature", "temperature = 2.5", "agent.temperature"),
+        ("temperature", "temperature = true", "agent.temperature"),
+        ("temperature", "", "agent.temperature"),
     ],
 )
 def test_invalid_entry_names_key(tmp_path: Path, line_start: str, new_line: str, key: str) -> None:

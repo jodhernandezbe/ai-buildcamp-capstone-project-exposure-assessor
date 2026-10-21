@@ -482,6 +482,87 @@ assigned_value = "ASSIGNED"
 title_field = "naics_desc"
 placeholder_codes = ["999999"]
 
+# Read-across (tools/informatics/read_across.py): the closest TRI chemical to a query chemical,
+# scored as alpha * MolDeBERTa cosine + (1 - alpha) * ECFP4 Tanimoto. A match is within the
+# applicability domain when its hybrid score is at least `min_hybrid_score`. The catalog is
+# built (and refreshed from the current TRI list) with:
+#   uv run python -m scripts.build_tri_embeddings
+#
+# The cosine is taken after subtracting the catalog's mean embedding (a first-order isotropy
+# correction, applied when the catalog is loaded): the model's raw vectors sit in a narrow cone,
+# where isohexane scored an alcohol above n-hexane and 94.7% of chemicals had a neighbour above
+# 0.60. A score is therefore relative to the catalog it was computed against, and comparable
+# only within one catalog version.
+#
+# Vectors are stored as float32 and bits as int8, zstd-compressed: float64 vectors and int64
+# bits made one 3.6 MB file, over the repository's 1000 KB limit.
+#
+# `min_hybrid_score` is calibrated against the catalog's own leave-one-out nearest-neighbour
+# distribution, not guessed. For the 712-chemical catalog of October 2026: p33 = 0.597,
+# p34 = 0.601, median 0.687, so 0.60 rejects the weakest third (in-domain share 66%); caffeine,
+# which has no TRI analogue, scores 0.379. Recalibrate with
+# `models.chemistry.similarity.leave_one_out_scores` when the catalog or the model changes.
+[read_across]
+# The catalog is sharded by the leading digit(s) of the CAS number, like data/nei_stacks, so
+# every committed file stays small and a rebuild rewrites only the shards that changed (the
+# pinned model re-embeds a given SMILES to the identical bytes). Scoring reads every shard.
+directory = "data/tri_chemicals"
+file_template = "tri_chemicals_{prefix}.parquet"
+prefix_digits = 1
+alpha = 0.55
+min_hybrid_score = 0.60
+
+# PubChem PUG REST (no API key; at most 5 requests a second). PubChem now answers the
+# CanonicalSMILES and IsomericSMILES names as ConnectivitySMILES and SMILES, so the SMILES is
+# read from the first of `smiles_properties` present. `{cas}` is the CAS number.
+[read_across.pubchem]
+url_template = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{cas}/property/CanonicalSMILES,IsomericSMILES,MolecularWeight/JSON"
+smiles_properties = ["CanonicalSMILES", "IsomericSMILES", "SMILES", "ConnectivitySMILES"]
+weight_property = "MolecularWeight"
+delay_seconds = 0.25
+timeout_seconds = 20.0
+max_retries = 2
+backoff_seconds = 2.0
+
+# The SMILES encoder (Hugging Face; about 500 MB, downloaded on first use and cached by
+# Hugging Face). Licence CC BY-NC-ND 4.0: non-commercial use only. `revision` pins the exact
+# model commit so the committed catalog and new queries always come from the same weights.
+[read_across.model]
+name = "SaeedLab/MolDeBERTa-base-123M-mtr"
+revision = "7d06a5f39098837a6f33ed095e2fa7706e30f8b9"  # pragma: allowlist secret (public git sha)
+max_length = 128
+embedding_width = 768
+
+# Morgan (ECFP4) fingerprint: radius 2, folded to `n_bits` bits.
+[read_across.fingerprint]
+radius = 2
+n_bits = 1024
+
+# Field -> column of the catalog. `benchmark_flag` and `naics_prefixes` are optional columns
+# (the read-across filters use them only when the catalog has them).
+[read_across.columns]
+cas = "tri_cas"
+name = "chemical_name"
+smiles = "canonical_smiles"
+molecular_weight = "molecular_weight"
+embedding = "moldeberta_vec"
+bits = "morgan_bits"
+benchmark_flag = "has_iris_benchmark"
+naics_prefixes = "naics_prefixes"
+
+# The current TRI chemical list (Envirofacts `tri_chem_info`; base URL and request policy from
+# [efservice]), read by the catalog builder. Rows whose CAS field is not a CAS number are TRI
+# groups or placeholders (N420, MIXTURE, TRD SECRT, ...) and are skipped; so are chemicals
+# delisted from TRI (`inactive_field` other than `active_value`) unless `keep_delisted`.
+[read_across.tri_list]
+path = "/tri_chem_info/rows/{start}:{end}/JSON"
+page_size = 2000
+cas_field = "cas_registry_number"
+name_field = "chem_name"
+inactive_field = "inactive_date"
+active_value = "9999"
+keep_delisted = false
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]
@@ -498,12 +579,16 @@ placeholder_codes = ["999999"]
 # evaluations alike, so both always run the same model. `provider` selects the factory in
 # app/chat_model.py; the API key is read from the environment variable named here.
 # `recursion_limit` is the LangGraph step limit of one run.
+# `temperature` 0 makes the agent as reproducible as the provider allows: a screening
+# assessment should give the same reasoning for the same inputs, and sampling at the provider
+# default (1.0 for OpenAI) only adds run-to-run variation. Range 0 to 2.
 [agent]
 provider = "openai"
 model = "gpt-4.1"
 api_key_env_var = "OPENAI_API_KEY"  # pragma: allowlist secret
 timeout_seconds = 120.0
 recursion_limit = 80
+temperature = 0.0
 
 # Agent evaluation (evals/). The agent model comes from [agent]; the judge is a different,
 # stronger model that scores report wording, pinned so runs are repeatable. Network tools are

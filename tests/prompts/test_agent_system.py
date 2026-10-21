@@ -42,7 +42,13 @@ def test_requires_visible_quality_signals_and_limits() -> None:
         "Limitations",
         "screening default",
         "never invent",
-        "ask for the CAS number",
+        # The CAS rule, in the wording measured clean in 150 of 150 first turns; a paraphrase
+        # ("ask for the CAS number and make that your whole reply") fell to 12 of 30.
+        "your whole reply is a request for that number",
+        "call no tool",
+        "write no cas number yourself",
+        "asks the user for the number rather than supplying one",
+        "a borrowed value is never presented as a measured value",
         "evaluate every one",
     ):
-        assert text.lower() in PROMPT.lower()
+        assert text.lower() in " ".join(PROMPT.split()).lower()  # line wrapping is irrelevant

@@ -19,6 +19,7 @@ SETTINGS = AgentSettings(
     api_key_env_var="TEST_KEY_VAR",  # pragma: allowlist secret
     timeout_seconds=5.0,
     recursion_limit=7,
+    temperature=0.0,
 )
 ENV = {"TEST_KEY_VAR": "not-a-real-key"}  # pragma: allowlist secret
 
@@ -32,6 +33,18 @@ def test_builds_the_configured_model() -> None:
     model = build_chat_model(SETTINGS, ENV)
     assert isinstance(model, ChatOpenAI)
     assert model.model_name == "chat-test"
+
+
+def test_temperature_reaches_the_model() -> None:
+    model = build_chat_model(SETTINGS, ENV)
+    assert isinstance(model, ChatOpenAI)
+    assert model.temperature == 0.0
+
+
+def test_no_temperature_keeps_the_provider_default() -> None:
+    model = build_named_chat_model("openai", "m", "TEST_KEY_VAR", 5.0, ENV)
+    assert isinstance(model, ChatOpenAI)
+    assert model.temperature is None
 
 
 def test_shipped_settings_build_their_model() -> None:

@@ -256,3 +256,27 @@ class FacilityIndustry(TypedDict):
     code_origin: str | None  # "reported" by the facility, "assigned" by EPA, or None if unknown
     source: str | None  # where the industry comes from; None when there is none
     warnings: list[str]  # why a value is missing, or that EPA assigned the code
+
+
+class ReadAcrossMatch(TypedDict):
+    """The TRI chemical closest to a query chemical (itself, or a read-across surrogate).
+
+    Every value that could not be obtained is None and ``warnings`` says why. Scores are
+    dimensionless; the surrogate's toxicity values are never part of this result.
+    """
+
+    query_cas: str  # the CAS number as validated (hyphenated), or as given if invalid
+    query_smiles: str | None  # canonical SMILES of the query chemical
+    query_mw: float | None  # g/mol
+    is_direct_tri_match: bool  # the query chemical is itself in the TRI catalog
+    surrogate_tri_cas: str | None
+    surrogate_name: str | None
+    surrogate_smiles: str | None  # canonical SMILES
+    surrogate_mw: float | None  # g/mol
+    moldeberta_cosine_sim: float | None  # learned-embedding cosine, -1 to 1
+    morgan_tanimoto_sim: float | None  # ECFP4 (radius 2) Tanimoto, 0 to 1
+    hybrid_read_across_score: float | None  # alpha * cosine + (1 - alpha) * Tanimoto
+    mw_scaling_factor: float | None  # query_mw / surrogate_mw; reported, never applied
+    within_applicability_domain: bool  # hybrid score >= the configured threshold
+    resolution_method: Literal["direct_tri_catalog_match", "hybrid_read_across", "unresolved"]
+    warnings: list[str]  # why a value is None, filters not applied, or out of domain
