@@ -109,6 +109,10 @@ class Meteorology(ContractModel):
     stability_class: str
     source: str
     screening_default: bool
+    latitude: float = Field(description="Point the weather is for, decimal degrees.")
+    longitude: float = Field(description="Point the weather is for, decimal degrees.")
+    frs_id: str | None = Field(default=None, description="Facility at that point, if one is.")
+    facility_name: str | None = None
     warnings: list[str] = Field(default_factory=list[str])
 
 

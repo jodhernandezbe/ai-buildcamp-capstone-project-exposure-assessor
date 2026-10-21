@@ -375,6 +375,19 @@ export interface Industry {
  */
 export interface Meteorology {
   ambient_temperature_k: number;
+  facility_name: string | null;
+  /**
+   * Facility at that point, if one is.
+   */
+  frs_id: string | null;
+  /**
+   * Point the weather is for, decimal degrees.
+   */
+  latitude: number;
+  /**
+   * Point the weather is for, decimal degrees.
+   */
+  longitude: number;
   screening_default: boolean;
   source: string;
   stability_class: string;

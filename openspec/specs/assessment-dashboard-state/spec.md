@@ -86,7 +86,8 @@ The state SHALL expose a summary of:
   applicability-domain flag, or unresolved);
 - receptors: the population, radius and age distribution of the selected facility (the highest
   risk one, or the only one);
-- meteorology: wind speed, direction (from), ambient temperature, stability class and source.
+- meteorology: wind speed, direction (from), ambient temperature, stability class and source, with the
+  point it is for and the facility at that point (none when the point is not one of the facilities).
 
 #### Scenario: Status above concern
 - **WHEN** the highest worst-case HQ exceeds the configured threshold of concern

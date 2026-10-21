@@ -597,3 +597,20 @@ def test_the_industry_tool_answer_replaces_the_bare_code() -> None:
 
 def test_a_facility_without_a_naics_code_has_no_industry() -> None:
     assert build(inventory(record())).facilities[0].industry is None
+
+
+# --- which place the weather is for ---------------------------------------------------------------
+
+
+def test_weather_at_a_facility_names_that_facility() -> None:
+    state = build(inventory(record()), weather())
+    shown = state.facilities[0].meteorology
+    assert shown is not None and (shown.frs_id, shown.facility_name) == ("F1", "Plant F1")
+    assert (shown.latitude, shown.longitude) == (10.0, -20.0)
+
+
+def test_weather_for_another_point_says_it_is_no_facility() -> None:
+    state = build(inventory(record()), weather(lat=50.0, lon=50.0))
+    assert state.meteorology is not None
+    assert state.meteorology.frs_id is None and state.meteorology.facility_name is None
+    assert (state.meteorology.latitude, state.meteorology.longitude) == (50.0, 50.0)

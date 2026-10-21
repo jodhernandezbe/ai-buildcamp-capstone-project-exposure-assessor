@@ -77,8 +77,10 @@ def _receptors(receptor: Receptor) -> Receptors:
     )
 
 
-def meteorology_view(point: Located[MeteorologyPayload]) -> Meteorology:
-    """The tool's weather with the downwind direction the arrow and sector point to."""
+def meteorology_view(
+    point: Located[MeteorologyPayload], facility: EmissionPayload | None = None
+) -> Meteorology:
+    """The tool's weather with the downwind direction, for its point and facility (if any)."""
     weather = point.payload
     return Meteorology(
         wind_speed_m_s=weather.wind_speed,
@@ -88,6 +90,10 @@ def meteorology_view(point: Located[MeteorologyPayload]) -> Meteorology:
         stability_class=weather.stability_class,
         source=weather.source,
         screening_default=weather.source == SCREENING_DEFAULT,
+        latitude=point.latitude,
+        longitude=point.longitude,
+        frs_id=facility.frs_id if facility else None,
+        facility_name=facility.facility_name if facility else None,
         warnings=list(weather.warnings),
     )
 
@@ -178,7 +184,7 @@ def _shapes(
     if receptor is None:
         return {"buffer": None, "sector": None}
     where, radius = (record.latitude, record.longitude), receptor.radius_km
-    toward = meteorology_view(weather).wind_toward_deg if weather else None
+    toward = meteorology_view(weather, record).wind_toward_deg if weather else None
     return {
         "buffer": circle(*where, radius, rules.vertex_spacing_deg),
         "sector": None
@@ -198,7 +204,7 @@ def _attached(
         "industry": _industry(found.industries.get(frs_id), record),
         "stacks": facility_stacks(nei[1] if nei else [], exposure[1] if exposure else None, ledger),
         "receptors": _receptors(receptor) if receptor else None,
-        "meteorology": meteorology_view(weather) if weather else None,
+        "meteorology": meteorology_view(weather, record) if weather else None,
         "exposure": ranges,
         "status": _status(ranges, rules),
         **_shapes(record, receptor, weather, rules),

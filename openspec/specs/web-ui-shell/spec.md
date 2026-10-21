@@ -62,7 +62,8 @@ The top of the left pane SHALL show four cards updated from each `workspace_upda
    Tanimoto, in/out of applicability domain), "Unresolved" or "Not evaluated";
 3. Exposed population: total within the radius `r` km and a horizontal stacked bar of the age
    bands 0-4, 5-17, 18-64, 65+, with the data source;
-4. Meteorology: wind speed (m/s), a direction arrow pointing downwind with the from-direction in
+4. Meteorology: the facility it is for (or, for a point that is not one of the facilities, its
+   coordinates and that fact), wind speed (m/s), a direction arrow pointing downwind with the from-direction in
    degrees, ambient temperature (K), Pasquill-Gifford class and source.
 Cards whose data comes from a screening default SHALL show a "screening default" marker.
 
@@ -166,3 +167,12 @@ marking the cost as an estimate, "unpriced" or "lower bound" as reported.
 #### Scenario: Unpriced
 - **WHEN** the usage event's cost is unpriced
 - **THEN** the meter shows tokens and "unpriced" instead of a dollar amount
+
+### Requirement: The assistant does not describe what it cannot see
+In the web program the assistant SHALL be told that it cannot see the overview or the map, what
+the map shows (every facility the inventory found, not only those listed to it) and how details
+open (pointing at or moving to a marker), and SHALL say no more about the map than that.
+
+#### Scenario: Asked to show the map
+- **WHEN** the user asks the assistant to show or explain the map
+- **THEN** the assistant describes only what the map places and how to open a facility's details, and speaks of its own results otherwise

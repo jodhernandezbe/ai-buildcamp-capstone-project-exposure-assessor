@@ -89,3 +89,10 @@ def test_addendum_does_not_contradict_the_no_conversion_rule() -> None:
     text = _flat(ADDENDUM)
     assert "units" in text
     assert "numbers the results or the user gave you" in text
+
+
+def test_the_addendum_says_what_the_map_shows_and_that_the_model_cannot_see_it() -> None:
+    text = _flat(ADDENDUM)
+    assert "you cannot see them" in text
+    assert "every facility the inventory found" in text
+    assert "say no more about the map than that" in text

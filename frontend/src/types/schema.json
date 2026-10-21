@@ -821,6 +821,37 @@
         "ambient_temperature_k": {
           "type": "number"
         },
+        "facility_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frs_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Facility at that point, if one is."
+        },
+        "latitude": {
+          "description": "Point the weather is for, decimal degrees.",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Point the weather is for, decimal degrees.",
+          "type": "number"
+        },
         "screening_default": {
           "type": "boolean"
         },
@@ -856,6 +887,10 @@
         "stability_class",
         "source",
         "screening_default",
+        "latitude",
+        "longitude",
+        "frs_id",
+        "facility_name",
         "warnings"
       ],
       "title": "Meteorology",

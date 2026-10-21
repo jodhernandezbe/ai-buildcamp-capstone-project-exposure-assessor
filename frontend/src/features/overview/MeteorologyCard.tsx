@@ -4,6 +4,14 @@ import { formatNumber, formatWithUnit, orNotReported } from "../../lib/format";
 import type { Meteorology } from "../../types/workspace";
 import { CardFrame, Metric, ScreeningDefault } from "./Metric";
 
+/** Where the weather is for: the facility at that point, else the point itself. */
+function place(weather: Meteorology): string {
+  if (weather.frs_id) return `For ${weather.facility_name ?? `FRS ${weather.frs_id}`}`;
+  const lat = weather.latitude.toFixed(3);
+  const lon = weather.longitude.toFixed(3);
+  return `At ${lat}, ${lon} (not one of the facilities)`;
+}
+
 /** Wind, temperature and stability; the arrow points where the wind blows to. */
 export function MeteorologyCard({ weather, digits }: { weather: Meteorology | null; digits: number }) {
   if (!weather) {
@@ -28,6 +36,7 @@ export function MeteorologyCard({ weather, digits }: { weather: Meteorology | nu
           <Metric label="Stability class">{orNotReported(weather.stability_class)}</Metric>
         </dl>
       </div>
+      <p className="m-0 truncate text-xs font-medium text-fg">{place(weather)}</p>
       <p className="m-0 text-xs text-fg2">
         {orNotReported(weather.source)}
         {weather.screening_default && <ScreeningDefault />}

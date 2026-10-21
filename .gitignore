@@ -35,3 +35,5 @@ frontend/dist/
 # Raw downloads: only the compact derived files in data/ are committed
 data/raw/
 frontend/*.tsbuildinfo
+# npm is the package manager (package-lock.json); a yarn lockfile would pin other versions.
+frontend/yarn.lock

@@ -147,8 +147,23 @@ describe("meteorology card", () => {
     stability_class: "D",
     source: "synthetic 2020",
     screening_default: false,
+    latitude: 29.72,
+    longitude: -95.25,
+    frs_id: "F1",
+    facility_name: "Plant F1",
     warnings: [],
   };
+
+  it("says which facility the weather is for", () => {
+    render(<EpaOverviewRibbon workspace={workspace({ meteorology: weather })} digits={2} />);
+    expect(within(card("Meteorology")).getByText("For Plant F1")).toBeInTheDocument();
+  });
+
+  it("says when the weather is for a point that is not one of the facilities", () => {
+    const state = workspace({ meteorology: { ...weather, frs_id: null, facility_name: null } });
+    render(<EpaOverviewRibbon workspace={state} digits={2} />);
+    expect(within(card("Meteorology")).getByText("At 29.720, -95.250 (not one of the facilities)")).toBeInTheDocument();
+  });
 
   it("shows the wind, temperature and class with the arrow pointing downwind", () => {
     const { container } = render(<EpaOverviewRibbon workspace={workspace({ meteorology: weather })} digits={2} />);
