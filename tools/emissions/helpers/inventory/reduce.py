@@ -9,15 +9,18 @@ from typing import NamedTuple, TypedDict
 
 from commons.units import UnitConversionError
 from config.loader import EmissionsSettings, TriSettings
+from tools.emissions.helpers.inventory.conditions import Conditions, ConditionsFor, not_requested
 from tools.emissions.helpers.inventory.rate import (
     HoursFor,
     OperatingHours,
     fixed_hours,
     to_emission_rate,
 )
-from tools.schemas import EmissionRecord
+from tools.schemas import ConditionOfUse, EmissionRecord
 
 Row = Mapping[str, object]
+Flags = tuple[tuple[str, str], ...]
+"""(``tri_chem_activity`` column, Form R section) pairs."""
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,8 @@ class Report:
     place: Place
     location: Location | None
     naics_code: str | None = None
+    activities: frozenset[str] = frozenset()  # Form R Section 3 items the submission reports
+    activity_seen: bool = False  # whether the row carried any activity column
 
 
 @dataclass
@@ -72,6 +77,15 @@ class Slot:
     place: Place
     location: Location | None
     location_year: int
+    activities: frozenset[str] = frozenset()  # union over the latest year's summed reports
+    activity_seen: bool = False
+
+
+class _Resolvers(NamedTuple):
+    """The injected per-facility lookups used when a record is built."""
+
+    hours_for: HoursFor
+    conditions_for: ConditionsFor | None
 
 
 class _Amount(NamedTuple):
@@ -95,6 +109,7 @@ class Stats:
     bad_unit: int = 0
     mixed_units: int = 0
     combined: int = 0
+    no_activity: int = 0
 
     def warnings(self) -> list[str]:
         """Return one message per non-zero count."""
@@ -108,6 +123,7 @@ class Stats:
             ("bad_unit", "facilities omitted: release unit is not a convertible mass unit"),
             ("mixed_units", "same-year reports ignored: unit differs from the first report"),
             ("combined", "facilities whose latest-year reports were added together"),
+            ("no_activity", "rows without TRI activity data (conditions of use unknown)"),
         )
         return [f"{getattr(self, key)} {text}" for key, text in labels if getattr(self, key)]
 
@@ -212,33 +228,56 @@ def is_secondary_naics(row: Row, settings: TriSettings) -> bool:
     return flag is not None and str(flag).strip() not in ("1", "")
 
 
-def parse_report(row: Row, settings: TriSettings) -> Report | None:
-    """Validate one TRI row.
+def _flag_set(value: object) -> bool:
+    """Whether a flag column holds the number 1 or the text "1" (never a boolean)."""
+    if isinstance(value, bool):
+        return False
+    return value == 1 or _text(value) == "1"
 
-    Args:
-        row: A row of the joined TRI release query (untrusted).
-        settings: TRI settings naming the columns to read.
 
-    Returns:
-        The report, or None if the row has no facility ID, medium or reporting year. An
-        unusable quantity or location does not drop the row here: it is carried as None.
-    """
+def _activities(row: Row, flags: Flags) -> tuple[frozenset[str], bool]:
+    """The Form R sections whose flag is set, and whether any flag column was sent."""
+    seen = any(column in row for column, _ in flags)
+    return frozenset(section for column, section in flags if _flag_set(row.get(column))), seen
+
+
+def _report_key(row: Row, settings: TriSettings) -> tuple[str, str, int] | None:
+    """(facility ID, medium, reporting year) of a row, or None if any is missing."""
     facility_id = _facility_id(row, settings)
     medium = _text(row.get(settings.fields["medium"]))
     year = _year(row.get(settings.fields["year"]))
     if facility_id is None or medium is None or year is None:
         return None
+    return facility_id, medium, year
+
+
+def parse_report(row: Row, settings: TriSettings, flags: Flags = ()) -> Report | None:
+    """Validate one TRI row.
+
+    Args:
+        row: A row of the joined TRI release query (untrusted).
+        settings: TRI settings naming the columns to read.
+        flags: (activity column, Form R section) pairs to read; none reads no activities.
+
+    Returns:
+        The report, or None if the row has no facility ID, medium or reporting year. An
+        unusable quantity or location does not drop the row here: it is carried as None.
+    """
+    key = _report_key(row, settings)
+    if key is None:
+        return None
     quantity, unit = _quantity(row, settings)
+    activities, seen = _activities(row, flags)
     return Report(
-        facility_id,
-        medium,
-        year,
+        *key,
         _text(row.get(settings.fields["doc_ctrl_num"])),
         quantity,
         unit,
         _place(row, settings),
         _location(row, settings),
         _naics(row, settings),
+        activities,
+        seen,
     )
 
 
@@ -253,6 +292,8 @@ def _new_slot(report: Report) -> Slot:
         place=report.place,
         location=report.location,
         location_year=report.year,
+        activities=report.activities,
+        activity_seen=report.activity_seen,
     )
 
 
@@ -265,6 +306,7 @@ def _take_year(slot: Slot, report: Report) -> None:
     slot.unit = report.unit
     slot.summed = 0 if report.quantity is None else 1
     slot.place = report.place
+    slot.activities, slot.activity_seen = report.activities, report.activity_seen
 
 
 def _keep_highest_submission(slot: Slot, report: Report) -> None:
@@ -285,9 +327,11 @@ class LatestReports:
     facility's most recent row that has valid ones, since the latest row often lacks them.
     """
 
-    def __init__(self, settings: TriSettings, first_year: int) -> None:
-        """Args: TRI settings; the first reporting year that counts (older rows are ignored)."""
+    def __init__(self, settings: TriSettings, first_year: int, flags: Flags = ()) -> None:
+        """Args: TRI settings; the first reporting year that counts (older rows are ignored);
+        the activity flags to read (none reads no activities)."""
         self._settings = settings
+        self._flags = flags
         self._first_year = first_year
         self._slots: dict[tuple[str, str], Slot] = {}
         self.stats = Stats()
@@ -301,13 +345,14 @@ class LatestReports:
         if is_secondary_naics(row, self._settings):
             self.stats.secondary_naics += 1
             return
-        report = parse_report(row, self._settings)
+        report = parse_report(row, self._settings, self._flags)
         if report is None or report.medium not in self._settings.media:
             self.stats.skipped_rows += 1
             return
         if report.year < self._first_year:
             self.stats.outside_window += 1
             return
+        self.stats.no_activity += bool(self._flags) and not report.activity_seen
         key = (report.medium, report.facility_id)
         slot = self._slots.get(key)
         if slot is None:
@@ -331,11 +376,14 @@ class LatestReports:
         if slot.quantity is None:
             slot.quantity, slot.unit, slot.summed = report.quantity, report.unit, 1
             slot.doc_ctrl_num, slot.naics_code = report.doc_ctrl_num, report.naics_code
+            slot.activities, slot.activity_seen = report.activities, report.activity_seen
         elif slot.unit != report.unit:
             self.stats.mixed_units += 1
         else:
             slot.quantity += report.quantity
             slot.summed += 1
+            slot.activities |= report.activities
+            slot.activity_seen = slot.activity_seen or report.activity_seen
             _keep_highest_submission(slot, report)
 
     def records(
@@ -344,6 +392,7 @@ class LatestReports:
         aliases: Mapping[str, str] | None = None,
         locate: Locator | None = None,
         hours_for: HoursFor | None = None,
+        conditions_for: ConditionsFor | None = None,
     ) -> list[EmissionRecord]:
         """Return the kept records, converting each release to an emission rate.
 
@@ -354,15 +403,17 @@ class LatestReports:
                 facilities that have a usable quantity but no coordinates in any TRI row.
             hours_for: Gives a facility's operating hours from its NAICS code; without it every
                 facility gets the default hours of ``emissions``.
+            conditions_for: Gives a facility's TSCA conditions of use from its activities;
+                without it the records have none and say so.
 
         Returns:
             One record per (medium, facility) with a usable latest-year quantity and
             coordinates; the others are counted in ``stats``.
         """
-        hours_for = hours_for or fixed_hours(emissions)
+        resolvers = _Resolvers(hours_for or fixed_hours(emissions), conditions_for)
         located = self._locate_missing(locate)
         found = (
-            self._record(key, slot, hours_for, aliases, located)
+            self._record(key, slot, resolvers, aliases, located)
             for key, slot in self._slots.items()
         )
         records = [record for record in found if record is not None]
@@ -407,21 +458,23 @@ class LatestReports:
         self,
         key: tuple[str, str],
         slot: Slot,
-        hours_for: HoursFor,
+        resolvers: _Resolvers,
         aliases: Mapping[str, str] | None,
         located: Mapping[str, Location],
     ) -> EmissionRecord | None:
         amount = self._amount(key[1], slot, located)
         if amount is None:
             return None
-        hours = hours_for(slot.naics_code)
+        hours = resolvers.hours_for(slot.naics_code)
         try:
             rate = to_emission_rate(amount.quantity, amount.unit, hours.hours_per_year, aliases)
         except UnitConversionError:
             self.stats.bad_unit += 1
             return None
         return EmissionRecord(
-            **_reported(key, slot, amount, rate, hours), **_where(slot.place, amount.location)
+            **_reported(key, slot, amount, rate, hours),
+            **_conditions(slot, resolvers.conditions_for),
+            **_where(slot.place, amount.location),
         )
 
 
@@ -440,6 +493,12 @@ class _Reported(TypedDict):
     emission_rate: float
     operating_hours_per_year: float
     operating_hours_source: str
+
+
+class _Conditions(TypedDict):
+    conditions_of_use: list[ConditionOfUse]
+    lifecycle_stages: list[str]
+    conditions_note: str | None
 
 
 class _Where(TypedDict):
@@ -471,6 +530,19 @@ def _reported(
         "emission_rate": rate,
         "operating_hours_per_year": hours.hours_per_year,
         "operating_hours_source": hours.source,
+    }
+
+
+def _conditions(slot: Slot, conditions_for: ConditionsFor | None) -> _Conditions:
+    found: Conditions = (
+        not_requested()
+        if conditions_for is None
+        else conditions_for(slot.activities, slot.activity_seen)
+    )
+    return {
+        "conditions_of_use": found.conditions_of_use,
+        "lifecycle_stages": found.lifecycle_stages,
+        "conditions_note": found.note,
     }
 
 

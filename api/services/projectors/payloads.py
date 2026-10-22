@@ -23,6 +23,14 @@ class Payload(BaseModel):
     model_config = ConfigDict(strict=True, extra="ignore", frozen=True)
 
 
+class ConditionPayload(Payload):
+    tri_activity: str
+    tri_section: str
+    lifecycle_stage: str
+    cou_category: str
+    mapping_strength: str
+
+
 class EmissionPayload(Payload):
     frs_id: str
     facility_name: str | None = None
@@ -38,6 +46,9 @@ class EmissionPayload(Payload):
     emission_rate: Num
     operating_hours_per_year: Num
     operating_hours_source: str | None = None
+    conditions_of_use: list[ConditionPayload] = []
+    lifecycle_stages: list[str] = []
+    conditions_note: str | None = None
     latitude: Lat
     longitude: Lon
     address: str | None = None

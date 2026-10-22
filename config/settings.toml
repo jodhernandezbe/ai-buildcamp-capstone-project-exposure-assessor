@@ -146,11 +146,13 @@ cache_seconds = 86400
 # URL-encoded medium, {after_year} the year after which reports are wanted and {start}:{end} an inclusive row range, so a page of N rows is
 # start .. start+N-1. Rows are not ordered by year and the end of data is signalled by a page
 # shorter than page_size (probing past the end hangs), so the whole result is read.
+# The tri_chem_activity table (one row per submission, the Form R Section 3 activity flags; see
+# [conditions_of_use]) is joined in the same request: it adds columns, not rows.
 # A submission with secondary NAICS codes comes back once per code; only its primary row
 # (`naics_primary` = 1) is kept, so its release is never counted twice. Filtering on the primary
 # indicator in the URL instead gives the same rows but was about 3 times slower.
 [tri]
-release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/tri_submission_naics/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
+release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/tri_submission_naics/tri_chem_activity/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
 # Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
 media = ["AIR STACK"]
 # A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
@@ -873,3 +875,41 @@ max_digits = 6
 days_per_year = 365
 # Rows above this many hours per week (hours in a week) are not plausible and are ignored.
 max_hours_per_week = 168
+
+# TSCA conditions of use and life cycle stages of a facility (tools/emissions/helpers/inventory/
+# conditions.py). The TRI release query joins `tri_chem_activity` (one row per submission with a
+# 0/1 flag per Form R Section 3 activity); each flag set in a facility's latest-year submissions
+# is mapped through the EPA crosswalk to a life cycle stage and condition-of-use category. Only
+# rows of `level` with no TRI sub-use code are used (Envirofacts has no sub-use table).
+[conditions_of_use]
+crosswalk_path = "data/tsca_cou_cdr_tri_crosswalk.csv"
+level = "1_lifecycle_stage"
+# Crosswalk columns.
+level_column = "mapping_level"
+section_column = "tri_form_r_section"
+subuse_column = "tri_subuse_code"
+stage_column = "tsca_lifecycle_stage"
+category_column = "tsca_cou_category"
+strength_column = "mapping_strength"
+activity_column = "tri_activity_category"
+# Pulls the section ("3.2b") out of the crosswalk's "Part II Section 3.2b" (group `section`).
+section_pattern = "Section (?P<section>3\\.[123][a-f])\\b"
+
+# `tri_chem_activity` flag column -> Form R Section 3 activity (3.1 manufacture, 3.2 process,
+# 3.3 otherwise use).
+[conditions_of_use.flags]
+produce = "3.1a"
+imported = "3.1b"
+used_processed = "3.1c"
+sale_distribution = "3.1d"
+byproduct = "3.1e"
+manufacture_impurity = "3.1f"
+reactant = "3.2a"
+formulation_component = "3.2b"
+article_component = "3.2c"
+repackaging = "3.2d"
+process_impurity = "3.2e"
+processed_recycling = "3.2f"
+chem_processing_aid = "3.3a"
+manufacture_aid = "3.3b"
+ancillary = "3.3c"

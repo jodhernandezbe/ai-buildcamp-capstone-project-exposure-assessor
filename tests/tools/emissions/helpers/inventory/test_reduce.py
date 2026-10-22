@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
+from tools.emissions.helpers.inventory.conditions import Conditions, ConditionsFor
 from tools.emissions.helpers.inventory.rate import HoursFor, OperatingHours
 from tools.emissions.helpers.inventory.reduce import LatestReports, Location, parse_report
 from tools.schemas import EmissionRecord
@@ -542,3 +543,105 @@ def test_resolver_is_asked_once_per_facility() -> None:
     reducer.add_rows([_row(naics_code="3252"), _row(epa_registry_id="110000000002")])
     reducer.records(EMISSIONS, ALIASES, hours_for=resolve)
     assert len(asked) == 2
+
+
+FLAGS = (("produce", "3.1a"), ("reactant", "3.2a"), ("formulation_component", "3.2b"))
+
+
+def _asked(log: list[tuple[frozenset[str], bool]]) -> ConditionsFor:
+    def conditions_for(activities: frozenset[str], seen: bool) -> Conditions:
+        log.append((activities, seen))
+        return Conditions([], sorted(activities), None)
+
+    return conditions_for
+
+
+def _activities(
+    *rows: dict[str, object],
+) -> tuple[list[tuple[frozenset[str], bool]], list[EmissionRecord]]:
+    log: list[tuple[frozenset[str], bool]] = []
+    reducer = LatestReports(load_tri_settings(), first_year=0, flags=FLAGS)
+    reducer.add_rows(list(rows))
+    return log, reducer.records(EMISSIONS, ALIASES, conditions_for=_asked(log))
+
+
+@pytest.mark.parametrize("value", [1, "1", 1.0])
+def test_a_flag_set_to_one_is_an_activity(value: object) -> None:
+    log, _ = _activities(_row(reactant=value, produce=0))
+    assert log == [(frozenset({"3.2a"}), True)]
+
+
+@pytest.mark.parametrize("value", [0, "0", None, "yes", True, 2, "", "true", []])
+def test_other_flag_values_set_nothing(value: object) -> None:
+    log, _ = _activities(_row(reactant=value, produce=value))
+    assert log == [(frozenset(), True)]
+
+
+def test_same_year_reports_add_their_activities() -> None:
+    log, records = _activities(
+        _row(doc_ctrl_num="1", reactant="1"), _row(doc_ctrl_num="2", formulation_component="1")
+    )
+    assert log == [(frozenset({"3.2a", "3.2b"}), True)] and len(records) == 1
+
+
+def test_repeated_rows_do_not_repeat_an_activity() -> None:
+    log, _ = _activities(_row(reactant="1"), _row(reactant="1"), _row(reactant="1"))
+    assert log == [(frozenset({"3.2a"}), True)]
+
+
+def test_a_later_year_replaces_the_activities() -> None:
+    log, _ = _activities(
+        _row(reporting_year="2019", produce="1"), _row(reporting_year="2020", reactant="1")
+    )
+    assert log == [(frozenset({"3.2a"}), True)]
+
+
+def test_an_earlier_year_adds_nothing() -> None:
+    log, _ = _activities(
+        _row(reporting_year="2020", reactant="1"), _row(reporting_year="2019", produce="1")
+    )
+    assert log == [(frozenset({"3.2a"}), True)]
+
+
+def test_a_report_without_a_quantity_does_not_contribute_activities() -> None:
+    log, _ = _activities(
+        _row(doc_ctrl_num="1", total_release=None, produce="1"),
+        _row(doc_ctrl_num="2", reactant="1"),
+    )
+    assert log == [(frozenset({"3.2a"}), True)]
+
+
+def test_rows_without_activity_columns_are_unknown_and_counted() -> None:
+    reducer = LatestReports(load_tri_settings(), first_year=0, flags=FLAGS)
+    reducer.add_rows([_row(), _row(doc_ctrl_num="2")])
+    log: list[tuple[frozenset[str], bool]] = []
+    reducer.records(EMISSIONS, ALIASES, conditions_for=_asked(log))
+    assert log == [(frozenset(), False)]
+    assert any("without TRI activity data" in w for w in reducer.stats.warnings())
+
+
+def test_no_flags_configured_reads_no_activities_and_counts_nothing() -> None:
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_row(reactant="1")])
+    assert reducer.stats.no_activity == 0
+
+
+def test_the_record_carries_what_the_mapper_returned() -> None:
+    _, records = _activities(_row(reactant="1"))
+    assert records[0]["lifecycle_stages"] == ["3.2a"]
+    assert records[0]["conditions_note"] is None
+
+
+def test_without_a_mapper_the_record_says_so() -> None:
+    record = _only([_row(reactant="1")])
+    assert record["conditions_of_use"] == [] and record["lifecycle_stages"] == []
+    assert record["conditions_note"] == "conditions of use were not requested"
+
+
+def test_activities_do_not_change_facilities_or_releases() -> None:
+    rows = [_row(doc_ctrl_num="1", total_release=100), _row(doc_ctrl_num="2", total_release=50)]
+    plain = _run(rows)[0]
+    with_flags = _activities(*[r | {"reactant": "1"} for r in rows])[1]
+    assert [(r["frs_id"], r["total_release"]) for r in with_flags] == [
+        (r["frs_id"], r["total_release"]) for r in plain
+    ]

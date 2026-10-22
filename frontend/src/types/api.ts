@@ -332,6 +332,9 @@ export interface ReadAcross {
  *     emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
  *     operating_hours_source: Where those hours came from (industry survey or default); None
  *         when the record predates the field.
+ *     conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
+ *     lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.
+ *     conditions_note: Why ``conditions_of_use`` is empty; None when it is not.
  *     stack_source: Where the NEI stack lookup came from, when one was made for the facility.
  *     status: Worst-case risk status (from the screening value when screened out); None
  *         while no risk is computed.
@@ -348,6 +351,8 @@ export interface Facility {
   buffer: Polygon | null;
   cas_number: string | null;
   city: string | null;
+  conditions_note: string | null;
+  conditions_of_use: ConditionOfUse[];
   county: string | null;
   doc_ctrl_num: string | null;
   emission_rate_g_s: number;
@@ -355,6 +360,7 @@ export interface Facility {
   frs_id: string;
   industry: Industry | null;
   latitude: number;
+  lifecycle_stages: string[];
   longitude: number;
   medium: string;
   meteorology: Meteorology | null;
@@ -381,6 +387,19 @@ export interface Facility {
 export interface Polygon {
   coordinates: number[][][];
   type: "Polygon";
+}
+/**
+ * One TSCA condition of use implied by a TRI activity the facility reported.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ConditionOfUse".
+ */
+export interface ConditionOfUse {
+  cou_category: string;
+  lifecycle_stage: string;
+  mapping_strength: string;
+  tri_activity: string;
+  tri_section: string;
 }
 /**
  * Ranges over the evaluated stacks of one facility; None when no stack has the quantity.

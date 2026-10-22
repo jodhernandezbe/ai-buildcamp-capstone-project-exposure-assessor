@@ -84,6 +84,9 @@ def test_docstring_describes_every_returned_field() -> None:
         "unit",
         "operating_hours_per_year",
         "operating_hours_source",
+        "conditions_of_use",
+        "lifecycle_stages",
+        "conditions_note",
         "latitude",
     ):
         assert field in text
@@ -281,3 +284,27 @@ def test_the_real_resolver_uses_the_committed_baseline_and_the_default() -> None
     assert resolve(code + "0" * (6 - len(code))).hours_per_year == pytest.approx(per_week * 365 / 7)
     assert resolve("999999").hours_per_year == 8760.0
     assert resolve(None).source.startswith("default 8760 h/yr")
+
+
+def test_the_release_request_joins_the_activity_table(requests_seen: list[httpx.Request]) -> None:
+    _all({"cas_number": "50-00-0"})
+    assert "/tri_submission_naics/tri_chem_activity/cas_registry_number/50-00-0/" in str(
+        requests_seen[0].url
+    )
+
+
+def test_the_program_gets_each_facilitys_conditions_of_use(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = [r | {"reactant": "1", "ancillary": "1", "produce": 0} for r in ROWS]
+    monkeypatch.setattr("tests.tools.emissions.test_inventory.ROWS", rows)
+    clear_inventory_cache()
+    record = _all({"cas_number": "50-00-0"})[0]
+    assert record["lifecycle_stages"] == ["Processing", "Industrial use", "Commercial use"]
+    assert [c["tri_section"] for c in record["conditions_of_use"]] == ["3.2a", "3.3c", "3.3c"]
+    assert record["conditions_note"] is None
+
+
+def test_rows_without_activity_data_are_explained(requests_seen: list[httpx.Request]) -> None:
+    record = _all({"cas_number": "50-00-0"})[0]
+    assert record["conditions_of_use"] == [] and "did not return" in str(record["conditions_note"])

@@ -151,6 +151,16 @@ class Screening(ContractModel):
     reason: str | None = None
 
 
+class ConditionOfUse(ContractModel):
+    """One TSCA condition of use implied by a TRI activity the facility reported."""
+
+    tri_activity: str
+    tri_section: str
+    lifecycle_stage: str
+    cou_category: str
+    mapping_strength: str
+
+
 class Facility(ContractModel):
     """One facility of the emissions inventory with what the other tools reported about it.
 
@@ -160,6 +170,9 @@ class Facility(ContractModel):
         emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
         operating_hours_source: Where those hours came from (industry survey or default); None
             when the record predates the field.
+        conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
+        lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.
+        conditions_note: Why ``conditions_of_use`` is empty; None when it is not.
         stack_source: Where the NEI stack lookup came from, when one was made for the facility.
         status: Worst-case risk status (from the screening value when screened out); None
             while no risk is computed.
@@ -187,6 +200,9 @@ class Facility(ContractModel):
     emission_rate_g_s: float
     operating_hours_per_year: float
     operating_hours_source: str | None = None
+    conditions_of_use: list[ConditionOfUse] = Field(default_factory=list[ConditionOfUse])
+    lifecycle_stages: list[str] = Field(default_factory=list[str])
+    conditions_note: str | None = None
     industry: Industry | None = None
     stacks: list[Stack] = Field(default_factory=list[Stack])
     receptors: Receptors | None = None

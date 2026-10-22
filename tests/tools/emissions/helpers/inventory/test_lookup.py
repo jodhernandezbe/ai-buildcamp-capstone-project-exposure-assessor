@@ -11,9 +11,12 @@ from pathlib import Path
 import httpx
 import pytest
 
+from config.conditions_of_use import get_conditions_settings
 from config.efservice import load_efservice_settings
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
 from tools.emissions.helpers.efservice import EfserviceClient
+from tools.emissions.helpers.inventory import conditions as module
+from tools.emissions.helpers.inventory.conditions import ConditionsMapper, load_crosswalk
 from tools.emissions.helpers.inventory.lookup import lookup_emissions
 from tools.emissions.helpers.inventory.rate import OperatingHours
 from tools.emissions.helpers.inventory.tri import TriFetcher
@@ -108,3 +111,37 @@ def test_hours_resolver_reaches_every_record() -> None:
 def test_without_a_resolver_the_default_hours_are_used() -> None:
     records = _lookup(_fetcher(_serve([ROWS[:4], ROWS[4:]])))
     assert {r["operating_hours_per_year"] for r in records} == {8760.0}
+
+
+def _mapper() -> ConditionsMapper:
+    settings = get_conditions_settings()
+    return ConditionsMapper(load_crosswalk(settings), settings)
+
+
+def _with_conditions(rows: list[dict[str, object]]) -> list[EmissionRecord]:
+    return lookup_emissions(
+        CAS, SETTINGS, EMISSIONS, get_unit_settings().aliases,
+        _fetcher(_serve([rows[:4], rows[4:]])), YEAR, conditions=_mapper(),
+    )  # fmt: skip
+
+
+def test_activities_become_conditions_of_use() -> None:
+    rows = [r | {"produce": "1", "reactant": "1", "imported": "0"} for r in ROWS]
+    records = _with_conditions(rows)
+    assert records
+    for record in records:
+        assert record["lifecycle_stages"] == ["Manufacturing", "Processing"]
+        assert [c["tri_section"] for c in record["conditions_of_use"]] == ["3.1a", "3.2a"]
+        assert record["conditions_note"] is None
+
+
+def test_rows_without_activity_columns_have_a_note_not_a_guess() -> None:
+    records = _with_conditions(ROWS)
+    assert {r["conditions_note"] for r in records} == {module.NO_ACTIVITY_DATA}
+    assert all(r["conditions_of_use"] == [] for r in records)
+
+
+def test_the_flags_come_from_the_mapper_not_the_lookup() -> None:
+    assert dict(_mapper().flags)["reactant"] == "3.2a"
+    records = _lookup(_fetcher(_serve([ROWS[:4], ROWS[4:]])))
+    assert {r["conditions_note"] for r in records} == {"conditions of use were not requested"}

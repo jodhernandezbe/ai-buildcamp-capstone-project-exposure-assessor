@@ -312,3 +312,28 @@ describe("card content", () => {
     expect(card).toHaveTextContent("Not assessed yet: no stack parameters were obtained");
   });
 });
+
+
+describe("conditions of use in the facility card", () => {
+  it("lists the stages and each condition the API sent", async () => {
+    const conditions = [
+      { tri_activity: "As a reactant", tri_section: "3.2a", lifecycle_stage: "Processing", cou_category: "Processing as a reactant", mapping_strength: "Direct" },
+      { tri_activity: "Ancillary or other use", tri_section: "3.3c", lifecycle_stage: "Industrial use", cou_category: "Industrial function category and chemical sector", mapping_strength: "Direct (group)" },
+    ];
+    show(facility({ conditions_of_use: conditions, lifecycle_stages: ["Processing", "Industrial use"] }));
+    await userEvent.hover(screen.getByRole("button", { name: /Plant F1/ }));
+    const stages = await screen.findByRole("list", { name: "Life cycle stages" });
+    expect(stages).toHaveTextContent("Processing");
+    expect(stages).toHaveTextContent("Industrial use");
+    const list = screen.getByRole("list", { name: "Conditions of use" });
+    expect(list).toHaveTextContent("As a reactant · Processing as a reactant (Processing; Direct)");
+    expect(list.querySelectorAll("li")).toHaveLength(2);
+  });
+
+  it("says not reported, with the reason, when there are none", async () => {
+    show(facility({ conditions_note: "TRI reported no activity for this submission" }));
+    await userEvent.hover(screen.getByRole("button", { name: /Plant F1/ }));
+    expect(await screen.findByText(/Not reported: TRI reported no activity/)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Conditions of use" })).toBeNull();
+  });
+});

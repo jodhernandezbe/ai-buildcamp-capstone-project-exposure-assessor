@@ -7,6 +7,7 @@ from collections.abc import Mapping
 
 from config.loader import EmissionsSettings, TriSettings
 from tools.emissions.helpers.efservice import EfserviceError
+from tools.emissions.helpers.inventory.conditions import ConditionsMapper
 from tools.emissions.helpers.inventory.rate import HoursFor
 from tools.emissions.helpers.inventory.reduce import LatestReports, Locator
 from tools.emissions.helpers.inventory.tri import TriFetcher
@@ -24,6 +25,7 @@ def lookup_emissions(
     current_year: int,
     locate: Locator | None = None,
     hours_for: HoursFor | None = None,
+    conditions: ConditionsMapper | None = None,
 ) -> list[EmissionRecord]:
     """Find the latest-year release record of each facility for a chemical.
 
@@ -40,13 +42,16 @@ def lookup_emissions(
             facilities are omitted.
         hours_for: Gives a facility's operating hours from its NAICS code (injected); without it
             every facility gets the default hours of ``emissions``.
+        conditions: Maps a facility's TRI activities to TSCA conditions of use (injected); it also
+            names the activity columns to read. Without it records carry no conditions.
 
     Returns:
         One record per (medium, facility); empty if nothing was reported or if retrieval
         failed (a partial result is never returned as if it were complete). Data problems
         and a hit page cap are logged as warnings.
     """
-    reducer = LatestReports(tri, tri.first_year(current_year))
+    flags = conditions.flags if conditions is not None else ()
+    reducer = LatestReports(tri, tri.first_year(current_year), flags)
     try:
         for medium in tri.media:
             if fetcher.fetch(cas, medium, reducer.add_rows):
@@ -59,7 +64,7 @@ def lookup_emissions(
     except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
         return []
-    records = reducer.records(emissions, aliases, locate, hours_for)
+    records = reducer.records(emissions, aliases, locate, hours_for, conditions)
     for message in reducer.stats.warnings():
         logger.warning("TRI %s: %s", cas, message)
     return records

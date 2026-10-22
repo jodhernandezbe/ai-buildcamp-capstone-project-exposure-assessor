@@ -132,6 +132,39 @@ def test_a_facility_carries_the_inventory_fields_and_the_queried_cas() -> None:
     assert facility.status is None
 
 
+COU = {
+    "tri_activity": "As a reactant",
+    "tri_section": "3.2a",
+    "lifecycle_stage": "Processing",
+    "cou_category": "Processing as a reactant",
+    "mapping_strength": "Direct",
+}
+
+
+def test_conditions_of_use_are_carried_unchanged() -> None:
+    other = {**COU, "tri_section": "3.3c", "lifecycle_stage": "Industrial use"}
+    extra = {
+        "conditions_of_use": [COU, other],
+        "lifecycle_stages": ["Processing", "Industrial use"],
+    }
+    facility = build(inventory(record() | extra)).facilities[0]
+    assert [c.model_dump() for c in facility.conditions_of_use] == [COU, other]
+    assert facility.lifecycle_stages == ["Processing", "Industrial use"]
+    assert facility.conditions_note is None
+
+
+def test_the_note_explains_missing_conditions() -> None:
+    note = "TRI reported no activity for this submission"
+    facility = build(inventory(record() | {"conditions_note": note})).facilities[0]
+    assert facility.conditions_of_use == [] and facility.conditions_note == note
+
+
+def test_a_record_without_conditions_fields_still_builds() -> None:
+    facility = build(inventory(record())).facilities[0]
+    assert facility.conditions_of_use == [] and facility.lifecycle_stages == []
+    assert facility.conditions_note is None
+
+
 def test_industry_is_attached_by_document_control_number() -> None:
     body: dict[str, object] = {
         "naics_code": "111111",

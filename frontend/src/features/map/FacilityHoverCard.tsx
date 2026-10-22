@@ -45,6 +45,35 @@ function StackRow({ stack, digits }: { stack: Stack; digits: number }) {
   );
 }
 
+const CONDITIONS_SHOWN_OPEN = 3;
+
+/** The TSCA life cycle stages and conditions of use the API sent, or why there are none. */
+function Conditions({ facility }: { facility: Facility }) {
+  const { conditions_of_use: conditions, lifecycle_stages: stages, conditions_note: note } = facility;
+  if (conditions.length === 0) {
+    return <p className="m-0 text-xs text-fg2">Not reported{note ? `: ${note}` : ""}</p>;
+  }
+  return (
+    <>
+      <ul aria-label="Life cycle stages" className="m-0 mb-1.5 flex list-none flex-wrap gap-1 p-0">
+        {stages.map((stage) => (
+          <li key={stage} className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent">
+            {stage}
+          </li>
+        ))}
+      </ul>
+      <ul aria-label="Conditions of use" className="m-0 grid list-none gap-1 p-0">
+        {conditions.map((c) => (
+          <li key={`${c.tri_section}-${c.lifecycle_stage}`} className="rounded-lg bg-fg2/5 p-2 text-xs">
+            <span className="font-medium">{c.tri_activity}</span> · {c.cou_category}
+            <span className="text-fg2"> ({c.lifecycle_stage}; {c.mapping_strength})</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 /** Why a facility has no stacks: screened out on the bound, or not assessed (yet). */
 function noStacks(screening: Screening | null): string {
   if (screening?.outcome === "screened_out_at_bound") {
@@ -178,6 +207,13 @@ export function FacilityHoverCard({ facility, digits, id, pinned, onClose, maxHe
           </Metric>
           <Metric label="CAS number">{orNotReported(facility.cas_number)}</Metric>
         </dl>
+        <Section
+          title="Conditions of use"
+          aside={<span className="text-xs text-fg2">{facility.conditions_of_use.length}</span>}
+          initiallyOpen={facility.conditions_of_use.length <= CONDITIONS_SHOWN_OPEN}
+        >
+          <Conditions facility={facility} />
+        </Section>
         <Section
           title="Stacks"
           aside={<span className="text-xs text-fg2">{stacks.length}</span>}

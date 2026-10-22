@@ -53,6 +53,16 @@ class ToxicityDetail(TypedDict):
     assessment: str | None  # "cancer" or "non-cancer"; None if unstated
 
 
+class ConditionOfUse(TypedDict):
+    """One TSCA condition of use implied by an activity a facility reported to TRI."""
+
+    tri_activity: str  # the TRI activity, e.g. "As a reactant"
+    tri_section: str  # its Form R Section 3 item, e.g. "3.2a"
+    lifecycle_stage: str  # TSCA life cycle stage, e.g. "Processing"
+    cou_category: str  # TSCA condition-of-use category, e.g. "Processing as a reactant"
+    mapping_strength: str  # how well the activity matches it, as the crosswalk states it
+
+
 class EmissionRecord(TypedDict):
     """One facility's most recent reported release of a chemical to one environmental medium."""
 
@@ -74,6 +84,9 @@ class EmissionRecord(TypedDict):
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
     operating_hours_per_year: float  # h/yr assumed for `emission_rate`
     operating_hours_source: str  # where those hours came from (industry baseline or default)
+    conditions_of_use: list[ConditionOfUse]  # TSCA conditions of use of the reported activities
+    lifecycle_stages: list[str]  # the distinct TSCA life cycle stages of `conditions_of_use`
+    conditions_note: str | None  # why `conditions_of_use` is empty; None when it is not
     latitude: float  # decimal degrees, positive north
     longitude: float  # decimal degrees, negative west of Greenwich
     address: str | None  # street address

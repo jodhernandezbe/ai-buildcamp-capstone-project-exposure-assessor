@@ -14,6 +14,7 @@ from langchain_core.tools import tool
 from commons.cas import format_cas
 from commons.ttl_cache import TtlCache
 from config.assessment import get_assessment_settings
+from config.conditions_of_use import get_conditions_settings
 from config.efservice import get_efservice_settings
 from config.frs_eis import get_frs_eis_settings
 from config.frs_point import get_frs_point_settings
@@ -21,6 +22,7 @@ from config.industry import get_industry_settings
 from config.loader import get_emissions_settings, get_tri_settings, get_unit_settings
 from config.plant_hours import get_plant_hours_settings
 from tools.emissions.helpers.efservice import EfserviceClient
+from tools.emissions.helpers.inventory.conditions import ConditionsMapper, get_crosswalk
 from tools.emissions.helpers.inventory.eis import UNREACHABLE_NOTE, EisResolver
 from tools.emissions.helpers.inventory.frs_point import FrsLocator
 from tools.emissions.helpers.inventory.listing import rank_and_cap
@@ -153,6 +155,15 @@ def query_emissions_inventory(
             8760 (continuous operation, a conservative screening assumption)
           - operating_hours_source: says which of the two it is, and for a survey figure the
             release, the survey's NAICS code and its plant hours per week
+          - conditions_of_use: the TSCA conditions of use implied by what the facility told TRI
+            it does with the chemical (produces, imports, uses it as a reactant, in a
+            formulation, in articles, as a processing aid, ...). A facility can have several; each
+            has `tri_activity`, `tri_section` (Form R Section 3 item), `lifecycle_stage`,
+            `cou_category` and `mapping_strength` (a "None (CDR exempt)" strength, for an
+            impurity, is not a condition of use in the CDR sense)
+          - lifecycle_stages: the distinct TSCA life cycle stages of `conditions_of_use`
+          - conditions_note: why `conditions_of_use` is empty (null when it is not); an empty list
+            with a note means "unknown" or "none reported", not "no use"
           - latitude, longitude: decimal degrees (negative longitude is west); from TRI, or
             from the facility's FRS record when TRI has none
           - address, city, county, state, zip_code: facility location (each may be null)
@@ -213,6 +224,7 @@ def _read_listing(cas: str, state: str | None, city: str | None, year: int) -> L
             year,
             _frs_locator(client),
             _hours_for(),
+            _conditions(),
         )
         return rank_and_cap(_titled(records), tri.max_listed, state, city, _eis_resolver(client))
 
@@ -222,6 +234,12 @@ def _hours_for() -> HoursFor:
     settings = get_plant_hours_settings()
     default = operating_hours_per_year(get_emissions_settings())
     return PlantHours(get_baseline(settings), settings, default)
+
+
+def _conditions() -> ConditionsMapper:
+    """The mapper from a facility's TRI activities to TSCA conditions of use."""
+    settings = get_conditions_settings()
+    return ConditionsMapper(get_crosswalk(settings), settings)
 
 
 def with_eis_ids(records: list[EmissionRecord]) -> list[EmissionRecord]:

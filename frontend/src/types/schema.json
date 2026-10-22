@@ -224,6 +224,36 @@
       "title": "ClientConfig",
       "type": "object"
     },
+    "ConditionOfUse": {
+      "additionalProperties": false,
+      "description": "One TSCA condition of use implied by a TRI activity the facility reported.",
+      "properties": {
+        "cou_category": {
+          "type": "string"
+        },
+        "lifecycle_stage": {
+          "type": "string"
+        },
+        "mapping_strength": {
+          "type": "string"
+        },
+        "tri_activity": {
+          "type": "string"
+        },
+        "tri_section": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tri_activity",
+        "tri_section",
+        "lifecycle_stage",
+        "cou_category",
+        "mapping_strength"
+      ],
+      "title": "ConditionOfUse",
+      "type": "object"
+    },
     "ErrorEvent": {
       "additionalProperties": false,
       "description": "A user-safe message and the id under which the details were logged.",
@@ -422,7 +452,7 @@
     },
     "Facility": {
       "additionalProperties": false,
-      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
+      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.\n    lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.\n    conditions_note: Why ``conditions_of_use`` is empty; None when it is not.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
       "properties": {
         "address": {
           "anyOf": [
@@ -467,6 +497,23 @@
             }
           ],
           "default": null
+        },
+        "conditions_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "conditions_of_use": {
+          "items": {
+            "$ref": "#/$defs/ConditionOfUse"
+          },
+          "type": "array"
         },
         "county": {
           "anyOf": [
@@ -520,6 +567,12 @@
         },
         "latitude": {
           "type": "number"
+        },
+        "lifecycle_stages": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "longitude": {
           "type": "number"
@@ -669,6 +722,9 @@
         "emission_rate_g_s",
         "operating_hours_per_year",
         "operating_hours_source",
+        "conditions_of_use",
+        "lifecycle_stages",
+        "conditions_note",
         "industry",
         "stacks",
         "receptors",

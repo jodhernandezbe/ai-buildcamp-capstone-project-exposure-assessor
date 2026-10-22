@@ -186,6 +186,9 @@ def _release(record: EmissionPayload, cas: str | None) -> dict[str, object]:
         "emission_rate_g_s": record.emission_rate,
         "operating_hours_per_year": record.operating_hours_per_year,
         "operating_hours_source": record.operating_hours_source,
+        "conditions_of_use": [c.model_dump() for c in record.conditions_of_use],
+        "lifecycle_stages": list(record.lifecycle_stages),
+        "conditions_note": record.conditions_note,
     }
 
 
