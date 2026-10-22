@@ -23,8 +23,10 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph.state import CompiledStateGraph
 from pydantic import SecretStr
 
+from agent.completion import CompletionGuard
 from agent.graph import build_agent
 from agent.guardrails import REDIRECT_NAME, ScopeGuard
 from agent.state import AgentState
@@ -58,6 +60,9 @@ ModelFactory = Callable[[SecretStr], BaseChatModel]
 NO_KEY_MESSAGE = "Add your OpenAI API key in Settings (the gear icon) to start."
 
 
+Agent = CompiledStateGraph[AgentState, None, AgentState, AgentState]
+
+
 @dataclass(frozen=True)
 class AgentRuntime:
     """What a turn needs besides the request: how to build the model and how to report it.
@@ -69,6 +74,7 @@ class AgentRuntime:
         model_name: Configured model name (the key into ``pricing``).
         pricing: Model name -> token prices; a model without an entry is unpriced.
         scope_guard: Checks that each user turn is on topic before the agent runs, when given.
+        completion_guard: Sends a reply that only announced its next steps back to work, when given.
         system_prompt: The agent's system prompt; None keeps the standard one.
         workspace_rules: Builds the workspace sent after each tool batch; None sends none.
     """
@@ -79,6 +85,7 @@ class AgentRuntime:
     model_name: str = ""
     pricing: Mapping[str, ModelPrice] = field(default_factory=lambda: MappingProxyType({}))
     scope_guard: ScopeGuard | None = None
+    completion_guard: CompletionGuard | None = None
     system_prompt: str | None = None
     workspace_rules: WorkspaceRules | None = None
 
@@ -233,6 +240,17 @@ def _translate(
     return _update_events(payload, seq, labels)
 
 
+def _build(model: BaseChatModel, threads: ThreadStore, runtime: AgentRuntime) -> Agent:
+    """The agent of one turn: the model, the thread history and the configured checks."""
+    return build_agent(
+        model,
+        checkpointer=threads.checkpointer,
+        scope_guard=runtime.scope_guard,
+        completion_guard=runtime.completion_guard,
+        system_prompt=runtime.system_prompt,
+    )
+
+
 async def _agent_events(
     request: ChatRequest,
     model: BaseChatModel,
@@ -241,12 +259,7 @@ async def _agent_events(
     seq: EventSequence,
     recorder: UsageRecorder,
 ) -> AsyncGenerator[StreamEvent]:
-    agent = build_agent(
-        model,
-        checkpointer=threads.checkpointer,
-        scope_guard=runtime.scope_guard,
-        system_prompt=runtime.system_prompt,
-    )
+    agent = _build(model, threads, runtime)
     config: RunnableConfig = {
         "recursion_limit": runtime.recursion_limit,
         "configurable": {"thread_id": request.thread_id},

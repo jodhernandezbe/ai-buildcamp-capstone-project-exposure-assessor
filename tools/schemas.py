@@ -65,6 +65,9 @@ class EmissionRecord(TypedDict):
     naics_code: (
         str | None
     )  # primary NAICS code of that submission (2-6 digits); None if TRI has none
+    naics_title: str | None  # that code's title in words (Census code lists); None if unknown
+    eis_ids: list[str]  # the facility's NEI (EIS) facility IDs; empty when FRS has none
+    eis_note: str | None  # why `eis_ids` is empty, or that they were borrowed from an FRS twin
     total_release: float  # annual quantity, in `unit`, exactly as reported
     unit: str  # unit of `total_release` as reported, e.g. "Pounds"
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
@@ -297,3 +300,149 @@ class ReadAcrossMatch(TypedDict):
     within_applicability_domain: bool  # hybrid score >= the configured threshold
     resolution_method: Literal["direct_tri_catalog_match", "hybrid_read_across", "unresolved"]
     warnings: list[str]  # why a value is None, filters not applied, or out of domain
+
+
+AssessmentLevel = Literal["full", "worst case only"]
+ScreeningStage = Literal["bound", "own stacks"]
+
+
+class ScreeningBound(TypedDict):
+    """A facility's conservative bound: the worst case with the EPA global default stack.
+
+    The SCREEN3 worst-case weather and the most conservative screening ambient temperature,
+    with a person at the maximum; None when the benchmark is missing.
+    """
+
+    hq: float | None  # unitless
+    cancer_risk: float | None  # unitless lifetime excess risk
+
+
+class FacilityAssessment(TypedDict):
+    """The chain for one facility, as the batch assessment ran it (for the program).
+
+    ``level`` is "full" (site weather, residents, worst and representative cases) or
+    "worst case only" (its own stacks over the worst-case weather; no weather or residents).
+    """
+
+    record: EmissionRecord  # the inventory record assessed
+    level: AssessmentLevel
+    bound: ScreeningBound | None  # None when not screened (asked for by ID, or no benchmark)
+    stacks: list[StackParameters]  # the stacks evaluated, all from one source
+    stack_tier: StackSource  # where they come from: NEI, PSTK by SCC, or the global default
+    scc_matches: list[SccMatch]  # the SCC matches whose PSTK stacks were used (PSTK tier only)
+    industry: FacilityIndustry | None  # TRI's industry, when it had to be looked up
+    meteorology: Meteorology | None  # None at worst case only
+    population: Population | None  # None at worst case only
+    radius_km: float | None  # radius the residents were counted in; None = the default
+    exposure: FacilityExposure
+    notes: list[str]  # why a better stack source could not be used, and other choices made
+
+
+class ScreenedOut(TypedDict):
+    """A facility left out because its screening value is below both thresholds."""
+
+    record: EmissionRecord
+    stage: ScreeningStage  # "bound" (generic stack) or "own stacks" (its own worst case)
+    hq: float | None  # the screening value compared with the threshold, unitless
+    cancer_risk: float | None
+    stacks: list[StackParameters]  # its own stacks ("own stacks" stage); empty at the bound
+    stack_tier: StackSource
+    reason: str
+
+
+class AssessmentArtifact(TypedDict):
+    """What the program receives from a batch assessment."""
+
+    assessed: list[FacilityAssessment]  # fully assessed first, then worst case only
+    screened_out: list[ScreenedOut]
+
+
+class NotAssessed(TypedDict):
+    """A facility that was asked for but not assessed, and why."""
+
+    frs_id: str
+    reason: str
+
+
+class FacilityRanges(TypedDict):
+    """Ranges over a facility's stacks, worst case and representative weather; None = none."""
+
+    concentration_worst: RangeEntry | None  # ug/m3, annual average, worst case over stacks
+    concentration_representative: RangeEntry | None  # ug/m3, representative weather
+    hq_worst: RangeEntry | None  # unitless
+    hq_representative: RangeEntry | None
+    cancer_risk_worst: RangeEntry | None  # unitless lifetime excess risk
+    cancer_risk_representative: RangeEntry | None
+
+
+class FacilitySummary(FacilityRanges):
+    """One assessed facility as the model reads it: provenance, risk ranges and notes."""
+
+    frs_id: str
+    facility_name: str | None
+    city: str | None
+    state: str | None
+    emission_rate: float  # g/s
+    stack_tier: StackSource
+    stacks_evaluated: int
+    sccs: list[str]  # SCCs whose PSTK stacks were used (PSTK tier only)
+    industry: str | None  # NAICS title, when known
+    weather_source: str
+    residents: int  # within the radius
+    radius_km: float | None  # None = the default radius
+    notes: list[str]  # the most important warnings, deduplicated and capped
+
+
+class WorstCaseSummary(TypedDict):
+    """A facility kept at its own-stack worst case only (beyond the full-assessment cap)."""
+
+    frs_id: str
+    facility_name: str | None
+    city: str | None
+    state: str | None
+    emission_rate: float  # g/s
+    stack_tier: StackSource
+    hq_worst: RangeEntry | None  # unitless, over its stacks
+    cancer_risk_worst: RangeEntry | None
+
+
+class ScreenedOutSummary(TypedDict):
+    """A screened-out facility as the model reads it: its screening value and emission rate."""
+
+    frs_id: str
+    facility_name: str | None
+    city: str | None
+    state: str | None
+    emission_rate: float  # g/s
+    stage: ScreeningStage
+    hq: float | None
+    cancer_risk: float | None
+
+
+class ScreeningSummary(TypedDict):
+    """How the facilities were screened: thresholds, counts and the closest call left out."""
+
+    possible: bool  # False when the chemical has neither an RfC nor an IUR
+    hq_threshold: float
+    cancer_risk_threshold: float
+    screened_out_at_bound: int
+    screened_out_with_own_stacks: int
+    closest_screened_out: list[ScreenedOutSummary]  # closest to a threshold first, capped
+
+
+class AssessmentResult(TypedDict):
+    """What the model is told about a batch assessment."""
+
+    cas_number: str | None
+    toxicity: Toxicity  # the benchmarks used
+    toxicity_source: str  # "given" (passed in) or "CompTox"
+    facilities_found: int  # in the inventory (for the place asked about)
+    screening: ScreeningSummary | None  # None when facilities were asked for by ID
+    assessed: int  # fully assessed
+    stack_tiers: dict[str, int]  # tier -> number of facilities fully assessed with it
+    facilities: list[FacilitySummary]  # fully assessed, highest worst-case HQ first
+    worst_case_only_count: int
+    worst_case_only: list[WorstCaseSummary]  # highest worst-case risk first, capped
+    not_assessed: list[NotAssessed]
+    note: str | None  # what was left out of the listing
+    warnings: list[str]

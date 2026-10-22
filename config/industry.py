@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from config.parsing import names, read_toml, require_str, section
+from config.parsing import names, project_path, read_toml, require_str, section
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,10 @@ class IndustrySettings:
         assigned_value: Value of ``origin_field`` for a code EPA assigned.
         title_field: Response field holding the code's title.
         placeholder_codes: Codes that are not industries and are never returned.
+        titles_path: CSV of six-digit codes and their titles (the Census code lists), the
+            first source of a title; absolute or resolved against the project root.
+        titles_code_column: Column of ``titles_path`` holding the code.
+        titles_title_column: Column of ``titles_path`` holding the title.
     """
 
     submission_naics_path: str
@@ -39,6 +43,9 @@ class IndustrySettings:
     assigned_value: str
     title_field: str
     placeholder_codes: tuple[str, ...]
+    titles_path: Path
+    titles_code_column: str
+    titles_title_column: str
 
 
 def _template(table: dict[str, object], key: str, slot: str) -> str:
@@ -83,6 +90,9 @@ def load_industry_settings(path: Path | None = None) -> IndustrySettings:
         assigned_value=_text(table, "assigned_value"),
         title_field=_text(table, "title_field"),
         placeholder_codes=_placeholders(table),
+        titles_path=project_path(table, "titles_path", "industry"),
+        titles_code_column=_text(table, "titles_code_column"),
+        titles_title_column=_text(table, "titles_title_column"),
     )
 
 

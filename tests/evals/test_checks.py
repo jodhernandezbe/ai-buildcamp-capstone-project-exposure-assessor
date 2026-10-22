@@ -139,3 +139,59 @@ def test_fallback_allowed_when_a_facility_has_no_candidates() -> None:
         _call(c.SCC_STACK, {}),
     )
     assert _passes(c.no_fallback_for_facilities_with_candidates(), record)
+
+
+def _batch(
+    *facilities: Mapping[str, object],
+    worst: tuple[Mapping[str, object], ...] = (),
+    found: int | None = None,
+    screened: int = 0,
+) -> ToolCall:
+    output = {
+        "facilities": [dict(f) for f in facilities],
+        "worst_case_only": [dict(w) for w in worst],
+        "not_assessed": [],
+        "facilities_found": len(facilities) + len(worst) + screened if found is None else found,
+        "screening": {"screened_out_at_bound": screened, "screened_out_with_own_stacks": 0},
+    }
+    return _call(c.ASSESSMENT, {"cas_number": "1-2-3"}, output)
+
+
+def test_the_batch_route_covers_every_facility_when_its_counts_add_up() -> None:
+    check = c.every_facility_covered()
+    assert _passes(check, _record(_batch({"frs_id": "F1"}, worst=({"frs_id": "F2"},), screened=5)))
+    result = check.evaluate(_record(_batch({"frs_id": "F1"}, found=4)))
+    assert not result.passed and "3 of 4 facilities unaccounted for" in result.reason
+
+
+def test_facilities_screened_out_by_the_batch_route_are_covered_with_nothing_to_name() -> None:
+    record = _record(_batch(screened=2), report="Both facilities were screened out.")
+    assert _passes(c.every_facility_covered(), record)
+    assert _passes(c.every_covered_facility_reported(), record)
+
+
+def test_the_manual_route_covers_a_facility_through_its_exposure_call() -> None:
+    check = c.every_facility_covered()
+    assert _passes(check, _full(_exposure(STACK_A, STACK_B)))
+    result = check.evaluate(_full())
+    assert not result.passed and "not assessed: F1" in result.reason
+    assert not _passes(check, _record())
+
+
+def test_every_assessed_facility_must_be_named_in_the_report() -> None:
+    call = _batch({"frs_id": "F1", "facility_name": "Plant One"}, worst=({"frs_id": "F2"},))
+    check = c.every_covered_facility_reported()
+    assert _passes(check, _record(call, report="PLANT ONE ... F2 worst case only"))
+    result = check.evaluate(_record(call, report="Plant One only"))
+    assert not result.passed and "F2" in result.reason
+    by_hand = _record(
+        _call(c.INVENTORY, {"cas_number": "1-2-3"}, [FACILITY]),
+        _exposure(STACK_A, STACK_B),
+        report="see F1",
+    )
+    assert _passes(check, by_hand)
+    assert not _passes(check, _record())
+
+
+def test_the_manual_site_input_check_does_not_apply_to_the_batch_route() -> None:
+    assert _passes(c.site_inputs_per_assessed_facility(), _record(_batch({"frs_id": "F1"})))

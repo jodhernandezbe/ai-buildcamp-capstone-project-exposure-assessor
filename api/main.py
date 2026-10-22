@@ -53,7 +53,7 @@ def create_app(settings: UiSettings | None = None) -> FastAPI:
         CORSMiddleware, allow_origins=[ui.origin], allow_methods=["GET", "POST", "DELETE"]
     )
     app.add_middleware(OriginGuard, origin=ui.origin)  # outermost: runs before CORS and routes
-    app.state.threads = ThreadStore()
+    app.state.threads = ThreadStore(max_threads=ui.max_threads)
     install_exception_handlers(app)
     app.include_router(v1_settings.router)
     app.include_router(v1_chat.router)

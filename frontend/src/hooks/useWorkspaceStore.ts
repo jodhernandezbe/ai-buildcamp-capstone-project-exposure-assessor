@@ -39,10 +39,19 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
   warnings: [],
 };
 
-/** The workspace the left pane shows: the latest `workspace_update`, empty before any. */
+/**
+ * The workspace the analysis area shows: the latest `workspace_update`, empty before any.
+ * `epoch` rises when the whole workspace is replaced (a new or restored run), so the map
+ * reframes even if the replacement carries the same framing version as the one it replaces.
+ */
 export function useWorkspaceStore() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(EMPTY_WORKSPACE);
+  const [epoch, setEpoch] = useState(0);
   const apply = useCallback((state: WorkspaceState) => setWorkspace(state), []);
-  const clear = useCallback(() => setWorkspace(EMPTY_WORKSPACE), []);
-  return { workspace, apply, clear };
+  const replace = useCallback((state: WorkspaceState) => {
+    setWorkspace(state);
+    setEpoch((now) => now + 1);
+  }, []);
+  const clear = useCallback(() => replace(EMPTY_WORKSPACE), [replace]);
+  return { workspace, epoch, apply, replace, clear };
 }

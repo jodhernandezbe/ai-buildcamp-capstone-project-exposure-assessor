@@ -123,6 +123,34 @@ class Polygon(ContractModel):
     coordinates: list[list[list[float]]]
 
 
+ScreeningOutcome = Literal[
+    "full", "worst_case_only", "screened_out_at_bound", "screened_out_with_own_stacks"
+]
+
+
+class Screening(ContractModel):
+    """How the batch assessment screened a facility.
+
+    Attributes:
+        outcome: Fully assessed; kept at its own-stack worst case only (no weather, residents
+            or representative case); or screened out on the conservative bound (a generic
+            short, cold stack) or on its own-stack worst case, below both thresholds.
+        bound_hq: The bound's hazard quotient (unitless), when computed.
+        bound_cancer_risk: The bound's lifetime excess cancer risk (unitless), when computed.
+        value_hq: The screening value compared with the threshold (the bound, or the own-stack
+            worst case), unitless.
+        value_cancer_risk: Likewise for the cancer risk.
+        reason: Why the facility was screened out, in words; None otherwise.
+    """
+
+    outcome: ScreeningOutcome
+    bound_hq: float | None = None
+    bound_cancer_risk: float | None = None
+    value_hq: float | None = None
+    value_cancer_risk: float | None = None
+    reason: str | None = None
+
+
 class Facility(ContractModel):
     """One facility of the emissions inventory with what the other tools reported about it.
 
@@ -131,7 +159,9 @@ class Facility(ContractModel):
         total_release: Annual quantity in ``release_unit``, as reported.
         emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
         stack_source: Where the NEI stack lookup came from, when one was made for the facility.
-        status: Worst-case risk status; None while no risk is computed.
+        status: Worst-case risk status (from the screening value when screened out); None
+            while no risk is computed.
+        screening: How the batch assessment screened it; None when it did not.
         buffer: The receptor radius drawn as a circle around the facility, when receptors exist.
         sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);
             never a modelled plume footprint. Present with both receptors and meteorology.
@@ -160,6 +190,7 @@ class Facility(ContractModel):
     meteorology: Meteorology | None = None
     exposure: ExposureRanges | None = None
     status: Status | None = None
+    screening: Screening | None = None
     buffer: Polygon | None = None
     sector: Polygon | None = None
 

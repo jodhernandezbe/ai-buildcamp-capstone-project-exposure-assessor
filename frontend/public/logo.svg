@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" fill="none">
+  <defs>
+    <!-- macOS Squircle Background Gradient -->
+    <linearGradient id="bgGrad" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#1E293B" />
+      <stop offset="100%" stop-color="#090D16" />
+    </linearGradient>
+
+    <!-- Compartment 1: Atmosphere (Air Plume Cyan-Blue) -->
+    <linearGradient id="airGrad" x1="120" y1="100" x2="392" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0.85" />
+    </linearGradient>
+
+    <!-- Compartment 2: Lithosphere (Land/Soil Emerald-Teal) -->
+    <linearGradient id="soilGrad" x1="100" y1="256" x2="412" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.9" />
+    </linearGradient>
+
+    <!-- Compartment 3: Hydrosphere (Water Cobalt-Indigo) -->
+    <linearGradient id="waterGrad" x1="120" y1="330" x2="392" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- Subtle Apple Inner Rim Highlight -->
+    <linearGradient id="rimLight" x1="256" y1="16" x2="256" y2="496" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.03" />
+    </linearGradient>
+
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Apple HIG Squircle Base -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bgGrad)" />
+  <rect x="25" y="25" width="462" height="462" rx="107" stroke="url(#rimLight)" stroke-width="2" />
+
+  <!-- Subtle Polar Dispersion / Receptor Range Rings -->
+  <circle cx="256" cy="256" r="168" stroke="#94A3B8" stroke-opacity="0.12" stroke-width="2" stroke-dasharray="6 8" />
+  <circle cx="256" cy="256" r="118" stroke="#94A3B8" stroke-opacity="0.18" stroke-width="1.5" />
+
+  <!-- Top Layer: Atmosphere / Plume Dispersion Arc -->
+  <path d="M136 220 C166 132, 346 132, 376 220 C336 184, 176 184, 136 220 Z" fill="url(#airGrad)" filter="url(#glow)" />
+
+  <!-- Middle Layer: Terrestrial / Soil Horizon -->
+  <path d="M116 286 C176 248, 336 248, 396 286 C356 324, 156 324, 116 286 Z" fill="url(#soilGrad)" opacity="0.92" />
+
+  <!-- Bottom Layer: Hydrosphere / River & Water Wave -->
+  <path d="M140 342 C192 382, 320 382, 372 342 C340 412, 172 412, 140 342 Z" fill="url(#waterGrad)" />
+
+  <!-- Central Molecular Hexagon (Chemical Structure / Read-Across Core) -->
+  <polygon points="256,172 328,214 328,298 256,340 184,298 184,214" fill="#0F172A" fill-opacity="0.78" stroke="#F8FAFC" stroke-width="10" stroke-linejoin="round" />
+
+  <!-- Central Source Node & Phase Partition Vectors -->
+  <line x1="256" y1="256" x2="256" y2="178" stroke="#38BDF8" stroke-width="6" stroke-linecap="round" />
+  <line x1="256" y1="256" x2="322" y2="294" stroke="#34D399" stroke-width="6" stroke-linecap="round" />
+  <line x1="256" y1="256" x2="190" y2="294" stroke="#60A5FA" stroke-width="6" stroke-linecap="round" />
+  <circle cx="256" cy="256" r="18" fill="#FFFFFF" />
+  <circle cx="256" cy="256" r="8" fill="#38BDF8" />
+</svg>

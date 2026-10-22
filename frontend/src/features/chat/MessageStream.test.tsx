@@ -48,4 +48,42 @@ describe("MessageStream", () => {
     expect(screen.getByText("Thinking…")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Add your OpenAI API key");
   });
+
+  describe("tables", () => {
+    const TABLE = "| CAS | Rate (g/s) | HQ |\n| --- | --- | --- |\n| 110-54-3 | 1.5 | 0.2 |\n| 71-43-2 | 2 | 1.1 |";
+
+    it("renders a pipe table as a real table with header and body rows", () => {
+      render(<MessageStream messages={[assistant(TABLE)]} />);
+      expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+        "CAS",
+        "Rate (g/s)",
+        "HQ",
+      ]);
+      expect(screen.getAllByRole("row")).toHaveLength(3); // header + two body rows
+      expect(screen.getByRole("cell", { name: "110-54-3" })).toBeInTheDocument();
+    });
+
+    it("keeps each table in its own horizontal scroll area, with tabular numerals", () => {
+      render(<MessageStream messages={[assistant(TABLE)]} />);
+      const table = screen.getByRole("table");
+      const wrapper = table.parentElement;
+      expect(wrapper).toHaveClass("overflow-x-auto", "max-w-full");
+      expect(table).toHaveClass("tabular-nums");
+      expect(screen.getByRole("cell", { name: "1.5" })).toHaveClass("whitespace-nowrap");
+    });
+
+    it("lets the message shrink so a wide table scrolls instead of widening the chat", () => {
+      const { container } = render(<MessageStream messages={[assistant(TABLE)]} />);
+      expect(container.querySelector("li")).toHaveClass("min-w-0");
+      expect(screen.getByRole("table").closest(".min-w-0")).not.toBeNull();
+    });
+
+    it("still shows raw HTML inside a table cell as text", () => {
+      const { container } = render(
+        <MessageStream messages={[assistant("| a |\n| - |\n| <script>x</script> |")]} />,
+      );
+      expect(container.querySelector("script")).toBeNull();
+      expect(screen.getByRole("table")).toHaveTextContent("<script>x</script>");
+    });
+  });
 });

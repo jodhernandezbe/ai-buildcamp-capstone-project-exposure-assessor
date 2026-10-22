@@ -15,7 +15,7 @@ DESCRIPTIONS = {t.name: " ".join(t.description.split()) for t in get_all_tools()
 REQUIRED = {
     "fetch_facility_industry": (
         "the numeric code alone is useless there",
-        "only for facilities you are assessing",
+        "only when that title is null",
         "which unit emits",
         "`doc_ctrl_num`",
         '"assigned" when EPA assigned it',
@@ -41,7 +41,8 @@ REQUIRED = {
         "Never a number recalled from a chemical's name",
     ),
     "query_emissions_inventory": (
-        "Decide which facilities to assess",
+        "every facility found (listed or",
+        "eis_ids",
         "nothing about its process",
         "not evidence that nobody emits it",
         "Never a number recalled from a chemical's name",
@@ -81,6 +82,19 @@ REQUIRED = {
         "screening default",
         "say so to the user",
         "United States only",
+    ),
+    "assess_facilities": (
+        "Use this to assess the facilities of a chemical",
+        "not only the largest emitters",
+        "is screened out",
+        "Report every facility in `facilities` in the results table and every one in",
+        "not a sample",
+        "state the screening counts, thresholds and `note`",
+        "Give `frs_ids` only when the user asks about particular",
+        '"AirToxScreen global default"',
+        "say so",
+        "Never a number recalled from a chemical's name",
+        "screening estimates, not regulatory determinations",
     ),
     "calculate_exposure_metrics": (
         "`stack_source` echoes where the stack came from",

@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 
 import { FakeMap } from "../../test/fakeMaplibre";
+import { resizeObservers } from "../../test/fakeResizeObserver";
 import { facility, workspace } from "../../test/fixtures";
 import type { WorkspaceState } from "../../types/workspace";
 import { BLANK_NOTICE, ExposureMapCanvas } from "./ExposureMapCanvas";
@@ -211,5 +213,122 @@ describe("legend", () => {
       />,
     );
     expect(screen.getByText(new RegExp(SECTOR_CAPTION))).toBeInTheDocument();
+  });
+});
+
+describe("starting view and resizing", () => {
+  it("is visible on the United States with no facilities", () => {
+    render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    expect(screen.getByRole("region", { name: "Facility map" })).toBeInTheDocument();
+    expect(FakeMap.last.options.bounds).toEqual([
+      [-125, 24.5],
+      [-66.9, 49.5],
+    ]);
+    expect(screen.queryByRole("button", { name: /^Facility/ })).toBeNull();
+  });
+
+  it("resizes the map when its container changes size, once per frame, and stops on unmount", async () => {
+    const { unmount } = render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    const map = FakeMap.last;
+    const mine = [...resizeObservers].filter((observer) => observer.targets.size > 0);
+    expect(mine).toHaveLength(1);
+    act(() => {
+      mine[0]?.fire();
+      mine[0]?.fire();
+    });
+    await vi.waitFor(() => expect(map.resizes).toBe(1));
+    unmount();
+    expect(mine[0]?.targets.size).toBe(0);
+    expect(map.removed).toBe(true);
+  });
+});
+
+describe("Reset to USA view", () => {
+  it("returns the camera to the configured view and leaves the markers placed", async () => {
+    const user = userEvent.setup();
+    render(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
+    const map = load();
+    expect(map.fits).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Reset to USA view" }));
+    expect(map.fits).toHaveLength(2);
+    expect(map.fits[1]?.bounds).toEqual([
+      [-125, 24.5],
+      [-66.9, 49.5],
+    ]);
+    expect(screen.getByRole("button", { name: /Plant F1/ })).toBeInTheDocument();
+  });
+
+  it("jumps instead of flying when the user prefers reduced motion", async () => {
+    media({ reduced: true });
+    const user = userEvent.setup();
+    render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    await user.click(screen.getByRole("button", { name: "Reset to USA view" }));
+    expect(FakeMap.last.fits[0]?.options.duration).toBe(0);
+  });
+});
+
+describe("reframing a replaced workspace", () => {
+  it("shows the United States again when a workspace with facilities is replaced by an empty one", () => {
+    const { rerender } = render(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} viewEpoch={0} />);
+    const map = load();
+    expect(map.fits).toHaveLength(1);
+    rerender(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} viewEpoch={1} />);
+    expect(map.fits).toHaveLength(2);
+    expect(map.fits[1]?.bounds).toEqual([
+      [-125, 24.5],
+      [-66.9, 49.5],
+    ]);
+  });
+
+  it("does not move the camera for the very first, empty workspace", () => {
+    render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} viewEpoch={0} />);
+    expect(FakeMap.last.fits).toHaveLength(0);
+  });
+
+  it("flies to the facilities when they arrive", () => {
+    const { rerender } = render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    const map = load();
+    rerender(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
+    expect(map.fits.at(-1)?.bounds).toEqual([
+      [-20, 10],
+      [-10, 20],
+    ]);
+  });
+});
+
+describe("a container that has no size yet", () => {
+  function sizeOf(element: Element, width: number, height: number) {
+    Object.defineProperty(element, "clientWidth", { value: width, configurable: true });
+    Object.defineProperty(element, "clientHeight", { value: height, configurable: true });
+  }
+
+  it("frames the starting view when the container first gets a size", async () => {
+    render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    const map = FakeMap.last;
+    const container = screen.getByRole("region", { name: "Facility map" });
+    expect(map.fits).toHaveLength(0);
+    sizeOf(container, 700, 500);
+    act(() => [...resizeObservers].forEach((observer) => observer.fire()));
+    await vi.waitFor(() => expect(map.fits).toHaveLength(1));
+    expect(map.fits[0]?.bounds).toEqual([
+      [-125, 24.5],
+      [-66.9, 49.5],
+    ]);
+    expect(map.fits[0]?.options.duration).toBe(0);
+    act(() => [...resizeObservers].forEach((observer) => observer.fire()));
+    await vi.waitFor(() => expect(map.resizes).toBe(2));
+    expect(map.fits).toHaveLength(1); // framed once, later resizes only resize
+  });
+
+  it("limits what the legend may take of a narrow map", () => {
+    const { rerender } = render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+    const map = load();
+    const container = screen.getByRole("region", { name: "Facility map" });
+    sizeOf(container, 300, 500);
+    const legend = screen.getByRole("complementary", { name: "Map legend" });
+    Object.defineProperty(legend, "offsetWidth", { value: 260, configurable: true });
+    rerender(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
+    const padding = map.fits.at(-1)?.options.padding as { left: number; right: number };
+    expect(padding.left + padding.right).toBeLessThan(300);
   });
 });

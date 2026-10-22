@@ -9,12 +9,26 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
+from agent.completion import CompletionGuard
 from agent.graph import build_agent
 from app.chat_model import build_chat_model
 from app.key_vault import KeyringVault, ServiceKeys, default_service_keys, stored_key
 from config.agent import AgentSettings, get_agent_settings
-from config.ui import KEY_NAMES
+from config.ui import KEY_NAMES, get_ui_settings
+from prompts.registry import load_prompt
 from tools.credentials import HOLDERS
+
+
+def completion_guard() -> CompletionGuard | None:
+    """The completion check the web program also uses, from ``[ui.prompts]``; None when off."""
+    names = get_ui_settings().prompts
+    if names.max_nudges == 0:
+        return None
+    return CompletionGuard(
+        classifier_prompt=load_prompt(names.completion),
+        nudge=load_prompt(names.nudge),
+        max_nudges=names.max_nudges,
+    )
 
 
 def run_config(settings: AgentSettings) -> RunnableConfig:
@@ -62,7 +76,8 @@ def ask(question: str, model: BaseChatModel | None = None, keys: ServiceKeys | N
     settings = get_agent_settings()
     vaults = keys if keys is not None else default_service_keys()
     agent = build_agent(
-        model if model is not None else program_model(settings, vaults.vault("openai"))
+        model if model is not None else program_model(settings, vaults.vault("openai")),
+        completion_guard=completion_guard(),
     )
     with stored_keys_provided(vaults):
         result = agent.invoke({"messages": [HumanMessage(content=question)]}, run_config(settings))

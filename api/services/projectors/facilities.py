@@ -11,6 +11,7 @@ from api.schemas.workspace import (
     Industry,
     Meteorology,
     Receptors,
+    Screening,
     Status,
     Unattributed,
 )
@@ -46,7 +47,7 @@ class Attachments:
     stacks: dict[str, tuple[str, list[StackPayload]]]
     receptors: dict[str, Receptor]
     weather: dict[str, Located[MeteorologyPayload]]
-    exposures: dict[str, tuple[float, ExposurePayload]]
+    exposures: dict[str, tuple[float | str, ExposurePayload]]
 
 
 def _attach(ledger: Ledger, rules: WorkspaceRules, lost: list[Unattributed]) -> Attachments:
@@ -133,18 +134,31 @@ def _status(ranges: ExposureRanges | None, rules: WorkspaceRules) -> Status | No
     )
 
 
+def _screened_status(screening: Screening | None, rules: WorkspaceRules) -> Status | None:
+    """The status of a screened-out facility, from the screening value it was left out on."""
+    if screening is None:
+        return None
+    hq, risk = screening.value_hq, screening.value_cancer_risk
+    return worse(
+        hq_status(hq, rules.thresholds) if hq is not None else None,
+        cancer_status(risk, rules.thresholds) if risk is not None else None,
+    )
+
+
 INVENTORY_SOURCE = "TRI inventory"
 
 
 def _industry(
     entry: tuple[str, IndustryPayload] | None, record: EmissionPayload
 ) -> Industry | None:
-    """The industry tool's answer; else the bare NAICS code the inventory reported, if any."""
+    """The industry tool's answer; else the code and title the inventory reported, if any."""
     if entry is not None:
         return Industry(**entry[1].model_dump())
     if record.naics_code is None:
         return None
-    return Industry(naics_code=record.naics_code, source=INVENTORY_SOURCE)
+    return Industry(
+        naics_code=record.naics_code, naics_title=record.naics_title, source=INVENTORY_SOURCE
+    )
 
 
 def _identity(record: EmissionPayload) -> dict[str, object]:
@@ -200,13 +214,15 @@ def _attached(
     nei, exposure = found.stacks.get(frs_id), found.exposures.get(frs_id)
     receptor, weather = found.receptors.get(frs_id), found.weather.get(frs_id)
     ranges = _ranges(exposure[1]) if exposure else None
+    screening = ledger.screening.get(frs_id)
     return {
         "industry": _industry(found.industries.get(frs_id), record),
         "stacks": facility_stacks(nei[1] if nei else [], exposure[1] if exposure else None, ledger),
         "receptors": _receptors(receptor) if receptor else None,
         "meteorology": meteorology_view(weather, record) if weather else None,
         "exposure": ranges,
-        "status": _status(ranges, rules),
+        "status": _status(ranges, rules) or _screened_status(screening, rules),
+        "screening": screening,
         **_shapes(record, receptor, weather, rules),
     }
 

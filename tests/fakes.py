@@ -188,3 +188,8 @@ def verdict(
     if usage is None:
         return AIMessage(content=body)
     return AIMessage(content=body, usage_metadata=reply(body, *usage).usage_metadata)
+
+
+def completion_verdict(complete: bool, reason: str = "") -> AIMessage:
+    """A scripted reviewer answer: the JSON the completion check parses."""
+    return AIMessage(content=json.dumps({"complete": complete, "reason": reason}))

@@ -1,7 +1,8 @@
 import { Coins } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { Usage, UsageTotals } from "../../types/workspace";
+import type { UsageView } from "../../hooks/chatState";
+import type { UsageTotals } from "../../types/workspace";
 import { formatCost, formatExact, formatTokens, totalTokens } from "./formatUsage";
 
 function Row({ label, totals }: { label: string; totals: UsageTotals }) {
@@ -24,7 +25,7 @@ function Row({ label, totals }: { label: string; totals: UsageTotals }) {
   );
 }
 
-function notes(usage: Usage): string[] {
+function notes(usage: UsageView): string[] {
   const { session } = usage;
   const lines: string[] = [];
   if (!session.complete) lines.push("Some calls reported no usage, so these totals are a minimum.");
@@ -34,7 +35,7 @@ function notes(usage: Usage): string[] {
 }
 
 /** Session tokens and estimated cost in the header, with a breakdown popover. */
-export function UsageMeter({ usage }: { usage: Usage | null }) {
+export function UsageMeter({ usage }: { usage: UsageView | null }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -42,7 +43,10 @@ export function UsageMeter({ usage }: { usage: Usage | null }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
     };
     const onPointer = (event: MouseEvent) => {
       if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
@@ -77,10 +81,14 @@ export function UsageMeter({ usage }: { usage: Usage | null }) {
           id={panelId}
           role="region"
           aria-label="Usage breakdown"
-          className="glass sheet-in absolute right-0 top-full z-40 mt-2 w-72 rounded-2xl p-4 shadow-[var(--shadow)]"
+          className="sheet-in absolute right-0 top-full z-40 mt-2 w-72 rounded-2xl border border-hairline bg-solid p-4 shadow-[var(--shadow)]"
         >
-          <Row label="Last turn" totals={usage.turn} />
-          <hr className="border-hairline" />
+          {usage.turn ? (
+            <>
+              <Row label="Last turn" totals={usage.turn} />
+              <hr className="border-hairline" />
+            </>
+          ) : null}
           <Row label="Session" totals={session} />
           {notes(usage).map((line) => (
             <p key={line} className="mt-2 text-xs text-fg2">

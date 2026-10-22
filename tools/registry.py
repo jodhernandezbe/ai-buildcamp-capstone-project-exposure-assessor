@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from langchain_core.tools import BaseTool
 
+from tools.assessment import TOOLS as ASSESSMENT_TOOLS
 from tools.emissions import TOOLS as EMISSIONS_TOOLS
 from tools.exposure import TOOLS as EXPOSURE_TOOLS
 from tools.informatics import TOOLS as INFORMATICS_TOOLS
@@ -37,6 +38,7 @@ def _build_default_registry() -> ToolRegistry:
         *INFORMATICS_TOOLS,
         *EMISSIONS_TOOLS,
         *EXPOSURE_TOOLS,
+        *ASSESSMENT_TOOLS,
     )
     return registry
 

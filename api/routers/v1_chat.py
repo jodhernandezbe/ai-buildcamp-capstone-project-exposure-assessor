@@ -9,14 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 
-from api.dependencies import get_runtime, get_service_keys, get_threads
-from api.schemas.chat import ChatRequest, ThreadId
+from api.dependencies import get_runtime, get_service_keys, get_settings, get_threads
+from api.schemas.chat import ChatRequest, ThreadId, ThreadSnapshot
 from api.services.agent_runner import AgentRuntime, run_turn
+from api.services.snapshots import thread_snapshot
 from api.services.sse import encode_event
 from api.services.threads import ThreadStore
 from app.key_vault import ServiceKeys
+from config.ui import UiSettings
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+UNKNOWN = "That run is no longer available."
 BUSY = "A turn is already running for this thread."
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -47,6 +50,19 @@ async def chat_stream(
         headers=SSE_HEADERS,
         background=BackgroundTask(threads.release, body.thread_id),
     )
+
+
+@router.get("/threads/{thread_id}")
+def get_thread(
+    thread_id: ThreadId,
+    threads: Annotated[ThreadStore, Depends(get_threads)],
+    settings: Annotated[UiSettings, Depends(get_settings)],
+) -> ThreadSnapshot:
+    """A held thread's messages, workspace and usage, so the interface can resume it."""
+    snapshot = thread_snapshot(threads, thread_id, settings.pricing)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=UNKNOWN)
+    return snapshot
 
 
 @router.delete("/threads/{thread_id}", status_code=204)

@@ -14,6 +14,10 @@ interface Active {
   frsId: string;
   flipX: boolean;
   flipY: boolean;
+  /** Opened by a click: it stays while the pointer leaves, takes the pointer, and folds. */
+  pinned: boolean;
+  /** Tallest the card may be: the overlay less the gaps (px). */
+  maxHeight: number;
 }
 
 function useMapMoves(map: MapLibreMap): void {
@@ -30,7 +34,9 @@ function useMapMoves(map: MapLibreMap): void {
 
 /**
  * One keyboard-focusable button over every marker (a canvas marker cannot take focus), and the
- * glass card of the facility that is hovered or focused. Escape, leaving or blurring closes it.
+ * glass card of the facility that is hovered or focused; a click pins it so its sections can be
+ * folded and it can be read at leisure. Escape closes it; leaving or blurring closes an
+ * unpinned one; a click on the map closes a pinned one.
  */
 export function FacilityInspector({
   map,
@@ -49,24 +55,47 @@ export function FacilityInspector({
   useMapMoves(map);
 
   useEffect(() => {
+    if (!active?.pinned) return;
+    const unpin = () => setActive(null);
+    map.on("click", unpin);
+    return () => {
+      map.off("click", unpin);
+    };
+  }, [map, active?.pinned]);
+
+  useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActive(null);
+      if (event.key !== "Escape") return;
+      // Handled here: a layer below (leaving fullscreen) must not also act on this key.
+      event.preventDefault();
+      event.stopPropagation();
+      setActive(null);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [active]);
 
   const radii = facilityCollection(facilities, scale).features;
-  const open = (facility: Facility, x: number, y: number) => {
+  const placed = (facility: Facility, x: number, y: number, pinned: boolean): Active => {
     const box = overlay.current?.getBoundingClientRect();
-    setActive({
+    return {
       frsId: facility.frs_id,
       flipX: box ? box.width - x < CARD_WIDTH_PX + GAP_PX : false,
       flipY: y < CARD_HEIGHT_PX + GAP_PX,
-    });
+      pinned,
+      maxHeight: box ? Math.max(box.height - 2 * GAP_PX, 0) : CARD_HEIGHT_PX,
+    };
   };
-  const close = (frsId: string) => setActive((now) => (now?.frsId === frsId ? null : now));
+  // Hovering or focusing shows a facility unless another one is pinned.
+  const open = (facility: Facility, x: number, y: number) =>
+    setActive((now) => (now?.pinned && now.frsId !== facility.frs_id ? now : placed(facility, x, y, now?.pinned ?? false)));
+  const pin = (facility: Facility, x: number, y: number) =>
+    setActive((now) =>
+      now?.pinned && now.frsId === facility.frs_id ? null : placed(facility, x, y, true),
+    );
+  const close = (frsId: string) =>
+    setActive((now) => (now?.frsId === frsId && !now.pinned ? null : now));
 
   return (
     <div ref={overlay} className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
@@ -82,10 +111,12 @@ export function FacilityInspector({
               aria-describedby={isActive ? cardId : undefined}
               className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full bg-transparent"
               style={{ left: x, top: y, width: radius * 2, height: radius * 2 }}
+              aria-pressed={isActive && active?.pinned ? true : undefined}
               onMouseEnter={() => open(facility, x, y)}
               onMouseLeave={() => close(facility.frs_id)}
               onFocus={() => open(facility, x, y)}
               onBlur={() => close(facility.frs_id)}
+              onClick={() => pin(facility, x, y)}
             />
             {isActive && active && (
               <div
@@ -96,7 +127,14 @@ export function FacilityInspector({
                   transform: `translate(${active.flipX ? "-100%" : "0"}, ${active.flipY ? "0" : "-100%"})`,
                 }}
               >
-                <FacilityHoverCard facility={facility} digits={digits} id={cardId} />
+                <FacilityHoverCard
+                  facility={facility}
+                  digits={digits}
+                  id={cardId}
+                  pinned={active.pinned}
+                  maxHeight={active.maxHeight}
+                  onClose={() => setActive(null)}
+                />
               </div>
             )}
           </div>

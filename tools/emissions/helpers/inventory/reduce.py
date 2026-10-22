@@ -422,6 +422,9 @@ class _Reported(TypedDict):
     reporting_year: int
     doc_ctrl_num: str | None
     naics_code: str | None
+    naics_title: str | None
+    eis_ids: list[str]
+    eis_note: str | None
     total_release: float
     unit: str
     emission_rate: float
@@ -449,6 +452,9 @@ def _reported(
         "reporting_year": slot.year,
         "doc_ctrl_num": slot.doc_ctrl_num,
         "naics_code": slot.naics_code,
+        "naics_title": None,  # filled by the tool from the local code lists
+        "eis_ids": [],  # filled by the tool for the listed facilities
+        "eis_note": None,
         "total_release": amount.quantity,
         "unit": amount.unit,
         "emission_rate": rate,

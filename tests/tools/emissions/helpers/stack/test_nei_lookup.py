@@ -106,3 +106,37 @@ def test_frs_failure_is_a_warning(tmp_path: Path) -> None:
     result, _ = _run(tmp_path, {"error": "x"})
     assert result["candidates"] == []
     assert "could not be looked up" in result["warnings"][0]
+
+
+def test_eis_ids_given_skip_the_frs_lookup(tmp_path: Path) -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request expected")
+
+    client = EfserviceClient(
+        EFSERVICE, httpx.Client(transport=httpx.MockTransport(fail)), lambda _s: None
+    )
+    rows = "1000001,10,3,10,200\n"
+    result = nei_stack_result(
+        FRS,
+        client,
+        FRS_SETTINGS,
+        _settings(tmp_path, rows),
+        None,
+        eis_ids=["1000001", " ", "x", 1000001],
+    )
+    assert result["eis_ids"] == ["1000001"]
+    assert len(result["candidates"]) == 1
+
+
+def test_an_empty_eis_list_falls_back_to_the_frs_lookup(tmp_path: Path) -> None:
+    client = EfserviceClient(
+        EFSERVICE,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _r: httpx.Response(200, json=_eis("1000001")))
+        ),
+        lambda _s: None,
+    )
+    result = nei_stack_result(
+        FRS, client, FRS_SETTINGS, _settings(tmp_path, "1000001,10,3,10,200\n"), None, eis_ids=[]
+    )
+    assert result["eis_ids"] == ["1000001"]

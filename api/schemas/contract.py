@@ -8,7 +8,7 @@ from typing import Any, cast
 from pydantic import BaseModel
 from pydantic.json_schema import JsonSchemaMode, models_json_schema
 
-from api.schemas.chat import ChatRequest, StreamEventSchema, UsageTotals
+from api.schemas.chat import ChatRequest, StreamEventSchema, ThreadSnapshot, UsageTotals
 from api.schemas.settings import (
     ClientConfig,
     KeysStatusResponse,
@@ -22,6 +22,7 @@ _MODELS: tuple[tuple[type[BaseModel], JsonSchemaMode], ...] = (
     (KeyUpdatePayload, "validation"),
     (StreamEventSchema, "serialization"),
     (UsageTotals, "serialization"),
+    (ThreadSnapshot, "serialization"),
     (KeyStatusResponse, "serialization"),
     (KeysStatusResponse, "serialization"),
     (ClientConfig, "serialization"),

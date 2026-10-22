@@ -6,6 +6,8 @@ import pytest
 from pydantic import BaseModel
 
 from api.services.projectors.payloads import (
+    AssessedPayload,
+    BoundPayload,
     EmissionPayload,
     ExposurePayload,
     IndustryPayload,
@@ -16,6 +18,7 @@ from api.services.projectors.payloads import (
     RangeEntryPayload,
     ReadAcrossPayload,
     SccMatchPayload,
+    ScreenedOutPayload,
     StackExposurePayload,
     StackPayload,
     decode_json,
@@ -26,6 +29,7 @@ from tools.schemas import (
     ChemicalProperties,
     EmissionRecord,
     ExposureRange,
+    FacilityAssessment,
     FacilityExposure,
     FacilityIndustry,
     Meteorology,
@@ -34,6 +38,8 @@ from tools.schemas import (
     RangeEntry,
     ReadAcrossMatch,
     SccMatch,
+    ScreenedOut,
+    ScreeningBound,
     StackExposure,
     StackParameters,
 )
@@ -51,6 +57,9 @@ PAIRS: list[tuple[type[BaseModel], type]] = [
     (StackExposurePayload, StackExposure),
     (RangeEntryPayload, RangeEntry),
     (ExposurePayload, FacilityExposure),
+    (AssessedPayload, FacilityAssessment),
+    (ScreenedOutPayload, ScreenedOut),
+    (BoundPayload, ScreeningBound),
 ]
 
 

@@ -6,7 +6,7 @@ The chat model is an injected dependency: this module only knows about
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Hashable, Sequence
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from agent.completion import CompletionGuard, build_completion_node, route_after_completion
 from agent.guardrails import ScopeGuard, build_scope_node, route_after_scope
 from agent.state import AgentState
 from prompts.registry import load_prompt
@@ -38,12 +39,35 @@ def _add_entry(
     graph.add_conditional_edges("scope", route_after_scope, {"model": "model", END: END})
 
 
+def _add_exit(
+    graph: StateGraph[AgentState],
+    model: BaseChatModel,
+    completion_guard: CompletionGuard | None,
+    has_tools: bool,
+) -> None:
+    """Connect the agent's answer to END, through the completion check when there is one."""
+    if completion_guard is None:
+        if has_tools:
+            graph.add_conditional_edges("model", tools_condition)
+        else:
+            graph.add_edge("model", END)
+        return
+    graph.add_node("finish", build_completion_node(model, completion_guard))
+    if has_tools:
+        route: dict[Hashable, str] = {"tools": "tools", END: "finish"}
+        graph.add_conditional_edges("model", tools_condition, route)
+    else:
+        graph.add_edge("model", "finish")
+    graph.add_conditional_edges("finish", route_after_completion, {"model": "model", END: END})
+
+
 def build_agent(
     model: BaseChatModel,
     tools: Sequence[BaseTool] | None = None,
     system_prompt: str | None = None,
     checkpointer: BaseCheckpointSaver[str] | None = None,
     scope_guard: ScopeGuard | None = None,
+    completion_guard: CompletionGuard | None = None,
 ) -> CompiledStateGraph[AgentState, None, AgentState, AgentState]:
     """Compile a tool-calling agent graph around an injected chat model.
 
@@ -57,6 +81,9 @@ def build_agent(
         scope_guard: When given, every user turn is first classified by ``model`` and an
             off-topic one is answered with a redirect without running the agent or its tools.
             None, the default, leaves the graph exactly as without the check.
+        completion_guard: When given, every answer is reviewed by ``model`` and one that only
+            announces the work it will do next sends the agent back to work (a bounded number
+            of times). None, the default, leaves the graph exactly as without the check.
 
     Returns:
         A compiled graph; invoke it with ``{"messages": [...]}``.
@@ -74,8 +101,6 @@ def build_agent(
     _add_entry(graph, model, scope_guard)
     if bound_tools:
         graph.add_node("tools", ToolNode(bound_tools))
-        graph.add_conditional_edges("model", tools_condition)
         graph.add_edge("tools", "model")
-    else:
-        graph.add_edge("model", END)
+    _add_exit(graph, model, completion_guard, bool(bound_tools))
     return graph.compile(checkpointer=checkpointer)

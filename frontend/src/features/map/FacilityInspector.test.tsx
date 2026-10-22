@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { FakeMap } from "../../test/fakeMaplibre";
@@ -104,6 +104,65 @@ describe("opening and closing", () => {
   });
 });
 
+describe("pinned card", () => {
+  const stacks = [stack({ stack_number: 1 }), stack({ stack_number: 2 }), stack({ stack_number: 3 })];
+
+  it("stays open after the pointer leaves once the marker is clicked, and closes by its control", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "F1", name: "Plant F1" }));
+    await user.click(marker(/Plant F1/));
+    expect(screen.getByRole("dialog", { name: "Plant F1" })).toBeInTheDocument();
+    await user.unhover(marker(/Plant F1/));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(marker(/Plant F1/)).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Close facility details" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes with Escape and with a click on the map", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "F1", name: "Plant F1" }));
+    await user.click(marker(/Plant F1/));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(marker(/Plant F1/));
+    act(() => FakeMap.last.emit("click"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("does not switch to a hovered facility while another is pinned", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "F1", name: "Alpha" }), facility({ frs_id: "F2", name: "Beta", latitude: 11 }));
+    await user.click(marker(/Alpha/));
+    await user.hover(marker(/Beta/));
+    expect(screen.getByRole("dialog", { name: "Alpha" })).toBeInTheDocument();
+    await user.click(marker(/Beta/));
+    expect(screen.getByRole("dialog", { name: "Beta" })).toBeInTheDocument();
+  });
+
+  it("folds the stacks when there are many, and each section toggles", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "F1", name: "Plant F1", stacks }));
+    await user.click(marker(/Plant F1/));
+    const toggle = screen.getByRole("button", { name: "Stacks" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("stack 3")).not.toBeVisible();
+    await user.click(toggle);
+    expect(screen.getByText("stack 3")).toBeVisible();
+    const risk = screen.getByRole("button", { name: "Receptor risk" });
+    expect(risk).toHaveAttribute("aria-expanded", "true");
+    await user.click(risk);
+    expect(risk).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows two stacks unfolded", async () => {
+    const user = userEvent.setup();
+    show(facility({ frs_id: "F1", name: "Plant F1", stacks: stacks.slice(0, 2) }));
+    await user.hover(marker(/Plant F1/));
+    expect(screen.getByRole("button", { name: "Stacks" })).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
 describe("card content", () => {
   it("shows the identifiers, industry, release and schedule", async () => {
     const user = userEvent.setup();
@@ -140,6 +199,55 @@ describe("card content", () => {
     expect(card).toHaveTextContent("Exit temperaturenot reported");
     expect(card).toHaveTextContent("No source reported");
     expect(card).toHaveTextContent("NAICS not reported · not reported");
+  });
+
+  it("says a facility without stacks was not assessed yet, rather than that data is missing", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.tab();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Not assessed yet");
+  });
+
+  it("says a facility screened out on the bound needs no stacks, with its value and reason", async () => {
+    const user = userEvent.setup();
+    const reason = "screened out: the bound is below HQ 0.1";
+    show(
+      facility({
+        status: "below",
+        screening: {
+          outcome: "screened_out_at_bound",
+          bound_hq: 0.05,
+          bound_cancer_risk: null,
+          value_hq: 0.05,
+          value_cancer_risk: null,
+          reason,
+        },
+      }),
+    );
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("None needed: screened out on a conservative bound");
+    expect(card).toHaveTextContent("Screened out on the bound (HQ 0.05)");
+    expect(card).toHaveTextContent(reason);
+  });
+
+  it("says when only the worst case was computed", async () => {
+    const user = userEvent.setup();
+    show(
+      facility({
+        stacks: [stack()],
+        screening: {
+          outcome: "worst_case_only",
+          bound_hq: 2,
+          bound_cancer_risk: null,
+          value_hq: null,
+          value_cancer_risk: null,
+          reason: null,
+        },
+      }),
+    );
+    await user.tab();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Worst case only, with this facility's own stacks");
   });
 
   it("shows the SCC and its description for a PSTK stack", async () => {
@@ -185,6 +293,6 @@ describe("card content", () => {
     const card = screen.getByRole("tooltip");
     expect(card).toHaveTextContent("HQ, worst casenot reported");
     expect(card).toHaveTextContent("Not computed");
-    expect(card).toHaveTextContent("Stack parameters not reported yet.");
+    expect(card).toHaveTextContent("Not assessed yet: no stack parameters were obtained");
   });
 });

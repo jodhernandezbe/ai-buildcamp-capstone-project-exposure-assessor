@@ -111,6 +111,31 @@ latitude_field = "latitude"
 longitude_field = "longitude"
 batch_size = 100
 
+# EIS (NEI) facility IDs of the listed facilities, many per request, from the same service
+# (Envirofacts `efservice` has no list operator, so it would be one request per facility).
+# `eis_path` lists the EIS program registrations of {frs_ids}. FRS sometimes holds one site under
+# several FRS IDs and TRI's is not always the one registered in EIS, so a facility without a
+# registration is matched to another FRS record of exactly the same site name (`sites_path` gives
+# the facility's own FRS name and location, `twins_path` the records of that name in that state)
+# within `max_twin_distance_km`, and only when exactly one such record has EIS registrations.
+[frs_eis]
+base_url = "https://data.epa.gov/dmapservice"
+eis_path = "/frs.frs_program_facility/registry_id/in/{frs_ids}/pgm_sys_acrnm/equals/EIS"
+registry_field = "registry_id"
+eis_id_field = "pgm_sys_id"
+sites_path = "/lookups.mv_new_geo_best_picks/registry_id/in/{frs_ids}"
+twins_path = "/lookups.mv_new_geo_best_picks/primary_name/equals/{name}/state_code/equals/{state}"
+name_field = "primary_name"
+state_field = "state_code"
+latitude_field = "latitude"
+longitude_field = "longitude"
+batch_size = 100
+max_twin_distance_km = 0.5
+# Same-site searches run this many at a time (each is one request); EIS IDs found are reused
+# for cache_seconds (registrations change rarely).
+twin_workers = 4
+cache_seconds = 86400
+
 # EPA Envirofacts TRI release data. The path joins the reporting form, chemical, facility,
 # release and submission-NAICS tables (so every row carries its NAICS code) and filters on CAS number and environmental medium (the medium segment has
 # no "/equals/": that form returns nothing). {casrn} is the hyphenated CAS number, {medium} the
@@ -499,6 +524,50 @@ reported_value = "Reported"
 assigned_value = "ASSIGNED"
 title_field = "naics_desc"
 placeholder_codes = ["999999"]
+# Titles of six-digit codes from the Census Bureau's NAICS code lists (2017 and 2022 vintages,
+# newest title first), built from the workbooks in data/raw/naics (not committed) with:
+# uv run python -m scripts.build_naics_titles
+# The table is the first source of a title: every facility of the inventory carries its industry
+# in words without a request, and REF_NAICS is asked only for a code the lists do not have.
+titles_path = "data/naics_titles.csv"
+titles_code_column = "naics_code"
+titles_title_column = "naics_title"
+
+# Batch facility assessment (tools/assessment/): the whole chain (stacks, weather, residents,
+# exposure) for every listed facility in code, so no facility depends on the model repeating
+# a dozen calls. Stacks: the facility's NEI stacks; else the PSTK stacks of the SCCs that match
+# its industry title with a similarity of at least `scc_min_score` (0.55 keeps e.g. "Soybean
+# and Other Oilseed Processing" -> soybean oil SCCs at ~0.69 and drops "Railroad Rolling Stock
+# Manufacturing" -> "Stamping" at 0.47), up to `max_scc_stacks` distinct ones evaluated as a
+# range; else the EPA AirToxScreen global default. `max_facilities` matches [tri].max_listed.
+# `max_workers` facilities run at once (each makes a few requests to Open-Meteo and Census).
+[assessment]
+# Full chain (site weather, residents, representative case) for at most this many facilities,
+# highest own-stack worst-case risk first. One year of hourly ERA5 weather costs ~26 Open-Meteo
+# calls (7 variables, 365 days); the free tier allows 600 a minute and 5000 an hour.
+max_facilities = 25
+# Own stacks and worst case (no weather or Census request) for at most this many facilities
+# whose bound reaches a screening threshold, largest bound first.
+max_refined = 500
+max_workers = 4
+scc_min_score = 0.55
+max_scc_stacks = 3
+inventory_cache_seconds = 900
+max_worst_case_listed = 100
+# Screened-out facilities listed to the model, closest to a threshold first.
+max_screened_out_listed = 5
+# ERA5 is a 0.25-degree grid: facilities in one cell get the same series, so they share a request.
+weather_cell_deg = 0.25
+
+# Tiered screening (EPA's tiered approach: exclude only on a conservative bound). The bound is
+# the worst case with the AirToxScreen global default stack (3 m, cold, slow) over the SCREEN3
+# weather combinations and these ambient temperatures, with a person at the maximum. A facility
+# is assessed further when its bound reaches either threshold: HQ 0.1 leaves room for other
+# chemicals at the same site; 1e-6 is the lower end of EPA's acceptable cancer-risk range.
+[assessment.screening]
+hq = 0.1
+cancer_risk = 1e-6
+ambient_temperatures_k = [253.15, 273.15, 293.15, 313.15]
 
 # Read-across (tools/informatics/read_across.py): the closest TRI chemical to a query chemical,
 # scored as alpha * MolDeBERTa cosine + (1 - alpha) * ECFP4 Tanimoto. A match is within the
@@ -640,13 +709,18 @@ openai = "openai_api_key"
 census = "census_api_key"
 comptox = "comptox_api_key"
 
-# Scope guardrail prompts (prompts/<name>.md) and how many earlier messages, besides the
-# latest user message, the classifier sees so follow-ups are judged in context.
+# Guardrail prompts (prompts/<name>.md). The scope classifier sees `history_window` earlier
+# messages besides the latest user message, so follow-ups are judged in context. The completion
+# check reviews the agent's reply and sends it back to work with the nudge when it only announced
+# what it would do next, at most `max_nudges` times per user turn (0 turns the check off).
 [ui.prompts]
 scope_classifier = "scope_classifier"
 scope_addendum = "scope_addendum"
 scope_fallback = "scope_redirect_fallback"
 history_window = 6
+completion_classifier = "completion_check"
+completion_nudge = "completion_nudge"
+max_nudges = 2
 
 # Human-readable step label shown for each tool call, keyed by tool name.
 [ui.step_labels]
@@ -660,6 +734,7 @@ fetch_stack_parameters_from_scc = "Looked up PSTK stack parameters"
 get_meteorological_boundary = "Retrieved meteorology"
 get_population_receptors = "Counted Census receptors"
 calculate_exposure_metrics = "Computed screening dispersion and risk"
+assess_facilities = "Screened every facility and assessed those that may matter"
 
 # Basemap vector styles (CARTO Positron / Dark Matter), the half-angle of the schematic
 # downwind sector drawn on the map (degrees; a drawing choice, not a modelled plume width),
@@ -707,6 +782,28 @@ suggestions = [
     "Assess benzene (CAS 71-43-2) releases from the largest emitting facility",
     "How does the screening dispersion model pick the worst case?",
 ]
+
+# Workspace layout. The rail is an icon strip (`rail_collapsed_px`) or expanded between
+# `rail_min_px` and `rail_max_px`, in px. The chat dock opens at `chat_default_share` of the
+# viewport width, never below `chat_min_px` (px) or above `chat_max_share` of it. The overview
+# panel takes `overview_default_share` of the analysis area height, between the min and max
+# shares. These are display choices, not regulatory values.
+[ui.layout]
+rail_collapsed_px = 60
+rail_default_px = 240
+rail_min_px = 200
+rail_max_px = 320
+chat_default_share = 0.34
+chat_min_px = 280
+chat_max_share = 0.55
+overview_default_share = 0.4
+overview_min_share = 0.15
+overview_max_share = 0.75
+
+# Conversation threads kept in server memory (never on disk). Past this many, the least
+# recently used idle thread is forgotten. A memory bound, not a limit on useful history.
+[ui.threads]
+max_retained = 20
 
 # Token prices per chat model, USD per million tokens, with the date and page they were taken
 # from. A model without an entry is shown as "unpriced"; never fill these from memory.

@@ -20,12 +20,16 @@ def _open_client() -> httpx.Client:
 
 
 @tool
-def fetch_stack_parameters_from_nei(frs_id: str | int) -> NeiStackResult:
+def fetch_stack_parameters_from_nei(
+    frs_id: str | int, eis_ids: list[str] | None = None
+) -> NeiStackResult:
     """Fetch a facility's own stacks (height, diameter, exit velocity and temperature) from the NEI.
 
     Purpose:
         Plume rise and dispersion depend on stack geometry. This is the first choice for
-        stack parameters: call it after identifying a facility. A facility usually has
+        stack parameters: call it after identifying a facility, with the `eis_ids` the
+        emissions inventory listed for it (when that list is empty the facility has no NEI
+        stacks; the inventory's `eis_note` says why). A facility usually has
         several stacks, so it returns several distinct CANDIDATE stacks (real records,
         never averaged), lowest stack first, at most a configured number.
         Pass ALL candidates together, exactly as returned, as the `stacks` of one
@@ -39,6 +43,9 @@ def fetch_stack_parameters_from_nei(frs_id: str | int) -> NeiStackResult:
     Args:
         frs_id: EPA Facility Registry Service identifier of the facility (12 digits, as
             returned by `query_emissions_inventory`); a number is also accepted.
+        eis_ids: The facility's `eis_ids` from `query_emissions_inventory`, exactly as
+            listed. Given, they are used as they are (no lookup); omitted, the FRS registry is
+            asked for them.
 
     Returns:
         A dict with:
@@ -56,6 +63,7 @@ def fetch_stack_parameters_from_nei(frs_id: str | int) -> NeiStackResult:
             get_frs_settings(),
             get_stack_settings(),
             get_unit_settings().aliases,
+            eis_ids,
         )
 
 

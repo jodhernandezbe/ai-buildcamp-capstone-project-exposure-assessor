@@ -137,7 +137,7 @@ describe("chatReducer", () => {
     };
     const usage: StreamEvent = { type: "usage", seq: 3, turn: totals, session: totals };
     const state = chatReducer(sent, { type: "event", event: usage });
-    expect(state.usage).toEqual(usage);
+    expect(state.usage).toEqual({ turn: totals, session: totals });
     expect(state.busy).toBe(true); // usage does not end the turn; turn_finished does
     expect(chatReducer(state, { type: "reset" }).usage).toBeNull();
   });
@@ -146,5 +146,46 @@ describe("chatReducer", () => {
     const scope: StreamEvent = { type: "scope", seq: 1, in_scope: true };
     expect(chatReducer(sent, { type: "event", event: scope })).toBe(sent);
     expect(chatReducer(sent, { type: "reset" })).toEqual(initialChatState);
+  });
+});
+
+describe("restore", () => {
+  const totals = {
+    calls: 2,
+    input_tokens: 10,
+    cached_input_tokens: 0,
+    output_tokens: 5,
+    complete: true,
+    cost_usd: null,
+    cost_status: "unpriced" as const,
+    priced_on: null,
+  };
+  const snapshot = {
+    thread_id: "t",
+    messages: [
+      { role: "user" as const, text: "hi" },
+      { role: "assistant" as const, text: "hello" },
+    ],
+    workspace: {} as never,
+    usage: totals,
+  };
+
+  it("replaces the conversation with the held messages, idle, without tool steps", () => {
+    const state = chatReducer(sent, { type: "restore", snapshot, ids: ["a", "b"] });
+    expect(state.busy).toBe(false);
+    expect(state.messages.map((m) => [m.id, m.role, m.text, m.streaming, m.tools])).toEqual([
+      ["a", "user", "hi", false, []],
+      ["b", "assistant", "hello", false, []],
+    ]);
+  });
+
+  it("shows the session usage but no last turn", () => {
+    const state = chatReducer(initialChatState, { type: "restore", snapshot, ids: [] });
+    expect(state.usage).toEqual({ turn: null, session: totals });
+  });
+
+  it("shows no usage for a thread that made no model call", () => {
+    const empty = { ...snapshot, usage: { ...totals, calls: 0 } };
+    expect(chatReducer(sent, { type: "restore", snapshot: empty, ids: [] }).usage).toBeNull();
   });
 });

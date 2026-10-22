@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from api.schemas.workspace import Screening
 from api.services.projectors.payloads import (
     EmissionPayload,
     ExposurePayload,
@@ -74,9 +75,12 @@ class Ledger:
         default_factory=list[Located[MeteorologyPayload]]
     )
     population: list[Receptor] = field(default_factory=list[Receptor])
-    exposures: list[tuple[float, ExposurePayload]] = field(
-        default_factory=list[tuple[float, ExposurePayload]]
+    # Keyed by the emission rate the model passed, or by FRS ID (batch assessment).
+    exposures: list[tuple[float | str, ExposurePayload]] = field(
+        default_factory=list[tuple[float | str, ExposurePayload]]
     )
+    # FRS ID -> how the batch assessment screened that facility.
+    screening: dict[str, Screening] = field(default_factory=dict[str, Screening])
     warnings: list[str] = field(default_factory=list[str])
 
     def read[T](self, exchange: ToolExchange, model: type[T]) -> T | None:

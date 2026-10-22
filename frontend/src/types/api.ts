@@ -25,6 +25,7 @@ export interface ApiContract {
   KeyUpdatePayload: KeyUpdatePayload;
   KeysStatusResponse: KeysStatusResponse;
   StreamEventSchema: StreamEventSchema;
+  ThreadSnapshot: ThreadSnapshot;
   UsageTotals: UsageTotals;
   WorkspaceState: WorkspaceState;
 }
@@ -45,6 +46,7 @@ export interface ChatRequest {
  * via the `definition` "ClientConfig".
  */
 export interface ClientConfig {
+  layout: LayoutConfig;
   map: MapConfig;
   /**
    * Chat model that drives the agent.
@@ -54,6 +56,51 @@ export interface ClientConfig {
   significant_digits: number;
   suggestions: string[];
   thresholds: Thresholds;
+}
+/**
+ * Workspace layout limits from the configuration.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "LayoutConfig".
+ */
+export interface LayoutConfig {
+  chat: ChatLayout;
+  overview: OverviewLayout;
+  rail: RailLayout;
+}
+/**
+ * Chat dock: default and maximum shares of the viewport width (0-1), minimum width in px.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ChatLayout".
+ */
+export interface ChatLayout {
+  default_share: number;
+  max_share: number;
+  min_px: number;
+}
+/**
+ * Overview panel height as shares (0-1) of the analysis area.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "OverviewLayout".
+ */
+export interface OverviewLayout {
+  default_share: number;
+  max_share: number;
+  min_share: number;
+}
+/**
+ * Navigation rail widths in px: collapsed to icons, and the expanded default and limits.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "RailLayout".
+ */
+export interface RailLayout {
+  collapsed_px: number;
+  default_px: number;
+  max_px: number;
+  min_px: number;
 }
 /**
  * Basemap style URLs and the marker radii (px) for the smallest and largest emission rate.
@@ -281,7 +328,9 @@ export interface ReadAcross {
  *     total_release: Annual quantity in ``release_unit``, as reported.
  *     emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
  *     stack_source: Where the NEI stack lookup came from, when one was made for the facility.
- *     status: Worst-case risk status; None while no risk is computed.
+ *     status: Worst-case risk status (from the screening value when screened out); None
+ *         while no risk is computed.
+ *     screening: How the batch assessment screened it; None when it did not.
  *     buffer: The receptor radius drawn as a circle around the facility, when receptors exist.
  *     sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);
  *         never a modelled plume footprint. Present with both receptors and meteorology.
@@ -309,6 +358,7 @@ export interface Facility {
   receptors: Receptors | null;
   release_unit: string;
   reporting_year: number;
+  screening: Screening | null;
   sector: Polygon | null;
   stacks: Stack[];
   state: string | null;
@@ -417,6 +467,31 @@ export interface Receptors {
   source: string;
   total_population: number;
   warnings: string[];
+}
+/**
+ * How the batch assessment screened a facility.
+ *
+ * Attributes:
+ *     outcome: Fully assessed; kept at its own-stack worst case only (no weather, residents
+ *         or representative case); or screened out on the conservative bound (a generic
+ *         short, cold stack) or on its own-stack worst case, below both thresholds.
+ *     bound_hq: The bound's hazard quotient (unitless), when computed.
+ *     bound_cancer_risk: The bound's lifetime excess cancer risk (unitless), when computed.
+ *     value_hq: The screening value compared with the threshold (the bound, or the own-stack
+ *         worst case), unitless.
+ *     value_cancer_risk: Likewise for the cancer risk.
+ *     reason: Why the facility was screened out, in words; None otherwise.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "Screening".
+ */
+export interface Screening {
+  bound_cancer_risk: number | null;
+  bound_hq: number | null;
+  outcome: "full" | "worst_case_only" | "screened_out_at_bound" | "screened_out_with_own_stacks";
+  reason: string | null;
+  value_cancer_risk: number | null;
+  value_hq: number | null;
 }
 /**
  * One release point with its provenance tier and, when computed, its results.
@@ -591,6 +666,28 @@ export interface TurnFinished {
    */
   seq: number;
   type: "turn_finished";
+}
+/**
+ * A held thread as of its last finished turn (``GET /api/v1/chat/threads/{id}``).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ThreadSnapshot".
+ */
+export interface ThreadSnapshot {
+  messages: ThreadMessage[];
+  thread_id: string;
+  usage: UsageTotals;
+  workspace: WorkspaceState;
+}
+/**
+ * One user or assistant message of a thread (text only, no tool calls or results).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ThreadMessage".
+ */
+export interface ThreadMessage {
+  role: "user" | "assistant";
+  text: string;
 }
 /**
  * A box on the map, decimal degrees (WGS84, west negative).

@@ -58,6 +58,9 @@ def test_an_unavailable_keychain_provides_nothing_and_does_not_fail() -> None:
 
 def test_ask_gives_the_agents_tools_the_stored_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.graph.get_all_tools", lambda: [probe_all])
+    monkeypatch.setattr(
+        "app.run.completion_guard", lambda: None
+    )  # the scripted model has no reviewer
     call = AIMessage(content="", tool_calls=[ToolCall(name="probe_all", args={}, id="c1")])
     model = ScriptedChatModel([call, AIMessage(content="final answer")])
     keys = default_service_keys(_store(OPENAI_ENTRY, CENSUS_ENTRY, COMPTOX_ENTRY))

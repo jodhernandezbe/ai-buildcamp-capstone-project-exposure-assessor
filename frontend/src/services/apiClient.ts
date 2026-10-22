@@ -5,6 +5,7 @@ import type {
   KeysStatusResponse,
   KeyStatusResponse,
   StreamEvent,
+  ThreadSnapshot,
 } from "../types/workspace";
 import { parseSseFrames } from "./sse";
 
@@ -64,6 +65,10 @@ export const saveKey = (name: KeyName, apiKey: string): Promise<KeyStatusRespons
 
 export const clearKey = (name: KeyName): Promise<KeyStatusResponse> =>
   json(`/settings/${KEY_PATHS[name]}`, { method: "DELETE" });
+
+/** A held thread's messages, workspace and usage; rejects with a 404 `ApiError` when gone. */
+export const getThread = (threadId: string): Promise<ThreadSnapshot> =>
+  json(`/chat/threads/${encodeURIComponent(threadId)}`);
 
 export async function resetThread(threadId: string): Promise<void> {
   await request(`/chat/threads/${encodeURIComponent(threadId)}`, { method: "DELETE" });

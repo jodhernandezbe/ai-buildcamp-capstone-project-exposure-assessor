@@ -51,6 +51,28 @@
       "title": "BoundingBox",
       "type": "object"
     },
+    "ChatLayout": {
+      "additionalProperties": false,
+      "description": "Chat dock: default and maximum shares of the viewport width (0-1), minimum width in px.",
+      "properties": {
+        "default_share": {
+          "type": "number"
+        },
+        "max_share": {
+          "type": "number"
+        },
+        "min_px": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "default_share",
+        "min_px",
+        "max_share"
+      ],
+      "title": "ChatLayout",
+      "type": "object"
+    },
     "ChatRequest": {
       "additionalProperties": false,
       "description": "Body of ``POST /api/v1/chat/stream``.",
@@ -152,6 +174,9 @@
       "additionalProperties": false,
       "description": "Display settings the frontend needs (``GET /api/v1/settings/client``).",
       "properties": {
+        "layout": {
+          "$ref": "#/$defs/LayoutConfig"
+        },
         "map": {
           "$ref": "#/$defs/MapConfig"
         },
@@ -181,6 +206,7 @@
         "map",
         "significant_digits",
         "narrow_breakpoint_px",
+        "layout",
         "suggestions"
       ],
       "title": "ClientConfig",
@@ -384,7 +410,7 @@
     },
     "Facility": {
       "additionalProperties": false,
-      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status; None while no risk is computed.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
+      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
       "properties": {
         "address": {
           "anyOf": [
@@ -531,6 +557,17 @@
         "reporting_year": {
           "type": "integer"
         },
+        "screening": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Screening"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "sector": {
           "anyOf": [
             {
@@ -614,6 +651,7 @@
         "meteorology",
         "exposure",
         "status",
+        "screening",
         "buffer",
         "sector"
       ],
@@ -783,6 +821,28 @@
       "title": "KeysStatusResponse",
       "type": "object"
     },
+    "LayoutConfig": {
+      "additionalProperties": false,
+      "description": "Workspace layout limits from the configuration.",
+      "properties": {
+        "chat": {
+          "$ref": "#/$defs/ChatLayout"
+        },
+        "overview": {
+          "$ref": "#/$defs/OverviewLayout"
+        },
+        "rail": {
+          "$ref": "#/$defs/RailLayout"
+        }
+      },
+      "required": [
+        "rail",
+        "chat",
+        "overview"
+      ],
+      "title": "LayoutConfig",
+      "type": "object"
+    },
     "MapConfig": {
       "additionalProperties": false,
       "description": "Basemap style URLs and the marker radii (px) for the smallest and largest emission rate.",
@@ -896,6 +956,28 @@
       "title": "Meteorology",
       "type": "object"
     },
+    "OverviewLayout": {
+      "additionalProperties": false,
+      "description": "Overview panel height as shares (0-1) of the analysis area.",
+      "properties": {
+        "default_share": {
+          "type": "number"
+        },
+        "max_share": {
+          "type": "number"
+        },
+        "min_share": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "default_share",
+        "min_share",
+        "max_share"
+      ],
+      "title": "OverviewLayout",
+      "type": "object"
+    },
     "Polygon": {
       "additionalProperties": false,
       "description": "A GeoJSON polygon: one closed ring of ``[longitude, latitude]`` positions (WGS84).",
@@ -923,6 +1005,32 @@
         "coordinates"
       ],
       "title": "Polygon",
+      "type": "object"
+    },
+    "RailLayout": {
+      "additionalProperties": false,
+      "description": "Navigation rail widths in px: collapsed to icons, and the expanded default and limits.",
+      "properties": {
+        "collapsed_px": {
+          "type": "integer"
+        },
+        "default_px": {
+          "type": "integer"
+        },
+        "max_px": {
+          "type": "integer"
+        },
+        "min_px": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "collapsed_px",
+        "default_px",
+        "min_px",
+        "max_px"
+      ],
+      "title": "RailLayout",
       "type": "object"
     },
     "ReadAcross": {
@@ -1220,6 +1328,86 @@
       "title": "ScopeDecision",
       "type": "object"
     },
+    "Screening": {
+      "additionalProperties": false,
+      "description": "How the batch assessment screened a facility.\n\nAttributes:\n    outcome: Fully assessed; kept at its own-stack worst case only (no weather, residents\n        or representative case); or screened out on the conservative bound (a generic\n        short, cold stack) or on its own-stack worst case, below both thresholds.\n    bound_hq: The bound's hazard quotient (unitless), when computed.\n    bound_cancer_risk: The bound's lifetime excess cancer risk (unitless), when computed.\n    value_hq: The screening value compared with the threshold (the bound, or the own-stack\n        worst case), unitless.\n    value_cancer_risk: Likewise for the cancer risk.\n    reason: Why the facility was screened out, in words; None otherwise.",
+      "properties": {
+        "bound_cancer_risk": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bound_hq": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "outcome": {
+          "enum": [
+            "full",
+            "worst_case_only",
+            "screened_out_at_bound",
+            "screened_out_with_own_stacks"
+          ],
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value_cancer_risk": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value_hq": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "outcome",
+        "bound_hq",
+        "bound_cancer_risk",
+        "value_hq",
+        "value_cancer_risk",
+        "reason"
+      ],
+      "title": "Screening",
+      "type": "object"
+    },
     "Stack": {
       "additionalProperties": false,
       "description": "One release point with its provenance tier and, when computed, its results.\n\nAttributes:\n    stack_number: 1-based position in the exposure call that evaluated it, else None.\n    tier: 1 Empirical NEI, 2 PSTK by SCC, 3 EPA global default; None without a source.\n    tier_label: ``Tier 1: Empirical NEI`` and so on.\n    scc: SCC behind a PSTK stack, when reported.\n    scc_description: Most specific process description of that SCC, from an SCC lookup\n        in the same thread; None when no lookup returned it.\n    scc_score: Match score (0-1) of that lookup.",
@@ -1448,6 +1636,57 @@
         }
       ],
       "title": "StreamEventSchema"
+    },
+    "ThreadMessage": {
+      "additionalProperties": false,
+      "description": "One user or assistant message of a thread (text only, no tool calls or results).",
+      "properties": {
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "text"
+      ],
+      "title": "ThreadMessage",
+      "type": "object"
+    },
+    "ThreadSnapshot": {
+      "additionalProperties": false,
+      "description": "A held thread as of its last finished turn (``GET /api/v1/chat/threads/{id}``).",
+      "properties": {
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/ThreadMessage"
+          },
+          "type": "array"
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceState"
+        }
+      },
+      "required": [
+        "thread_id",
+        "messages",
+        "workspace",
+        "usage"
+      ],
+      "title": "ThreadSnapshot",
+      "type": "object"
     },
     "Thresholds": {
       "additionalProperties": false,
@@ -1859,6 +2098,9 @@
     "StreamEventSchema": {
       "$ref": "#/$defs/StreamEventSchema"
     },
+    "ThreadSnapshot": {
+      "$ref": "#/$defs/ThreadSnapshot"
+    },
     "UsageTotals": {
       "$ref": "#/$defs/UsageTotals"
     },
@@ -1873,6 +2115,7 @@
     "KeyUpdatePayload",
     "KeysStatusResponse",
     "StreamEventSchema",
+    "ThreadSnapshot",
     "UsageTotals",
     "WorkspaceState"
   ],

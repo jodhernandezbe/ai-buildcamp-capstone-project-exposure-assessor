@@ -14,6 +14,7 @@ from api.schemas.settings import (
     KeysStatusResponse,
     KeyStatusResponse,
     KeyUpdatePayload,
+    LayoutConfig,
     MapConfig,
     Thresholds,
 )
@@ -101,6 +102,17 @@ def _map_config(settings: UiSettings) -> MapConfig:
     )
 
 
+def _layout_config(settings: UiSettings) -> LayoutConfig:
+    shown = settings.layout
+    return LayoutConfig.model_validate(
+        {
+            "rail": vars(shown.rail),
+            "chat": vars(shown.chat),
+            "overview": vars(shown.overview),
+        }
+    )
+
+
 @router.get("/client")
 def client_config(settings: Settings) -> ClientConfig:
     """Display settings the frontend needs."""
@@ -116,5 +128,6 @@ def client_config(settings: Settings) -> ClientConfig:
         map=_map_config(settings),
         significant_digits=display.significant_digits,
         narrow_breakpoint_px=display.narrow_breakpoint_px,
+        layout=_layout_config(settings),
         suggestions=list(display.suggestions),
     )

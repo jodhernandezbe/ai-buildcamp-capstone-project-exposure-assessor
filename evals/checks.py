@@ -23,6 +23,7 @@ SCC_STACK = "fetch_stack_parameters_from_scc"
 METEOROLOGY = "get_meteorological_boundary"
 POPULATION = "get_population_receptors"
 EXPOSURE = "calculate_exposure_metrics"
+ASSESSMENT = "assess_facilities"
 STACK_FIELDS = ("stack_height", "stack_diameter", "exit_velocity", "exit_temperature")
 _REL_TOL = 1e-9
 
@@ -179,6 +180,8 @@ def site_inputs_per_assessed_facility() -> Check:
     def evaluate(record: RunRecord) -> CheckResult:
         facilities = inventory_facilities(record)
         assessed = assessed_candidates(record)
+        if not assessed and record.calls_to(ASSESSMENT):
+            return CheckResult(True, "the batch assessment gathered the site inputs")
         if not assessed:
             return CheckResult(False, "no facility had its NEI stacks requested")
         problems = [p for frs in assessed for p in _site_problems(record, frs, facilities.get(frs))]
@@ -264,3 +267,100 @@ def no_fallback_for_facilities_with_candidates() -> Check:
         return _verdict(problems, "no fallback for facilities with their own stacks")
 
     return Check("no fallback for facilities with NEI stacks", evaluate)
+
+
+def batch_facilities(record: RunRecord) -> list[Facility]:
+    """Facilities the batch assessment returned, fully assessed and at worst case only."""
+    found: list[Facility] = []
+    for call in record.calls_to(ASSESSMENT):
+        output = _mapping(call.output)
+        found += _dicts(output.get("facilities")) + _dicts(output.get("worst_case_only"))
+    return found
+
+
+def _batch_unaccounted(record: RunRecord) -> list[str]:
+    """Batch results whose counts (assessed, worst case, screened out) miss some facility."""
+    problems: list[str] = []
+    for call in record.calls_to(ASSESSMENT):
+        output = _mapping(call.output)
+        screening = _mapping(output.get("screening"))
+        covered = (
+            len(batch_facilities(record))
+            + len(_dicts(output.get("not_assessed")))
+            + (_number(screening.get("screened_out_at_bound")) or 0)
+            + (_number(screening.get("screened_out_with_own_stacks")) or 0)
+        )
+        found = _number(output.get("facilities_found")) or 0
+        if covered < found:
+            problems.append(f"{int(found - covered)} of {int(found)} facilities unaccounted for")
+    return problems
+
+
+def screened_out(record: RunRecord) -> int:
+    """Facilities the batch assessment screened out, on the bound or with their own stacks."""
+    total = 0.0
+    for call in record.calls_to(ASSESSMENT):
+        screening = _mapping(_mapping(call.output).get("screening"))
+        total += (_number(screening.get("screened_out_at_bound")) or 0) + (
+            _number(screening.get("screened_out_with_own_stacks")) or 0
+        )
+    return int(total)
+
+
+def _by_hand(record: RunRecord, facility: Facility) -> bool:
+    """Whether an exposure call carried this facility's emission rate (the manual route)."""
+    return any(
+        _close(c.args.get("emission_rate"), facility.get("emission_rate"))
+        for c in record.calls_to(EXPOSURE)
+    )
+
+
+def covered_facilities(record: RunRecord) -> dict[str, Facility]:
+    """Inventory facilities assessed by either route, plus the batch tool's own, by FRS ID."""
+    covered = {str(f.get("frs_id")): f for f in batch_facilities(record)}
+    for frs_id, facility in inventory_facilities(record).items():
+        if frs_id in covered or _by_hand(record, facility):
+            covered[frs_id] = facility
+    return covered
+
+
+def every_facility_covered() -> Check:
+    """Every inventory facility is assessed (by the batch tool or by hand) or accounted for
+    by the batch tool's screening counts; nothing is dropped silently."""
+
+    def evaluate(record: RunRecord) -> CheckResult:
+        inventory = inventory_facilities(record)
+        covered = covered_facilities(record)
+        if record.calls_to(ASSESSMENT):
+            problems = _batch_unaccounted(record)
+        elif inventory:
+            missing = [frs for frs in inventory if frs not in covered]
+            problems = [f"not assessed: {', '.join(missing)}"] if missing else []
+        else:
+            problems = ["neither the inventory nor the batch assessment was called"]
+        done = f"{len(covered)} facilities assessed, {screened_out(record)} screened out"
+        return _verdict(problems, f"{done}, none dropped")
+
+    return Check("every facility covered", evaluate)
+
+
+def _named(report: str, facility: Facility) -> bool:
+    text = report.lower()
+    frs, name = str(facility.get("frs_id") or ""), str(facility.get("facility_name") or "")
+    return bool(frs and frs in report) or bool(name.strip() and name.strip().lower() in text)
+
+
+def every_covered_facility_reported() -> Check:
+    """The report names every facility that was assessed (by FRS ID or name)."""
+
+    def evaluate(record: RunRecord) -> CheckResult:
+        covered = covered_facilities(record)
+        if not covered and screened_out(record):
+            return CheckResult(True, f"nothing to name: {screened_out(record)} screened out")
+        if not covered:
+            return CheckResult(False, "no facility was assessed")
+        missing = [frs for frs, f in covered.items() if not _named(record.report, f)]
+        problems = [f"not in the report: {', '.join(missing)}"] if missing else []
+        return _verdict(problems, f"all {len(covered)} assessed facilities reported")
+
+    return Check("every assessed facility reported", evaluate)

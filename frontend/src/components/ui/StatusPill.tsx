@@ -13,7 +13,7 @@ export function StatusPill({ status }: { status: Status | null }) {
     : { label: "Not computed", tone: "bg-fg2/10 text-fg2" };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
       data-status={status ?? "none"}
     >
       {label}

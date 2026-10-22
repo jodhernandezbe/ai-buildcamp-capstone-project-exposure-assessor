@@ -9,6 +9,7 @@ from urllib.parse import quote
 from config.industry import IndustrySettings
 from tools.digits import digit_string
 from tools.emissions.helpers.efservice import EfserviceClient, EfserviceError, Row
+from tools.emissions.helpers.naics_titles import naics_titles
 from tools.schemas import FacilityIndustry
 
 SOURCE = "TRI submission NAICS"
@@ -74,7 +75,10 @@ def _origin(row: Row, settings: IndustrySettings) -> str | None:
 
 
 def _title(code: str, client: EfserviceClient, settings: IndustrySettings) -> str | None:
-    """Return the title of ``code`` from the reference table, or None if it has none."""
+    """The title of ``code``: from the local code lists, else TRI's reference table, else None."""
+    local = naics_titles(settings).get(code)
+    if local is not None:
+        return local
     path = settings.title_path.format(naics_code=quote(code, safe=""))
     try:
         rows = client.get_rows(path)

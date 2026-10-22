@@ -1,4 +1,4 @@
-import type { StreamEvent, Usage } from "../types/workspace";
+import type { StreamEvent, ThreadSnapshot, UsageTotals } from "../types/workspace";
 
 export interface ToolStep {
   callId: string;
@@ -15,10 +15,16 @@ export interface ChatMessage {
   tools: ToolStep[];
 }
 
+/** What the usage meter shows: the session, and the last turn when one was streamed here. */
+export interface UsageView {
+  turn: UsageTotals | null;
+  session: UsageTotals;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   busy: boolean;
-  usage: Usage | null;
+  usage: UsageView | null;
 }
 
 export type ChatAction =
@@ -26,6 +32,7 @@ export type ChatAction =
   | { type: "event"; event: StreamEvent }
   | { type: "failed"; message: string }
   | { type: "closed" }
+  | { type: "restore"; snapshot: ThreadSnapshot; ids: string[] }
   | { type: "reset" };
 
 export const initialChatState: ChatState = { messages: [], busy: false, usage: null };
@@ -72,7 +79,7 @@ function onEvent(state: ChatState, event: StreamEvent): ChatState {
     case "tool_status":
       return updateLastAssistant(state, (m) => withToolStatus(m, event));
     case "usage":
-      return { ...state, usage: event };
+      return { ...state, usage: { turn: event.turn, session: event.session } };
     case "error":
       return updateLastAssistant(state, (m) => ({ ...m, error: event.message }));
     case "turn_finished":
@@ -80,6 +87,20 @@ function onEvent(state: ChatState, event: StreamEvent): ChatState {
     default:
       return state;
   }
+}
+
+/** A held thread's text messages and session usage; its tool steps are not stored. */
+function restored(snapshot: ThreadSnapshot, ids: string[]): ChatState {
+  const messages = snapshot.messages.map((message, index): ChatMessage => ({
+    id: ids[index] ?? `restored-${index}`,
+    role: message.role,
+    text: message.text,
+    error: null,
+    streaming: false,
+    tools: [],
+  }));
+  const usage = snapshot.usage.calls > 0 ? { turn: null, session: snapshot.usage } : null;
+  return { messages, busy: false, usage };
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -117,6 +138,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "closed":
       return { ...updateLastAssistant(state, (m) => ({ ...m, streaming: false })), busy: false };
+    case "restore":
+      return restored(action.snapshot, action.ids);
     case "reset":
       return initialChatState;
   }

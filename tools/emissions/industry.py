@@ -27,9 +27,10 @@ def fetch_facility_industry(doc_ctrl_num: str | int) -> FacilityIndustry:
         each record, identifying the submission whose year the record reports). The
         `naics_title` (for example "Petroleum Refineries") is exactly the text the SCC
         process search needs to suggest the processes that likely emit and, from them, a
-        process-typical stack; the numeric code alone is useless there. It costs two requests
-        per record, so call it only for facilities you are assessing, and only when you need
-        the industry (for example because the facility has no stack of its own in the NEI).
+        process-typical stack; the numeric code alone is useless there. The inventory already
+        gives each record its `naics_title`, so call this only when that title is null and
+        you need the industry (for example because the facility has no stack of its own in
+        the NEI): it asks TRI's own tables and costs a request or two per record.
         An industry says what a facility makes, not which unit emits, so treat what you derive
         from it as a candidate. If the industry is unknown (null title), do not guess one:
         call `fetch_stack_parameters_from_scc` without a code to get the EPA global default

@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
 
 from agent.graph import build_agent
-from app.run import run_config
+from app.run import completion_guard, run_config
 from config.agent import AgentSettings
 from evals.cassette import UNRECORDED_KEY
 from evals.record import RunRecord, ToolCall
@@ -81,7 +81,7 @@ def run_scenario(
     settings the program uses. Expected failures go into the record.
     """
     scenario_id, query = scenario
-    agent = build_agent(model, tools)
+    agent = build_agent(model, tools, completion_guard=completion_guard())
     messages: list[AnyMessage] = []
     error: str | None = None
     try:

@@ -3,7 +3,10 @@
 Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `tools/`.
 
 - Tools must not import from `agent/`, and must not call an LLM.
-- Tools must not import other tool subfolders; shared types go in `tools/schemas.py`.
+- Tools must not import other tool subfolders; shared types go in `tools/schemas.py`. The one
+  exception is `tools/assessment/`, the batch assessment: it composes the other folders' tools
+  (invoking them, or the public functions of their tool modules, never their helpers) and adds
+  only the selection, the stack-source order and the summary; only the registry imports it.
 - Never import a provider package (`langchain_openai`, ...) in `tools/`, with two exceptions:
   `tools/emissions/rag/embeddings.py` builds the default embeddings for the SCC retrieval
   (lazily, chosen by `[embeddings].provider`), and

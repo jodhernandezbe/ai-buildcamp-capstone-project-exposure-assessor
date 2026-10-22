@@ -18,7 +18,7 @@ from tools.emissions.stack import fetch_stack_parameters_from_nei, fetch_stack_p
 def test_nei_schema_and_description() -> None:
     tool = fetch_stack_parameters_from_nei
     assert tool.name == "fetch_stack_parameters_from_nei"
-    assert set(tool.args) == {"frs_id"}
+    assert set(tool.args) == {"frs_id", "eis_ids"}
     description = tool.description
     assert "fetch_stack_parameters_from_scc" in description
     assert "first choice" in description
@@ -48,6 +48,25 @@ def test_nei_tool_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert result["eis_ids"] == ["1000001"]
     assert [round(c["stack_height"] / 0.3048) for c in result["candidates"]] == [10, 20]
     assert all(c["source"] == "NEI" for c in result["candidates"])
+
+
+def test_nei_tool_uses_the_eis_ids_given_without_a_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request expected")
+
+    monkeypatch.setattr(
+        stack, "_open_client", lambda: httpx.Client(transport=httpx.MockTransport(fail))
+    )
+    nei = _nei_settings(tmp_path, "1000001,10,3,10,200\n")
+    monkeypatch.setattr(stack, "get_stack_settings", lambda: nei)
+    result = fetch_stack_parameters_from_nei.invoke(
+        {"frs_id": "999999999999", "eis_ids": ["1000001"]}
+    )
+    assert result["eis_ids"] == ["1000001"]
+    assert len(result["candidates"]) == 1
+    assert set(fetch_stack_parameters_from_nei.args) == {"frs_id", "eis_ids"}
 
 
 @pytest.mark.parametrize("frs", ["abc", ""])

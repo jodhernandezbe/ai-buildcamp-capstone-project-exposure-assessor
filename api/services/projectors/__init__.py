@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from types import MappingProxyType
 
+from api.services.projectors.assessment import project_assessment
 from api.services.projectors.chemistry import project_properties, project_read_across
 from api.services.projectors.emissions import (
     project_industry,
@@ -38,5 +39,6 @@ PROJECTORS: Mapping[str, Projector] = MappingProxyType(
         "get_meteorological_boundary": project_meteorology,
         "get_population_receptors": project_population,
         "calculate_exposure_metrics": project_exposure,
+        "assess_facilities": project_assessment,
     }
 )

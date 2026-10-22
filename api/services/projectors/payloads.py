@@ -8,7 +8,7 @@ Numbers must be finite and never ``bool``.
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
@@ -30,6 +30,9 @@ class EmissionPayload(Payload):
     reporting_year: int
     doc_ctrl_num: str | None = None
     naics_code: str | None = None
+    naics_title: str | None = None
+    eis_ids: list[str] = []
+    eis_note: str | None = None
     total_release: Num
     unit: str
     emission_rate: Num
@@ -156,6 +159,40 @@ class ExposurePayload(Payload):
     stacks_given: int
     stacks_evaluated: int
     warnings: list[str] = Field(default_factory=list[str])
+
+
+class BoundPayload(Payload):
+    hq: Num | None = None
+    cancer_risk: Num | None = None
+
+
+class AssessedPayload(Payload):
+    """One facility of the batch assessment: its record and every result of its chain.
+
+    At "worst case only" it has no weather or residents (they were not requested).
+    """
+
+    record: EmissionPayload
+    level: Literal["full", "worst case only"] = "full"
+    bound: BoundPayload | None = None
+    stacks: list[StackPayload]
+    scc_matches: list[SccMatchPayload] = Field(default_factory=list[SccMatchPayload])
+    industry: IndustryPayload | None = None
+    meteorology: MeteorologyPayload | None = None
+    population: PopulationPayload | None = None
+    radius_km: Num | None = None
+    exposure: ExposurePayload
+
+
+class ScreenedOutPayload(Payload):
+    """A facility the batch assessment left out, with its screening value and the reason."""
+
+    record: EmissionPayload
+    stage: Literal["bound", "own stacks"]
+    hq: Num | None = None
+    cancer_risk: Num | None = None
+    stacks: list[StackPayload] = Field(default_factory=list[StackPayload])
+    reason: str
 
 
 def decode_json(content: object) -> object | None:

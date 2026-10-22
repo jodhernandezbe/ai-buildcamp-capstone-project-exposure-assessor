@@ -19,6 +19,7 @@ export class FakeMap {
   styles: unknown[] = [];
   fits: FitCall[] = [];
   removed = false;
+  resizes = 0;
 
   constructor(options: Record<string, unknown>) {
     this.options = options;
@@ -86,6 +87,10 @@ export class FakeMap {
 
   fitBounds(bounds: FitCall["bounds"], options: FitCall["options"]): void {
     this.fits.push({ bounds, options });
+  }
+
+  resize(): void {
+    this.resizes += 1;
   }
 
   remove(): void {

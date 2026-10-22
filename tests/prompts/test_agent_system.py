@@ -50,5 +50,9 @@ def test_requires_visible_quality_signals_and_limits() -> None:
         "asks the user for the number rather than supplying one",
         "a borrowed value is never presented as a measured value",
         "evaluate every one",
+        # Every facility is covered: small sources are screened, never dropped by rank.
+        "cover every facility of the chemical, not only the largest emitters",
+        "a conservative screen shows it cannot reach a level of concern",
+        "never end a reply by announcing what you will do next",
     ):
         assert text.lower() in " ".join(PROMPT.split()).lower()  # line wrapping is irrelevant

@@ -440,6 +440,10 @@ def test_the_record_carries_the_primary_naics_code() -> None:
     assert _only([_naics("311224")])["naics_code"] == "311224"
 
 
+def test_the_record_leaves_the_title_for_the_tool_to_fill() -> None:
+    assert _only([_naics("311224")])["naics_title"] is None
+
+
 def test_a_submission_repeated_for_its_secondary_codes_is_counted_once() -> None:
     rows = [_naics("311224", "1"), _naics("424510", "0"), _naics("325199", "0")]
     records, reducer = _run(rows)

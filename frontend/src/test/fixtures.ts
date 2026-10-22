@@ -31,6 +31,7 @@ export function facility(over: Partial<Facility> = {}): Facility {
     meteorology: null,
     exposure: null,
     status: null,
+    screening: null,
     buffer: null,
     sector: null,
     ...over,

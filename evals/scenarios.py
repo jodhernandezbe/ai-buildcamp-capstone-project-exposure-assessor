@@ -29,7 +29,9 @@ CHEMICAL_NAME_ONLY = Scenario(
 )
 
 # 1,2-Dibromo-3-chloropropane: its live TRI inventory has two facilities, both with NEI stacks,
-# which keeps the run and the cassette small while exercising the stack fan-out.
+# which keeps the run and the cassette small. The checks are about the outcome, whichever
+# route the agent takes (the batch assessment, or the chain by hand): every facility assessed
+# and reported, and the chain done right when it is driven by hand.
 FULL_ASSESSMENT_CAS = "96-12-8"
 
 FULL_ASSESSMENT = Scenario(
@@ -42,7 +44,8 @@ FULL_ASSESSMENT = Scenario(
         c.completed(),
         c.no_unrecorded(),
         c.called_with("fetch_chemical_properties", cas_number=FULL_ASSESSMENT_CAS),
-        c.called_with(c.INVENTORY, cas_number=FULL_ASSESSMENT_CAS),
+        c.every_facility_covered(),
+        c.every_covered_facility_reported(),
         c.site_inputs_per_assessed_facility(),
         c.exposure_covers_every_candidate(),
         c.no_fallback_for_facilities_with_candidates(),

@@ -20,6 +20,7 @@ def test_all_tools_registered_with_docstrings() -> None:
         "get_meteorological_boundary",
         "get_population_receptors",
         "calculate_exposure_metrics",
+        "assess_facilities",
     }
     assert all(t.description for t in tools)
 

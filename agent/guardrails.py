@@ -19,6 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
 from pydantic import BaseModel
 
+from agent.completion import is_nudge
 from agent.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -48,16 +49,25 @@ class ScopeGuard:
 
 
 def _speaker(message: BaseMessage) -> str | None:
+    if is_nudge(message):
+        return None  # the completion guardrail's own words, not the user's
     if isinstance(message, HumanMessage):
         return "User"
     return "Assistant" if isinstance(message, AIMessage) else None
 
 
+def _latest_user(messages: Sequence[BaseMessage]) -> int | None:
+    """Index of the latest message the user wrote (a nudge is not one)."""
+    for index in reversed(range(len(messages))):
+        message = messages[index]
+        if isinstance(message, HumanMessage) and not is_nudge(message):
+            return index
+    return None
+
+
 def _conversation(messages: Sequence[BaseMessage], window: int) -> str | None:
     """The window of earlier turns and the latest user message, as material to judge."""
-    latest = next(
-        (i for i in reversed(range(len(messages))) if isinstance(messages[i], HumanMessage)), None
-    )
+    latest = _latest_user(messages)
     if latest is None:
         return None
     lines = [

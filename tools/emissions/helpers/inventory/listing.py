@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from tools.schemas import EmissionRecord, InventoryResult
 
@@ -35,6 +35,7 @@ def rank_and_cap(
     max_listed: int,
     state: str | None = None,
     city: str | None = None,
+    enrich: Callable[[list[EmissionRecord]], list[EmissionRecord]] | None = None,
 ) -> tuple[InventoryResult, list[EmissionRecord]]:
     """Rank facilities by emission rate and cap what the model sees.
 
@@ -43,6 +44,8 @@ def rank_and_cap(
         max_listed: Most facilities listed to the model.
         state: Keep only facilities in this state (postal abbreviation, any case).
         city: Keep only facilities in this city (any case, exact name).
+        enrich: Applied to the listed facilities only (lookups worth making for the few the
+            model sees, not for every facility found); returns them in the same order.
 
     Returns:
         The model's view (``InventoryResult``) and the complete matching list, largest
@@ -54,7 +57,8 @@ def rank_and_cap(
         key=lambda r: r["emission_rate"],
         reverse=True,
     )
-    listed = matching[:max_listed]
+    listed = enrich(matching[:max_listed]) if enrich else matching[:max_listed]
+    matching[: len(listed)] = listed
     filtered = wanted_state is not None or wanted_city is not None
     result: InventoryResult = {
         "total_found": len(records),

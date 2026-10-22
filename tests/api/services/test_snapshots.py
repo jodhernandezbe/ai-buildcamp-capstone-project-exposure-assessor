@@ -1,0 +1,69 @@
+"""Tests for the thread snapshot: text messages, workspace and usage of a held thread."""
+
+from __future__ import annotations
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+
+from agent.completion import NUDGE_NAME
+from api.services.snapshots import thread_messages, thread_snapshot
+from api.services.threads import ThreadStore
+
+
+def test_only_user_and_assistant_text_is_kept() -> None:
+    shown = thread_messages(
+        [
+            SystemMessage(content="rules"),
+            HumanMessage(content="map hexane"),
+            AIMessage(content="", tool_calls=[{"name": "t", "args": {}, "id": "1"}]),
+            ToolMessage(content="{}", tool_call_id="1"),
+            AIMessage(content="Here it is."),
+        ]
+    )
+    assert [(m.role, m.text) for m in shown] == [
+        ("user", "map hexane"),
+        ("assistant", "Here it is."),
+    ]
+
+
+def test_assistant_text_around_tool_calls_is_one_message() -> None:
+    shown = thread_messages(
+        [HumanMessage(content="q"), AIMessage(content="Looking."), AIMessage(content="Done.")]
+    )
+    assert [m.text for m in shown] == ["q", "Looking.\n\nDone."]
+
+
+def test_text_blocks_are_read_and_other_blocks_dropped() -> None:
+    blocks: list[str | dict[str, object]] = [
+        {"type": "text", "text": "Hi"},
+        {"type": "tool_use", "id": "1"},
+    ]
+    assert thread_messages([AIMessage(content=blocks)])[0].text == "Hi"
+
+
+def test_unknown_thread_has_no_snapshot() -> None:
+    assert thread_snapshot(ThreadStore(), "nope", {}) is None
+
+
+def test_held_thread_without_turns_has_an_empty_snapshot() -> None:
+    threads = ThreadStore()
+    threads.claim("a")
+    snapshot = thread_snapshot(threads, "a", {})
+    assert snapshot is not None
+    assert snapshot.messages == []
+    assert snapshot.workspace.facilities == []
+    assert snapshot.usage.calls == 0
+
+
+def test_a_completion_nudge_is_not_shown_and_the_text_after_it_joins_the_reply() -> None:
+    shown = thread_messages(
+        [
+            HumanMessage(content="map hexane"),
+            AIMessage(content="I will now gather the data."),
+            HumanMessage(content="Continue now.", name=NUDGE_NAME),
+            AIMessage(content="Here it is."),
+        ]
+    )
+    assert [(m.role, m.text) for m in shown] == [
+        ("user", "map hexane"),
+        ("assistant", "I will now gather the data.\n\nHere it is."),
+    ]

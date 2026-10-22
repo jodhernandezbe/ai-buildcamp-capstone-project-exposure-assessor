@@ -67,6 +67,14 @@ def test_client_config_comes_from_settings(client: TestClient) -> None:
     assert body["model"]
 
 
+def test_client_config_carries_the_layout_limits(client: TestClient) -> None:
+    layout = client.get("/api/v1/settings/client").json()["layout"]
+    assert layout["rail"]["min_px"] < layout["rail"]["default_px"] <= layout["rail"]["max_px"]
+    assert 0 < layout["chat"]["default_share"] <= layout["chat"]["max_share"] < 1
+    assert layout["chat"]["min_px"] > 0
+    assert 0 < layout["overview"]["min_share"] <= layout["overview"]["max_share"] < 1
+
+
 # --- the three keys ---------------------------------------------------------------------------
 
 ENTRIES = {"openai": OPENAI_ENTRY, "census": CENSUS_ENTRY, "comptox": COMPTOX_ENTRY}

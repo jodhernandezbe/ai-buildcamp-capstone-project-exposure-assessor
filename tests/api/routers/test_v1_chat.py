@@ -138,3 +138,38 @@ def test_the_command_line_agent_keeps_the_standard_prompt_and_no_guard() -> None
 
     source = inspect.getsource(run)
     assert "scope_guard" not in source and "system_prompt" not in source
+
+
+def test_snapshot_returns_the_turns_of_a_held_thread(chat: TestClient) -> None:
+    _post(chat, "t9")
+    body = chat.get("/api/v1/chat/threads/t9").json()
+    assert body["thread_id"] == "t9"
+    assert [(m["role"], m["text"]) for m in body["messages"]] == [
+        ("user", "hello"),
+        ("assistant", "an answer"),
+    ]
+    assert body["workspace"]["facilities"] == []
+    assert body["usage"]["calls"] >= 0
+    assert KEY not in str(body)
+
+
+def test_snapshot_of_an_unknown_thread_is_a_generic_404(chat: TestClient) -> None:
+    response = chat.get("/api/v1/chat/threads/never-seen")
+    assert response.status_code == 404
+    assert set(response.json()) == {"error", "correlation_id"}
+
+
+def test_snapshot_rejects_a_malformed_id(chat: TestClient) -> None:
+    assert chat.get("/api/v1/chat/threads/bad.id").status_code == 422
+
+
+def test_snapshot_does_not_change_the_thread(chat: TestClient) -> None:
+    _post(chat, "t8")
+    first = chat.get("/api/v1/chat/threads/t8").json()
+    assert chat.get("/api/v1/chat/threads/t8").json() == first
+
+
+def test_snapshot_survives_a_reset_as_a_404(chat: TestClient) -> None:
+    _post(chat, "t7")
+    chat.delete("/api/v1/chat/threads/t7", headers=OWN)
+    assert chat.get("/api/v1/chat/threads/t7").status_code == 404

@@ -580,6 +580,17 @@ def test_the_inventory_naics_code_shows_until_the_industry_tool_answers() -> Non
     )
 
 
+def test_the_inventory_title_shows_for_every_facility() -> None:
+    state = build(inventory(record(naics_code="311224", naics_title="Synthetic milling")))
+    industry = state.facilities[0].industry
+    assert industry is not None
+    assert (industry.naics_title, industry.code_origin, industry.source) == (
+        "Synthetic milling",
+        None,
+        "TRI inventory",
+    )
+
+
 def test_the_industry_tool_answer_replaces_the_bare_code() -> None:
     body = {
         "naics_code": "311224",

@@ -14,7 +14,7 @@ from langchain_core.messages import ToolMessage
 from config.efservice import get_efservice_settings
 from tests.tools.emissions.records import emission_record
 from tools.emissions import inventory
-from tools.emissions.inventory import query_emissions_inventory
+from tools.emissions.inventory import clear_inventory_cache, query_emissions_inventory
 from tools.registry import get_all_tools
 from tools.schemas import EmissionRecord, InventoryResult
 
@@ -27,8 +27,10 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if "mv_new_geo_best_picks" in str(request.url):
-            return httpx.Response(200, json=[])  # FRS has no point either
+        if "mv_new_geo_best_picks" in str(request.url) or "frs_program_facility" in str(
+            request.url
+        ):
+            return httpx.Response(200, json=[])  # FRS has no point, and no EIS registration
         seen.append(request)
         return httpx.Response(200, json=ROWS)
 
@@ -124,6 +126,15 @@ def test_every_record_carries_its_submission_control_number(
     assert any(record["doc_ctrl_num"] for record in records)
 
 
+def test_listed_facilities_carry_their_eis_ids(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = _view({"cas_number": "50-00-0"})
+    listed = view["facilities"]
+    assert listed and all(record["eis_ids"] == [] for record in listed)
+    assert all("no EIS registration" in (record["eis_note"] or "") for record in listed)
+
+
 def test_description_explains_the_window_and_the_control_number() -> None:
     text = " ".join(query_emissions_inventory.description.split())
     for phrase in ("last 2 reporting years", "doc_ctrl_num", "fetch_facility_industry"):
@@ -201,3 +212,38 @@ def _list_at_most(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
         return many
 
     monkeypatch.setattr(inventory, "lookup_emissions", fake_lookup)
+
+
+def test_the_same_inventory_is_read_once_while_it_is_remembered(
+    requests_seen: list[httpx.Request],
+) -> None:
+    first = _all({"cas_number": "50-00-0"})
+    asked = len(requests_seen)
+    again = _all({"cas_number": "50-00-0"})
+    assert again == first and len(requests_seen) == asked
+    clear_inventory_cache()
+    _all({"cas_number": "50-00-0"})
+    assert len(requests_seen) > asked
+
+
+def test_eis_ids_are_remembered_but_an_unreachable_frs_is_not() -> None:
+    asked: list[list[str]] = []
+
+    def resolve(records: list[EmissionRecord]) -> list[EmissionRecord]:
+        asked.append([r["frs_id"] for r in records])
+        return [
+            {**r, "eis_ids": ["9"] if r["frs_id"] == "A" else [], "eis_note": None} for r in records
+        ]
+
+    first = inventory.remembered_eis(resolve, [emission_record("A", 1.0)])
+    both = inventory.remembered_eis(resolve, [emission_record("A", 1.0), emission_record("B", 1.0)])
+    assert first[0]["eis_ids"] == ["9"] and [r["eis_ids"] for r in both] == [["9"], []]
+    assert asked == [["A"], ["B"]]  # A was not asked again
+
+    def down(records: list[EmissionRecord]) -> list[EmissionRecord]:
+        asked.append([r["frs_id"] for r in records])
+        return [{**r, "eis_ids": [], "eis_note": inventory.UNREACHABLE_NOTE} for r in records]
+
+    inventory.remembered_eis(down, [emission_record("C", 1.0)])
+    inventory.remembered_eis(down, [emission_record("C", 1.0)])
+    assert asked[-2:] == [["C"], ["C"]]  # a failed lookup is tried again

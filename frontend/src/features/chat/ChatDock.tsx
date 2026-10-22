@@ -1,6 +1,5 @@
 import { TopHeaderBar, type AssistantStatus } from "../../components/layout/TopHeaderBar";
-import type { ChatMessage } from "../../hooks/chatState";
-import type { Usage } from "../../types/workspace";
+import type { ChatMessage, UsageView } from "../../hooks/chatState";
 import { ChatComposer } from "./ChatComposer";
 import { MessageStream } from "./MessageStream";
 import { UsageMeter } from "./UsageMeter";
@@ -11,10 +10,12 @@ interface ChatDockProps {
   hasKey: boolean;
   model?: string | undefined;
   suggestions?: string[] | undefined;
-  usage: Usage | null;
+  usage: UsageView | null;
+  /** A message about switching runs (for example, that one is no longer available). */
+  notice?: string | null | undefined;
   onSend: (text: string) => void;
-  onNewAssessment: () => void;
   onOpenSettings: () => void;
+  onCollapse: () => void;
 }
 
 function statusOf(messages: ChatMessage[], busy: boolean): AssistantStatus {
@@ -23,7 +24,7 @@ function statusOf(messages: ChatMessage[], busy: boolean): AssistantStatus {
   return last?.error ? "error" : "idle";
 }
 
-/** The right pane: header, conversation and composer. */
+/** The chat dock: header, conversation and composer. */
 export function ChatDock({
   messages,
   busy,
@@ -31,28 +32,20 @@ export function ChatDock({
   model,
   suggestions,
   usage,
+  notice,
   onSend,
-  onNewAssessment,
   onOpenSettings,
+  onCollapse,
 }: ChatDockProps) {
   return (
     <div className="flex h-full flex-col">
       <TopHeaderBar
-        title="Exposure Assessor"
+        title="EcoFate"
         subtitle={model}
         status={statusOf(messages, busy)}
-        onOpenSettings={onOpenSettings}
+        onCollapse={onCollapse}
       >
         <UsageMeter usage={usage} />
-        {messages.length > 0 ? (
-          <button
-            type="button"
-            onClick={onNewAssessment}
-            className="spring rounded-full px-3 py-1 text-xs text-accent transition hover:bg-hairline"
-          >
-            New assessment
-          </button>
-        ) : null}
       </TopHeaderBar>
       <MessageStream
         messages={messages}
@@ -60,6 +53,11 @@ export function ChatDock({
         canSend={hasKey && !busy}
         onSend={onSend}
       />
+      {notice ? (
+        <p role="status" className="px-5 pb-1 text-center text-xs text-fg2">
+          {notice}
+        </p>
+      ) : null}
       <ChatComposer
         busy={busy}
         hasKey={hasKey}

@@ -21,6 +21,9 @@ reported_value = "Rep"
 assigned_value = "Asg"
 title_field = "t"
 placeholder_codes = ["999999", " 000000 "]
+titles_path = "data/naics_titles.csv"
+titles_code_column = "code"
+titles_title_column = "title"
 """
 
 
@@ -47,6 +50,8 @@ def test_explicit_values(tmp_path: Path) -> None:
         "t",
     )
     assert s.placeholder_codes == ("999999", "000000")
+    assert s.titles_path.is_absolute() and s.titles_path.parts[-2:] == ("data", "naics_titles.csv")
+    assert (s.titles_code_column, s.titles_title_column) == ("code", "title")
 
 
 def test_default_file_loads() -> None:
@@ -59,6 +64,8 @@ def test_default_file_loads() -> None:
     assert s.placeholder_codes == ("999999",)
     assert (s.code_field, s.title_field, s.origin_field) == ("naics_code", "naics_desc", "source")
     assert (s.reported_value, s.assigned_value) == ("Reported", "ASSIGNED")
+    assert s.titles_path.is_file()
+    assert (s.titles_code_column, s.titles_title_column) == ("naics_code", "naics_title")
 
 
 def test_no_placeholders_is_allowed(tmp_path: Path) -> None:
@@ -82,6 +89,13 @@ def test_no_placeholders_is_allowed(tmp_path: Path) -> None:
         ('["999999", " 000000 "]', '["abc"]', "placeholder_codes"),
         ('["999999", " 000000 "]', '["99-99"]', "placeholder_codes"),
         ('["999999", " 000000 "]', '"999999"', "placeholder_codes"),
+        ('titles_path = "data/naics_titles.csv"', 'titles_path = ""', "industry.titles_path"),
+        ('titles_code_column = "code"', "", "industry.titles_code_column"),
+        (
+            'titles_title_column = "title"',
+            'titles_title_column = " "',
+            "industry.titles_title_column",
+        ),
     ],
 )
 def test_invalid_entries_name_the_key(tmp_path: Path, old: str, new: str, key: str) -> None:

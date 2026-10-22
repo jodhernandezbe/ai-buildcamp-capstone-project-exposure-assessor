@@ -84,6 +84,22 @@ class UsageTotals(ContractModel):
     priced_on: str | None
 
 
+class ThreadMessage(ContractModel):
+    """One user or assistant message of a thread (text only, no tool calls or results)."""
+
+    role: Literal["user", "assistant"]
+    text: str
+
+
+class ThreadSnapshot(ContractModel):
+    """A held thread as of its last finished turn (``GET /api/v1/chat/threads/{id}``)."""
+
+    thread_id: str
+    messages: list[ThreadMessage]
+    workspace: WorkspaceState
+    usage: UsageTotals
+
+
 class Usage(_Event):
     type: Literal["usage"] = "usage"
     turn: UsageTotals

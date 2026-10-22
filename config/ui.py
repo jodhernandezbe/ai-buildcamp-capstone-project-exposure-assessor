@@ -46,19 +46,25 @@ class KeyringNames:
 
 @dataclass(frozen=True)
 class ScopePrompts:
-    """Scope-guardrail prompt names (``prompts/<name>.md``) and the classifier's history window.
+    """Guardrail prompt names (``prompts/<name>.md``) and their limits.
 
     Attributes:
         classifier: Prompt that classifies a turn and writes the redirect.
         addendum: Prompt appended to the agent system prompt in the web program.
         fallback: Redirect text used when the classifier gives none.
         history_window: Earlier messages the classifier sees besides the latest user message.
+        completion: Prompt that reviews whether the agent's reply stopped early.
+        nudge: Message that sends the agent back to work after such a reply.
+        max_nudges: Most nudges in one user turn.
     """
 
     classifier: str
     addendum: str
     fallback: str
     history_window: int
+    completion: str
+    nudge: str
+    max_nudges: int
 
 
 @dataclass(frozen=True)
@@ -123,6 +129,43 @@ class Display:
 
 
 @dataclass(frozen=True)
+class RailLayout:
+    """Navigation rail widths, px: collapsed to icons, and the expanded default and limits."""
+
+    collapsed_px: int
+    default_px: int
+    min_px: int
+    max_px: int
+
+
+@dataclass(frozen=True)
+class ChatLayout:
+    """Chat dock size: default and maximum as shares of the viewport width, minimum in px."""
+
+    default_share: float
+    min_px: int
+    max_share: float
+
+
+@dataclass(frozen=True)
+class OverviewLayout:
+    """Overview panel height as shares of the analysis area: default and limits."""
+
+    default_share: float
+    min_share: float
+    max_share: float
+
+
+@dataclass(frozen=True)
+class Layout:
+    """Workspace layout limits: the rail, the chat dock and the overview/map split."""
+
+    rail: RailLayout
+    chat: ChatLayout
+    overview: OverviewLayout
+
+
+@dataclass(frozen=True)
 class ModelPrice:
     """Token prices of one chat model, USD per million tokens, with their provenance.
 
@@ -156,6 +199,8 @@ class UiSettings:
         map: Map settings.
         thresholds: Risk status thresholds.
         display: Digits, breakpoint and suggestion chips.
+        layout: Workspace layout limits.
+        max_threads: Most conversation threads held in memory.
         pricing: Chat model name -> token prices.
     """
 
@@ -169,6 +214,8 @@ class UiSettings:
     map: MapDisplay
     thresholds: RiskThresholds
     display: Display
+    layout: Layout
+    max_threads: int
     pricing: Mapping[str, ModelPrice]
 
     @property
@@ -221,6 +268,9 @@ def _prompts(table: dict[str, object]) -> ScopePrompts:
         addendum=require_str(sub, "scope_addendum", name).strip(),
         fallback=require_str(sub, "scope_fallback", name).strip(),
         history_window=require_int(sub, "history_window", minimum=0, name=name),
+        completion=require_str(sub, "completion_classifier", name).strip(),
+        nudge=require_str(sub, "completion_nudge", name).strip(),
+        max_nudges=require_int(sub, "max_nudges", minimum=0, name=name),
     )
 
 
@@ -312,6 +362,64 @@ def _display(table: dict[str, object]) -> Display:
     )
 
 
+def _share(sub: dict[str, object], key: str, name: str) -> float:
+    value = require_number(sub, key, minimum=0, name=name)
+    if not 0 < value < 1:
+        raise ValueError(f"{name}.{key} must be strictly between 0 and 1")
+    return value
+
+
+def _ordered(name: str, low: float, default: float, high: float) -> None:
+    if not low <= default <= high:
+        raise ValueError(f"{name} must satisfy min <= default <= max")
+
+
+def _rail(sub: dict[str, object], parent: str) -> RailLayout:
+    name = f"{parent}.rail"
+    rail = RailLayout(
+        collapsed_px=require_int(sub, "rail_collapsed_px", minimum=1, name=parent),
+        default_px=require_int(sub, "rail_default_px", minimum=1, name=parent),
+        min_px=require_int(sub, "rail_min_px", minimum=1, name=parent),
+        max_px=require_int(sub, "rail_max_px", minimum=1, name=parent),
+    )
+    _ordered(name, rail.min_px, rail.default_px, rail.max_px)
+    if rail.collapsed_px >= rail.min_px:
+        raise ValueError(f"{name}: rail_collapsed_px must be below rail_min_px")
+    return rail
+
+
+def _chat(sub: dict[str, object], parent: str) -> ChatLayout:
+    chat = ChatLayout(
+        default_share=_share(sub, "chat_default_share", parent),
+        min_px=require_int(sub, "chat_min_px", minimum=1, name=parent),
+        max_share=_share(sub, "chat_max_share", parent),
+    )
+    if chat.default_share > chat.max_share:
+        raise ValueError(f"{parent}.chat_default_share must not exceed chat_max_share")
+    return chat
+
+
+def _overview(sub: dict[str, object], parent: str) -> OverviewLayout:
+    overview = OverviewLayout(
+        default_share=_share(sub, "overview_default_share", parent),
+        min_share=_share(sub, "overview_min_share", parent),
+        max_share=_share(sub, "overview_max_share", parent),
+    )
+    _ordered(f"{parent}.overview", overview.min_share, overview.default_share, overview.max_share)
+    return overview
+
+
+def _layout(table: dict[str, object]) -> Layout:
+    name = f"{_NAME}.layout"
+    sub = subtable(table, "layout", _NAME)
+    return Layout(rail=_rail(sub, name), chat=_chat(sub, name), overview=_overview(sub, name))
+
+
+def _max_threads(table: dict[str, object]) -> int:
+    name = f"{_NAME}.threads"
+    return require_int(subtable(table, "threads", _NAME), "max_retained", minimum=1, name=name)
+
+
 def _priced_on(sub: dict[str, object], name: str) -> date:
     value = sub.get("priced_on")
     if not isinstance(value, date):
@@ -360,6 +468,8 @@ def load_ui_settings(path: Path | None = None) -> UiSettings:
         map=_map(table),
         thresholds=_thresholds(table),
         display=_display(table),
+        layout=_layout(table),
+        max_threads=_max_threads(table),
         pricing=_pricing(table),
     )
 

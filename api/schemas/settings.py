@@ -55,6 +55,39 @@ class MapConfig(ContractModel):
     initial_view: InitialView = Field(description="What the map shows before any facility.")
 
 
+class RailLayout(ContractModel):
+    """Navigation rail widths in px: collapsed to icons, and the expanded default and limits."""
+
+    collapsed_px: int
+    default_px: int
+    min_px: int
+    max_px: int
+
+
+class ChatLayout(ContractModel):
+    """Chat dock: default and maximum shares of the viewport width (0-1), minimum width in px."""
+
+    default_share: float
+    min_px: int
+    max_share: float
+
+
+class OverviewLayout(ContractModel):
+    """Overview panel height as shares (0-1) of the analysis area."""
+
+    default_share: float
+    min_share: float
+    max_share: float
+
+
+class LayoutConfig(ContractModel):
+    """Workspace layout limits from the configuration."""
+
+    rail: RailLayout
+    chat: ChatLayout
+    overview: OverviewLayout
+
+
 class ClientConfig(ContractModel):
     """Display settings the frontend needs (``GET /api/v1/settings/client``)."""
 
@@ -63,4 +96,5 @@ class ClientConfig(ContractModel):
     map: MapConfig
     significant_digits: int
     narrow_breakpoint_px: int
+    layout: LayoutConfig
     suggestions: list[str]

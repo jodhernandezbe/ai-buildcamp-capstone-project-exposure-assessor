@@ -6,6 +6,7 @@ from typing import cast
 
 from fastapi import Request
 
+from agent.completion import CompletionGuard
 from agent.graph import DEFAULT_SYSTEM_PROMPT
 from agent.guardrails import ScopeGuard
 from api.core.config import ui_settings
@@ -40,6 +41,17 @@ def _scope_guard(ui: UiSettings) -> ScopeGuard:
     )
 
 
+def _completion_guard(ui: UiSettings) -> CompletionGuard | None:
+    names = ui.prompts
+    if names.max_nudges == 0:
+        return None
+    return CompletionGuard(
+        classifier_prompt=load_prompt(names.completion),
+        nudge=load_prompt(names.nudge),
+        max_nudges=names.max_nudges,
+    )
+
+
 def _workspace_rules(ui: UiSettings) -> WorkspaceRules:
     return WorkspaceRules(
         thresholds=ui.thresholds,
@@ -61,6 +73,7 @@ def get_runtime() -> AgentRuntime:
         model_name=settings.model,
         pricing=ui.pricing,
         scope_guard=_scope_guard(ui),
+        completion_guard=_completion_guard(ui),
         system_prompt=f"{load_prompt(DEFAULT_SYSTEM_PROMPT)}\n\n{load_prompt(ui.prompts.addendum)}",
         workspace_rules=_workspace_rules(ui),
     )

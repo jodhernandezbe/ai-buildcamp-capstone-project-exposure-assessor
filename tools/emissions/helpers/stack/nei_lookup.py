@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from config.efservice import FrsSettings
 from config.stack import StackSettings
+from tools.digits import digit_string
 from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.stack.frs import eis_ids_for_frs
 from tools.emissions.helpers.stack.nei import Candidates, Stack, build_candidates
@@ -37,12 +38,20 @@ def _result(eis_ids: tuple[str, ...], found: Candidates, warnings: list[str]) ->
     )
 
 
+def _given(eis_ids: Sequence[str | int] | None) -> tuple[str, ...]:
+    """The EIS IDs handed in that are digit strings, distinct, in order."""
+    if not eis_ids:
+        return ()
+    return tuple(dict.fromkeys(d for d in (digit_string(i) for i in eis_ids) if d))
+
+
 def nei_stack_result(
     frs_id: str | int,
     client: EfserviceClient,
     frs: FrsSettings,
     settings: StackSettings,
     aliases: Mapping[str, str] | None,
+    eis_ids: Sequence[str | int] | None = None,
 ) -> NeiStackResult:
     """Return the NEI stack candidates of the facility with this FRS ID.
 
@@ -52,6 +61,8 @@ def nei_stack_result(
         frs: FRS-to-EIS query settings.
         settings: Stack settings (NEI table, units, ranges).
         aliases: Unit spelling -> Pint-parsable unit string.
+        eis_ids: The facility's EIS IDs when already known (from the inventory); given, the
+            FRS lookup is skipped and no request is made.
 
     Returns:
         Candidates in m, m, m/s and K with warnings. When the FRS ID is invalid, has no EIS
@@ -61,6 +72,10 @@ def nei_stack_result(
     Raises:
         ValueError: If the configuration is unusable.
     """
+    known = _given(eis_ids)
+    if known:
+        found = build_candidates(known, settings, aliases)
+        return _result(known, found, list(found.warnings))
     lookup = eis_ids_for_frs(frs_id, client, frs)
     warnings = list(lookup.warnings)
     if not lookup.eis_ids:

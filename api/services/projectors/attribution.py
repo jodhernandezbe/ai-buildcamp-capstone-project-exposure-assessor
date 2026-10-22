@@ -62,9 +62,12 @@ def at_facility(tolerance_deg: float) -> Callable[[Point, EmissionPayload], bool
     return matches
 
 
-def same_rate(item: tuple[float, object], record: EmissionPayload) -> bool:
-    """Matches an emission rate (g/s) equal to the facility's."""
-    return math.isclose(item[0], record.emission_rate, rel_tol=1e-9, abs_tol=0.0)
+def same_rate(item: tuple[float | str, object], record: EmissionPayload) -> bool:
+    """Matches by FRS ID when the item carries one, else by an equal emission rate (g/s)."""
+    key = item[0]
+    if isinstance(key, str):
+        return key == record.frs_id
+    return math.isclose(key, record.emission_rate, rel_tol=1e-9, abs_tol=0.0)
 
 
 def same_doc(item: tuple[str, object], record: EmissionPayload) -> bool:

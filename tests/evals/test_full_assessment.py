@@ -1,8 +1,9 @@
 """Scenario ``full-assessment-with-nei-stacks``: a CAS whose facilities have their own stacks.
 
-The agent must fetch the chemical and its TRI facilities, request NEI stacks, weather and
-population for each facility it assesses, run the exposure calculation once per NEI candidate,
-skip the industry/SCC fallback, and write the full report (checked by an LLM judge). Network
+The agent must fetch the chemical and assess every one of its TRI facilities, by the batch
+assessment or by hand (then: NEI stacks, weather and population per facility, the exposure
+calculation once with every NEI candidate, no industry/SCC fallback), name each facility in
+the report, and write the full report (checked by an LLM judge). Network
 tools replay the live outputs recorded in ``evals/cassettes/`` (record them with
 ``uv run python -m evals record full-assessment-with-nei-stacks``).
 

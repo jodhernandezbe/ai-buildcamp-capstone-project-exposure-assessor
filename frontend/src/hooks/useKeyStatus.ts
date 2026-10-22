@@ -7,21 +7,31 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Try again.";
 }
 
-/** Which keys are stored (never a key), with save and clear actions for each. */
+/** How the last save or clear of one key went; its text never holds any part of a key. */
+export interface KeyOutcome {
+  kind: "success" | "error";
+  message: string;
+}
+
+export type KeyOutcomes = Partial<Record<KeyName, KeyOutcome>>;
+
+/** Which keys are stored (never a key), with save and clear actions and each key's last outcome. */
 export function useKeyStatus() {
   const [statuses, setStatuses] = useState<KeysStatusResponse | null>(null);
   const [busy, setBusy] = useState<KeyName | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [outcomes, setOutcomes] = useState<KeyOutcomes>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const run = useCallback(async (name: KeyName, action: () => Promise<unknown>) => {
+  const run = useCallback(async (name: KeyName, done: string, action: () => Promise<unknown>) => {
     setBusy(name);
-    setError(null);
+    setOutcomes((now) => ({ ...now, [name]: undefined }));
     try {
       await action();
       setStatuses(await getKeysStatus());
+      setOutcomes((now) => ({ ...now, [name]: { kind: "success", message: done } }));
       return true;
     } catch (failure) {
-      setError(message(failure));
+      setOutcomes((now) => ({ ...now, [name]: { kind: "error", message: message(failure) } }));
       return false;
     } finally {
       setBusy(null);
@@ -35,14 +45,17 @@ export function useKeyStatus() {
         if (live) setStatuses(value);
       })
       .catch((failure: unknown) => {
-        if (live) setError(message(failure));
+        if (live) setLoadError(message(failure));
       });
     return () => {
       live = false;
     };
   }, []);
 
-  const save = useCallback((name: KeyName, key: string) => run(name, () => saveKey(name, key)), [run]);
-  const clear = useCallback((name: KeyName) => run(name, () => clearKey(name)), [run]);
-  return { statuses, busy, error, save, clear };
+  const save = useCallback(
+    (name: KeyName, key: string) => run(name, "Key saved.", () => saveKey(name, key)),
+    [run],
+  );
+  const clear = useCallback((name: KeyName) => run(name, "Key cleared.", () => clearKey(name)), [run]);
+  return { statuses, busy, outcomes, loadError, save, clear };
 }

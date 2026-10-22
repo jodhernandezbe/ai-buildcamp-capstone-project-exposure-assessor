@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
@@ -22,10 +22,12 @@ function stubApi(keyConfigured: boolean) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("App", () => {
-  it("renders the locked split shell with both panes", async () => {
+  it("renders the workspace with the rail, both analysis panels and the copilot", async () => {
     stubApi(true);
     render(<App />);
+    expect(screen.getByRole("navigation", { name: "Navigation" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Map" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Copilot" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/test-model/)).toBeInTheDocument());
   });
@@ -37,14 +39,27 @@ describe("App", () => {
     expect(screen.getByLabelText("Message")).toBeDisabled();
   });
 
-  it("opens the key sheet from the gear button", async () => {
+  it("opens the settings drawer from the rail without disturbing the workspace", async () => {
     stubApi(true);
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Settings" }));
-    expect(screen.getByRole("dialog", { name: "API keys" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Map" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Data services" }));
     expect(await screen.findByText("Key stored securely in OS Keychain")).toBeInTheDocument();
     expect(screen.getAllByText("No key configured")).toHaveLength(2); // Census and CompTox
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens the drawer from the composer's link while no key is stored", async () => {
+    stubApi(false);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Open Settings" }));
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Assistant" })).toHaveAttribute("aria-expanded", "true");
   });
 });
 
@@ -62,7 +77,7 @@ const ANSWER_WITH_A_TOOL = [
   { type: "turn_finished", seq: 5 },
 ];
 
-describe("onboarding and new assessment", () => {
+describe("onboarding and new analysis", () => {
   function stubWithChips(events: object[] = ANSWER_WITH_A_TOOL) {
     const calls: { url: string; method: string }[] = [];
     vi.stubGlobal(
@@ -102,7 +117,7 @@ describe("onboarding and new assessment", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("runs a chip, shows its tool pill and answer, then starts a new assessment", async () => {
+  it("runs a chip, shows its tool pill and answer, then starts a new analysis", async () => {
     const calls = stubWithChips();
     const user = userEvent.setup();
     render(<App />);
@@ -110,14 +125,16 @@ describe("onboarding and new assessment", () => {
     expect(await screen.findByText("All done.")).toBeInTheDocument();
     expect(screen.getByLabelText("Queried EPA TRI releases, done")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Usage: 1.8K tokens, ~$0.0050" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "New assessment" }));
+    await user.click(screen.getAllByRole("button", { name: /New analysis/ })[0] as HTMLElement);
     expect(screen.queryByRole("button", { name: /Usage:/ })).toBeNull();
-    expect(await screen.findByRole("button", { name: "Assess benzene" })).toBeInTheDocument();
+    const chat = within(screen.getByRole("region", { name: "Copilot" }));
+    expect(await chat.findByRole("button", { name: "Assess benzene" })).toBeInTheDocument();
     expect(screen.queryByText("All done.")).toBeNull();
-    expect(calls.some((c) => c.method === "DELETE" && c.url.includes("/chat/threads/"))).toBe(true);
+    // The earlier run is kept on the server, not deleted.
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 
-  it("fills the summary from a workspace update and clears it on a new assessment", async () => {
+  it("fills the summary from a workspace update and clears it on a new analysis", async () => {
     const state = workspace({
       risk: { ...EMPTY_WORKSPACE.risk, hq_worst: extremum(2.5, "above"), reason: null },
     });
@@ -130,7 +147,7 @@ describe("onboarding and new assessment", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Assess benzene" }));
     expect(await screen.findByText("Above concern")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "New assessment" }));
+    await user.click(screen.getAllByRole("button", { name: /New analysis/ })[0] as HTMLElement);
     await waitFor(() => expect(screen.queryByText("Above concern")).toBeNull());
   });
 });

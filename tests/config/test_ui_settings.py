@@ -30,6 +30,9 @@ scope_classifier = "classifier"
 scope_addendum = "addendum"
 scope_fallback = "fallback"
 history_window = 4
+completion_classifier = "completion"
+completion_nudge = "nudge"
+max_nudges = 1
 
 [ui.step_labels]
 some_tool = "Did a thing"
@@ -59,6 +62,21 @@ cancer_upper = 0.1
 significant_digits = 2
 narrow_breakpoint_px = 800
 suggestions = ["first", "second"]
+
+[ui.layout]
+rail_collapsed_px = 60
+rail_default_px = 240
+rail_min_px = 200
+rail_max_px = 320
+chat_default_share = 0.34
+chat_min_px = 280
+chat_max_share = 0.55
+overview_default_share = 0.4
+overview_min_share = 0.15
+overview_max_share = 0.75
+
+[ui.threads]
+max_retained = 5
 
 [ui.pricing."model-a"]
 input_usd_per_mtok = 1.5
@@ -95,6 +113,8 @@ def test_values(tmp_path: Path) -> None:
         "comptox": "acct-comptox",
     }
     assert settings.prompts.history_window == 4
+    assert (settings.prompts.completion, settings.prompts.nudge) == ("completion", "nudge")
+    assert settings.prompts.max_nudges == 1
     assert dict(settings.step_labels) == {"some_tool": "Did a thing"}
     assert settings.map.sector_half_angle_deg == 20.0
     assert settings.map.vertex_spacing_deg == 10.0
@@ -102,6 +122,9 @@ def test_values(tmp_path: Path) -> None:
     assert (view.west, view.south, view.east, view.north) == (-10.0, 20.0, 10.0, 30.0)
     assert settings.thresholds.hq_near_lower == 0.2
     assert settings.display.suggestions == ("first", "second")
+    assert (settings.layout.rail.collapsed_px, settings.layout.chat.min_px) == (60, 280)
+    assert settings.layout.overview.default_share == 0.4
+    assert settings.max_threads == 5
     price = settings.pricing["model-a"]
     assert (price.input_usd_per_mtok, price.priced_on) == (1.5, date(2026, 1, 2))
 
@@ -156,6 +179,10 @@ def test_unpriced_when_pricing_empty(tmp_path: Path) -> None:
         ("openai", "openai = 5", "ui.keyring.accounts.openai"),
         ("scope_classifier", 'scope_classifier = ""', "ui.prompts.scope_classifier"),
         ("history_window", "history_window = -1", "ui.prompts.history_window"),
+        ("completion_classifier", 'completion_classifier = ""', "ui.prompts.completion_classifier"),
+        ("completion_nudge", "", "ui.prompts.completion_nudge"),
+        ("max_nudges", "max_nudges = -1", "ui.prompts.max_nudges"),
+        ("max_nudges", "max_nudges = true", "ui.prompts.max_nudges"),
         ("some_tool", "some_tool = 3", "ui.step_labels.some_tool"),
         ("sector_half_angle_deg", "sector_half_angle_deg = 90", "sector_half_angle_deg"),
         ("vertex_spacing_deg", "vertex_spacing_deg = 0.01", "ui.map.vertex_spacing_deg"),
@@ -173,6 +200,17 @@ def test_unpriced_when_pricing_empty(tmp_path: Path) -> None:
         ("cancer_lower", "cancer_lower = 0.5", "ui.thresholds.cancer_lower"),
         ("significant_digits", "significant_digits = 0", "ui.display.significant_digits"),
         ("suggestions", "suggestions = []", "ui.display.suggestions"),
+        ("rail_min_px", "rail_min_px = 300", "ui.layout.rail"),
+        ("rail_collapsed_px", "rail_collapsed_px = 200", "rail_collapsed_px"),
+        ("rail_max_px", "rail_max_px = 1.5", "ui.layout.rail_max_px"),
+        ("rail_default_px", "rail_default_px = true", "ui.layout.rail_default_px"),
+        ("chat_min_px", "chat_min_px = 0", "ui.layout.chat_min_px"),
+        ("chat_max_share", "chat_max_share = 1", "ui.layout.chat_max_share"),
+        ("chat_default_share", "chat_default_share = 0.6", "chat_default_share"),
+        ("overview_min_share", "overview_min_share = 0.5", "ui.layout.overview"),
+        ("overview_max_share", "overview_max_share = 0", "ui.layout.overview_max_share"),
+        ("max_retained", "max_retained = 0", "ui.threads.max_retained"),
+        ("max_retained", "max_retained = true", "ui.threads.max_retained"),
         ("input_usd_per_mtok", "input_usd_per_mtok = -1", "input_usd_per_mtok"),
         ("output_usd_per_mtok", "output_usd_per_mtok = true", "output_usd_per_mtok"),
         ("cached_input_usd_per_mtok", 'cached_input_usd_per_mtok = "1"', "cached_input"),

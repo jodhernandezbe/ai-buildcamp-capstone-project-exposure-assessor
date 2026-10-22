@@ -6,6 +6,7 @@ the ones Envirofacts returns for ``tri_submission_naics``.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 import httpx
@@ -14,10 +15,24 @@ import pytest
 from config.efservice import load_efservice_settings
 from config.industry import IndustrySettings, load_industry_settings
 from tools.emissions.helpers.efservice import EfserviceClient
+from tools.emissions.helpers.industry import naics
 from tools.emissions.helpers.industry.naics import SOURCE, submission_industry
 from tools.schemas import FacilityIndustry
 
 SETTINGS = load_industry_settings()
+LOCAL_TITLES = naics.naics_titles
+
+
+def _no_titles(_settings: IndustrySettings) -> Mapping[str, str]:
+    return {}
+
+
+@pytest.fixture(autouse=True)
+def no_local_titles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The reference-table behaviour is tested with empty local lists; see the local tests."""
+    monkeypatch.setattr(naics, "naics_titles", _no_titles)
+
+
 EF = replace(
     load_efservice_settings(), base_url="https://ef.test", delay_seconds=0.0, max_retries=0
 )
@@ -240,3 +255,26 @@ def test_a_failing_service_is_a_warning_not_an_exception() -> None:
 def test_the_titles_are_read_from_the_reference_table_not_made_up() -> None:
     result = Service([_row("324110")], titles={"324110": "Whatever The Table Says"}).run()
     assert result["naics_title"] == "Whatever The Table Says"
+
+
+# --- The local Census code lists come first --------------------------------------------------
+
+
+def test_a_listed_code_is_titled_from_the_local_lists_without_a_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(naics, "naics_titles", LOCAL_TITLES)
+    service = Service([_row("324110")], titles={"324110": "Whatever The Table Says"})
+    result = service.run()
+    assert result["naics_title"] == "Petroleum Refineries"
+    assert result["warnings"] == []
+    assert not any("REF_NAICS" in path for path in service.paths)
+
+
+def test_a_code_the_lists_lack_is_asked_of_the_reference_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(naics, "naics_titles", LOCAL_TITLES)
+    service = Service([_row("123456")], titles={"123456": "From The Reference Table"})
+    assert service.run()["naics_title"] == "From The Reference Table"
+    assert any("REF_NAICS" in path for path in service.paths)
