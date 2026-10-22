@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
+from tools.emissions.helpers.inventory.rate import HoursFor, OperatingHours
 from tools.emissions.helpers.inventory.reduce import LatestReports, Location, parse_report
 from tools.schemas import EmissionRecord
 
@@ -496,3 +497,48 @@ def test_a_missing_code_on_the_kept_submission_is_filled_from_another_same_year_
         _naics("222222", doc_ctrl_num="1320000000002"),
     ]
     assert _only(rows)["naics_code"] == "222222"
+
+
+def _hours_by_code(table: Mapping[str | None, float]) -> HoursFor:
+    def resolve(code: str | None) -> OperatingHours:
+        return OperatingHours(table.get(code, 8760.0), f"test source for {code}")
+
+    return resolve
+
+
+def test_record_without_a_resolver_says_the_default_was_used() -> None:
+    record = _only([_row()])
+    assert record["operating_hours_source"] == "default 8760 h/yr (configured)"
+
+
+def test_each_facility_gets_the_hours_of_its_own_naics_code() -> None:
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows(
+        [
+            _row(epa_registry_id="110000000001", total_release=8760, naics_code="325211"),
+            _row(epa_registry_id="110000000002", total_release=8760, naics_code="324110"),
+            _row(epa_registry_id="110000000003", total_release=8760),
+        ]
+    )
+    resolver = _hours_by_code({"325211": 4380.0})
+    by_id = {r["frs_id"]: r for r in reducer.records(EMISSIONS, ALIASES, hours_for=resolver)}
+    half, full, none = (by_id[f"11000000000{i}"] for i in (1, 2, 3))
+    assert half["operating_hours_per_year"] == 4380.0
+    assert half["operating_hours_source"] == "test source for 325211"
+    assert half["emission_rate"] == pytest.approx(2 * G_PER_LB / 3600)
+    assert full["operating_hours_per_year"] == 8760.0
+    assert full["emission_rate"] == pytest.approx(G_PER_LB / 3600)
+    assert none["operating_hours_source"] == "test source for None"
+
+
+def test_resolver_is_asked_once_per_facility() -> None:
+    asked: list[str | None] = []
+
+    def resolve(code: str | None) -> OperatingHours:
+        asked.append(code)
+        return OperatingHours(8760.0, "x")
+
+    reducer = LatestReports(load_tri_settings(), first_year=0)
+    reducer.add_rows([_row(naics_code="3252"), _row(epa_registry_id="110000000002")])
+    reducer.records(EMISSIONS, ALIASES, hours_for=resolve)
+    assert len(asked) == 2

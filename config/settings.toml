@@ -858,3 +858,18 @@ header_search_rows = 15
 timeout_seconds = 30
 max_bytes = 5_000_000
 output_path = "data/census_qpc_baseline.parquet"
+
+# Operating hours by industry (tools/emissions/helpers/inventory/plant_hours.py): a facility's
+# primary NAICS code is matched, most specific first (its own length down to `min_digits`),
+# against the Census QPC baseline built by scripts/build_census_qpc_baseline.py; the matched
+# average plant hours per week become operating hours per year as h/week x days_per_year / 7
+# (168 h/week = 8760 h/yr). No match: [emissions].operating_hours_per_year.
+[plant_hours]
+baseline_path = "data/census_qpc_baseline.parquet"
+code_column = "naics_code"
+hours_column = "avg_plant_hours_per_week"
+min_digits = 3
+max_digits = 6
+days_per_year = 365
+# Rows above this many hours per week (hours in a week) are not plausible and are ignored.
+max_hours_per_week = 168

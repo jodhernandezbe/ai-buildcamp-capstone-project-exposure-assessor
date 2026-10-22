@@ -127,6 +127,7 @@ def test_a_facility_carries_the_inventory_fields_and_the_queried_cas() -> None:
     assert facility.doc_ctrl_num == "DOCF1"
     assert facility.release_unit == "Pounds"
     assert facility.operating_hours_per_year == 8760.0
+    assert facility.operating_hours_source == "default 8760 h/yr (test)"
     assert facility.cas_number == "2-2-2"
     assert facility.status is None
 

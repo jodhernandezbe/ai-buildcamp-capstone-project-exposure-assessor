@@ -25,6 +25,7 @@ export function facility(over: Partial<Facility> = {}): Facility {
     release_unit: "Pounds",
     emission_rate_g_s: 1,
     operating_hours_per_year: 8760,
+    operating_hours_source: null,
     industry: null,
     stacks: [],
     receptors: null,

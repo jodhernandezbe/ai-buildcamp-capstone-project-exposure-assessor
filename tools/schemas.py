@@ -73,6 +73,7 @@ class EmissionRecord(TypedDict):
     unit: str  # unit of `total_release` as reported, e.g. "Pounds"
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
     operating_hours_per_year: float  # h/yr assumed for `emission_rate`
+    operating_hours_source: str  # where those hours came from (industry baseline or default)
     latitude: float  # decimal degrees, positive north
     longitude: float  # decimal degrees, negative west of Greenwich
     address: str | None  # street address

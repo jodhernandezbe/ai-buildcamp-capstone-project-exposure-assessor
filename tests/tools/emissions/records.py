@@ -22,6 +22,7 @@ def emission_record(
         "unit": "Pounds",
         "emission_rate": rate,
         "operating_hours_per_year": 8760.0,
+        "operating_hours_source": "default 8760 h/yr (configured)",
         "latitude": 10.0,
         "longitude": -20.0,
         "address": None,

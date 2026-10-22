@@ -9,7 +9,12 @@ from typing import NamedTuple, TypedDict
 
 from commons.units import UnitConversionError
 from config.loader import EmissionsSettings, TriSettings
-from tools.emissions.helpers.inventory.rate import operating_hours_per_year, to_emission_rate
+from tools.emissions.helpers.inventory.rate import (
+    HoursFor,
+    OperatingHours,
+    fixed_hours,
+    to_emission_rate,
+)
 from tools.schemas import EmissionRecord
 
 Row = Mapping[str, object]
@@ -338,23 +343,27 @@ class LatestReports:
         emissions: EmissionsSettings,
         aliases: Mapping[str, str] | None = None,
         locate: Locator | None = None,
+        hours_for: HoursFor | None = None,
     ) -> list[EmissionRecord]:
         """Return the kept records, converting each release to an emission rate.
 
         Args:
-            emissions: Emission-rate assumptions (operating hours per year).
+            emissions: Emission-rate assumptions (the default operating hours per year).
             aliases: Source unit spelling -> Pint-parsable unit string.
             locate: Gives the coordinates of many FRS IDs in one call; asked once, and only for
                 facilities that have a usable quantity but no coordinates in any TRI row.
+            hours_for: Gives a facility's operating hours from its NAICS code; without it every
+                facility gets the default hours of ``emissions``.
 
         Returns:
             One record per (medium, facility) with a usable latest-year quantity and
             coordinates; the others are counted in ``stats``.
         """
-        hours = operating_hours_per_year(emissions)
+        hours_for = hours_for or fixed_hours(emissions)
         located = self._locate_missing(locate)
         found = (
-            self._record(key, slot, hours, aliases, located) for key, slot in self._slots.items()
+            self._record(key, slot, hours_for, aliases, located)
+            for key, slot in self._slots.items()
         )
         records = [record for record in found if record is not None]
         self.stats.combined = sum(slot.summed > 1 for slot in self._slots.values())
@@ -398,15 +407,16 @@ class LatestReports:
         self,
         key: tuple[str, str],
         slot: Slot,
-        hours: float,
+        hours_for: HoursFor,
         aliases: Mapping[str, str] | None,
         located: Mapping[str, Location],
     ) -> EmissionRecord | None:
         amount = self._amount(key[1], slot, located)
         if amount is None:
             return None
+        hours = hours_for(slot.naics_code)
         try:
-            rate = to_emission_rate(amount.quantity, amount.unit, hours, aliases)
+            rate = to_emission_rate(amount.quantity, amount.unit, hours.hours_per_year, aliases)
         except UnitConversionError:
             self.stats.bad_unit += 1
             return None
@@ -429,6 +439,7 @@ class _Reported(TypedDict):
     unit: str
     emission_rate: float
     operating_hours_per_year: float
+    operating_hours_source: str
 
 
 class _Where(TypedDict):
@@ -442,7 +453,7 @@ class _Where(TypedDict):
 
 
 def _reported(
-    key: tuple[str, str], slot: Slot, amount: _Amount, rate: float, hours: float
+    key: tuple[str, str], slot: Slot, amount: _Amount, rate: float, hours: OperatingHours
 ) -> _Reported:
     medium, facility_id = key
     return {
@@ -458,7 +469,8 @@ def _reported(
         "total_release": amount.quantity,
         "unit": amount.unit,
         "emission_rate": rate,
-        "operating_hours_per_year": hours,
+        "operating_hours_per_year": hours.hours_per_year,
+        "operating_hours_source": hours.source,
     }
 
 

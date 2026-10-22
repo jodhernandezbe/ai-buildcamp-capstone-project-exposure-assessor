@@ -15,6 +15,7 @@ from config.efservice import load_efservice_settings
 from config.loader import EmissionsSettings, TriSettings, get_unit_settings, load_tri_settings
 from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.inventory.lookup import lookup_emissions
+from tools.emissions.helpers.inventory.rate import OperatingHours
 from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
 
@@ -90,3 +91,20 @@ def test_data_warnings_are_logged(caplog: pytest.LogCaptureFixture) -> None:
         _lookup(_fetcher(_serve([ROWS[:4], ROWS[4:]])))
     assert "no usable release quantity" in caplog.text
     assert "added together" in caplog.text
+
+
+def test_hours_resolver_reaches_every_record() -> None:
+    def resolve(code: str | None) -> OperatingHours:
+        return OperatingHours(4380.0, f"from {code}")
+
+    records = lookup_emissions(
+        CAS, SETTINGS, EMISSIONS, get_unit_settings().aliases,
+        _fetcher(_serve([ROWS[:4], ROWS[4:]])), YEAR, hours_for=resolve,
+    )  # fmt: skip
+    assert records and {r["operating_hours_per_year"] for r in records} == {4380.0}
+    assert all(r["operating_hours_source"].startswith("from ") for r in records)
+
+
+def test_without_a_resolver_the_default_hours_are_used() -> None:
+    records = _lookup(_fetcher(_serve([ROWS[:4], ROWS[4:]])))
+    assert {r["operating_hours_per_year"] for r in records} == {8760.0}

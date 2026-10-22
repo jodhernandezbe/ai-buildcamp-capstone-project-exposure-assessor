@@ -185,6 +185,7 @@ def _release(record: EmissionPayload, cas: str | None) -> dict[str, object]:
         "release_unit": record.unit,
         "emission_rate_g_s": record.emission_rate,
         "operating_hours_per_year": record.operating_hours_per_year,
+        "operating_hours_source": record.operating_hours_source,
     }
 
 

@@ -8,7 +8,12 @@ import pytest
 
 from commons.units import UnitConversionError
 from config.loader import EmissionsSettings, get_unit_settings, load_emissions_settings
-from tools.emissions.helpers.inventory.rate import operating_hours_per_year, to_emission_rate
+from tools.emissions.helpers.inventory.rate import (
+    OperatingHours,
+    fixed_hours,
+    operating_hours_per_year,
+    to_emission_rate,
+)
 
 ALIASES = {"Pounds": "pound"}
 KG_PER_POUND = 0.45359237
@@ -67,3 +72,10 @@ def test_changing_the_setting_changes_the_rate() -> None:
     ]
     assert rates[1] == pytest.approx(2 * rates[0])
     assert rates[0] == pytest.approx(1000.0 * KG_PER_POUND * 1000.0 / (8760.0 * 3600.0))
+
+
+def test_fixed_hours_gives_every_source_the_configured_default() -> None:
+    resolve = fixed_hours(EmissionsSettings(4380.0))
+    expected = OperatingHours(4380.0, "default 4380 h/yr (configured)")
+    assert resolve("325211") == expected
+    assert resolve(None) == expected

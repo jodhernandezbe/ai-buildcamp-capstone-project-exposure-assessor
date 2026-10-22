@@ -12,8 +12,11 @@ import pytest
 from langchain_core.messages import ToolMessage
 
 from config.efservice import get_efservice_settings
+from config.plant_hours import get_plant_hours_settings
 from tests.tools.emissions.records import emission_record
 from tools.emissions import inventory
+from tools.emissions.helpers.inventory.plant_hours import get_baseline
+from tools.emissions.helpers.inventory.rate import OperatingHours
 from tools.emissions.inventory import clear_inventory_cache, query_emissions_inventory
 from tools.registry import get_all_tools
 from tools.schemas import EmissionRecord, InventoryResult
@@ -40,7 +43,13 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
     settings = replace(get_efservice_settings(), delay_seconds=0.0, backoff_seconds=0.0)
     monkeypatch.setattr(inventory, "get_efservice_settings", lambda: settings)
     monkeypatch.setattr(inventory, "_current_year", lambda: CURRENT_YEAR)
+    monkeypatch.setattr(inventory, "_hours_for", lambda: _default_hours)
     return seen
+
+
+def _default_hours(_code: str | None) -> OperatingHours:
+    """No industry hours: keeps these tests independent of the committed baseline."""
+    return OperatingHours(8760.0, "default 8760 h/yr (test)")
 
 
 def _call(args: dict[str, object]) -> ToolMessage:
@@ -74,6 +83,7 @@ def test_docstring_describes_every_returned_field() -> None:
         "total_release",
         "unit",
         "operating_hours_per_year",
+        "operating_hours_source",
         "latitude",
     ):
         assert field in text
@@ -247,3 +257,27 @@ def test_eis_ids_are_remembered_but_an_unreachable_frs_is_not() -> None:
     inventory.remembered_eis(down, [emission_record("C", 1.0)])
     inventory.remembered_eis(down, [emission_record("C", 1.0)])
     assert asked[-2:] == [["C"], ["C"]]  # a failed lookup is tried again
+
+
+def test_each_facility_gets_the_hours_of_its_industry(
+    requests_seen: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def by_industry(code: str | None) -> OperatingHours:
+        return OperatingHours(4380.0, f"test hours for {code}")
+
+    monkeypatch.setattr(inventory, "_hours_for", lambda: by_industry)
+    clear_inventory_cache()
+    records = _all({"cas_number": "50-00-0"})
+    port = next(r for r in records if r["frs_id"] == "110000307864")
+    assert port["operating_hours_per_year"] == 4380.0
+    assert port["operating_hours_source"] == f"test hours for {port['naics_code']}"
+    assert port["emission_rate"] == pytest.approx(31070 * 453.59237 / (4380 * 3600))
+
+
+def test_the_real_resolver_uses_the_committed_baseline_and_the_default() -> None:
+    baseline = get_baseline(get_plant_hours_settings())
+    code, per_week = next(iter(baseline.hours_per_week.items()))
+    resolve = inventory._hours_for()  # pyright: ignore[reportPrivateUsage]
+    assert resolve(code + "0" * (6 - len(code))).hours_per_year == pytest.approx(per_week * 365 / 7)
+    assert resolve("999999").hours_per_year == 8760.0
+    assert resolve(None).source.startswith("default 8760 h/yr")

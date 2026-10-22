@@ -37,6 +37,7 @@ class EmissionPayload(Payload):
     unit: str
     emission_rate: Num
     operating_hours_per_year: Num
+    operating_hours_source: str | None = None
     latitude: Lat
     longitude: Lon
     address: str | None = None

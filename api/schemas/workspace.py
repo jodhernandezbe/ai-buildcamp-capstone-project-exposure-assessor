@@ -158,6 +158,8 @@ class Facility(ContractModel):
         doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).
         total_release: Annual quantity in ``release_unit``, as reported.
         emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
+        operating_hours_source: Where those hours came from (industry survey or default); None
+            when the record predates the field.
         stack_source: Where the NEI stack lookup came from, when one was made for the facility.
         status: Worst-case risk status (from the screening value when screened out); None
             while no risk is computed.
@@ -184,6 +186,7 @@ class Facility(ContractModel):
     release_unit: str
     emission_rate_g_s: float
     operating_hours_per_year: float
+    operating_hours_source: str | None = None
     industry: Industry | None = None
     stacks: list[Stack] = Field(default_factory=list[Stack])
     receptors: Receptors | None = None

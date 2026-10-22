@@ -60,6 +60,7 @@ def record(
         "unit": "Pounds",
         "emission_rate": rate,
         "operating_hours_per_year": 8760.0,
+        "operating_hours_source": "default 8760 h/yr (test)",
         "latitude": lat,
         "longitude": lon,
         "address": "1 Test Road",

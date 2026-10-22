@@ -19,11 +19,14 @@ from config.frs_eis import get_frs_eis_settings
 from config.frs_point import get_frs_point_settings
 from config.industry import get_industry_settings
 from config.loader import get_emissions_settings, get_tri_settings, get_unit_settings
+from config.plant_hours import get_plant_hours_settings
 from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.inventory.eis import UNREACHABLE_NOTE, EisResolver
 from tools.emissions.helpers.inventory.frs_point import FrsLocator
 from tools.emissions.helpers.inventory.listing import rank_and_cap
 from tools.emissions.helpers.inventory.lookup import lookup_emissions
+from tools.emissions.helpers.inventory.plant_hours import PlantHours, get_baseline
+from tools.emissions.helpers.inventory.rate import HoursFor, operating_hours_per_year
 from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.emissions.helpers.naics_titles import naics_titles, with_titles
 from tools.schemas import EmissionRecord, InventoryResult
@@ -144,8 +147,12 @@ def query_emissions_inventory(
           - unit: unit of `total_release` as reported by TRI, e.g. "Pounds"
           - emission_rate: average emission rate, g/s, assuming the facility operates
             `operating_hours_per_year`
-          - operating_hours_per_year: hours per year assumed for `emission_rate` (8760 =
-            continuous operation, a conservative screening assumption)
+          - operating_hours_per_year: hours per year assumed for `emission_rate`: the
+            industry's average plant hours from the Census plant capacity survey when the
+            facility's NAICS code (or a shorter prefix of it) is in that survey, otherwise
+            8760 (continuous operation, a conservative screening assumption)
+          - operating_hours_source: says which of the two it is, and for a survey figure the
+            release, the survey's NAICS code and its plant hours per week
           - latitude, longitude: decimal degrees (negative longitude is west); from TRI, or
             from the facility's FRS record when TRI has none
           - address, city, county, state, zip_code: facility location (each may be null)
@@ -205,8 +212,16 @@ def _read_listing(cas: str, state: str | None, city: str | None, year: int) -> L
             TriFetcher(tri, ef, year),
             year,
             _frs_locator(client),
+            _hours_for(),
         )
         return rank_and_cap(_titled(records), tri.max_listed, state, city, _eis_resolver(client))
+
+
+def _hours_for() -> HoursFor:
+    """The resolver of a facility's operating hours: industry baseline, else the default."""
+    settings = get_plant_hours_settings()
+    default = operating_hours_per_year(get_emissions_settings())
+    return PlantHours(get_baseline(settings), settings, default)
 
 
 def with_eis_ids(records: list[EmissionRecord]) -> list[EmissionRecord]:

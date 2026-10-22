@@ -7,6 +7,7 @@ from collections.abc import Mapping
 
 from config.loader import EmissionsSettings, TriSettings
 from tools.emissions.helpers.efservice import EfserviceError
+from tools.emissions.helpers.inventory.rate import HoursFor
 from tools.emissions.helpers.inventory.reduce import LatestReports, Locator
 from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
@@ -22,6 +23,7 @@ def lookup_emissions(
     fetcher: TriFetcher,
     current_year: int,
     locate: Locator | None = None,
+    hours_for: HoursFor | None = None,
 ) -> list[EmissionRecord]:
     """Find the latest-year release record of each facility for a chemical.
 
@@ -36,6 +38,8 @@ def lookup_emissions(
         locate: Gives the coordinates of many facilities from their FRS IDs in one call
             (injected); used only for facilities whose TRI rows have none. Without it such
             facilities are omitted.
+        hours_for: Gives a facility's operating hours from its NAICS code (injected); without it
+            every facility gets the default hours of ``emissions``.
 
     Returns:
         One record per (medium, facility); empty if nothing was reported or if retrieval
@@ -55,7 +59,7 @@ def lookup_emissions(
     except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
         return []
-    records = reducer.records(emissions, aliases, locate)
+    records = reducer.records(emissions, aliases, locate, hours_for)
     for message in reducer.stats.warnings():
         logger.warning("TRI %s: %s", cas, message)
     return records
