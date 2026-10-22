@@ -26,6 +26,7 @@ api_key_header = "x-key"  # pragma: allowlist secret
 api_key_env_var = "SOME_KEY_VAR"  # pragma: allowlist secret
 delay_seconds = 0
 timeout_seconds = 2
+accept_expired_certificate = false
 
 [comptox.molecular_weight]
 field = "mass"
@@ -198,6 +199,19 @@ def test_comptox_path_validation(tmp_path: Path, old: str, new: str, match: str)
 def test_comptox_negative_delay(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="comptox.delay_seconds"):
         _load(tmp_path, COMPTOX.replace("delay_seconds = 0", "delay_seconds = -1"))
+
+
+def test_comptox_certificate_waiver_must_be_a_boolean(tmp_path: Path) -> None:
+    assert _load(tmp_path, COMPTOX).accept_expired_certificate is False
+    with pytest.raises(ValueError, match="comptox.accept_expired_certificate"):
+        _load(
+            tmp_path,
+            COMPTOX.replace(
+                "accept_expired_certificate = false", 'accept_expired_certificate = "yes"'
+            ),
+        )
+    with pytest.raises(ValueError, match="comptox.accept_expired_certificate"):
+        _load(tmp_path, COMPTOX.replace("accept_expired_certificate = false\n", ""))
 
 
 def test_comptox_non_numeric_timeout(tmp_path: Path) -> None:

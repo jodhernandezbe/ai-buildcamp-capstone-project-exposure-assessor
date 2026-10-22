@@ -61,6 +61,20 @@ describe("provenance card", () => {
     expect(chem.getByText("not reported")).toBeInTheDocument(); // the unit risk
   });
 
+  it("shows the chemical's name before the CAS number only when the state has one", () => {
+    const named = workspace({
+      chemical: { ...EMPTY_WORKSPACE.chemical, cas_number: "1-1-1", name: "Testane" },
+    });
+    const { unmount } = render(<EpaOverviewRibbon workspace={named} digits={2} />);
+    const chem = within(card("Chemical & provenance"));
+    expect(chem.getByTestId("chemical-name")).toHaveTextContent("Testane");
+    expect(chem.getByText("1-1-1")).toBeInTheDocument();
+    unmount();
+    const bare = workspace({ chemical: { ...EMPTY_WORKSPACE.chemical, cas_number: "1-1-1" } });
+    render(<EpaOverviewRibbon workspace={bare} digits={2} />);
+    expect(within(card("Chemical & provenance")).queryByTestId("chemical-name")).toBeNull();
+  });
+
   it("shows a surrogate with its scores inside the applicability domain", () => {
     const state = workspace({
       chemical: {

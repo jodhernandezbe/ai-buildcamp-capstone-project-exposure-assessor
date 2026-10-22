@@ -12,6 +12,7 @@ from typing import Literal, cast
 from config.parsing import DEFAULT_SETTINGS_PATH as DEFAULT_SETTINGS_PATH
 from config.parsing import names as _names
 from config.parsing import read_toml as _read_toml
+from config.parsing import require_bool as _require_bool
 from config.parsing import require_int as _require_int
 from config.parsing import require_number as _require_number
 from config.parsing import require_str as _require_str
@@ -102,6 +103,9 @@ class ComptoxSettings:
         api_key_env_var: Name of the environment variable holding the API key.
         delay_seconds: Wait before each request, in seconds.
         timeout_seconds: Per-request timeout, in seconds.
+        accept_expired_certificate: Skip only the validity-dates check of the service's TLS
+            certificate (its chain and host name are still verified); for an outage where
+            the certificate has lapsed. Off unless set, and to be turned off again after.
         molecular_weight: Where molecular weight is read from and its units.
         properties: Properties to extract, in order.
         toxicity_values: Toxicity values to extract, in order.
@@ -117,6 +121,7 @@ class ComptoxSettings:
     api_key_env_var: str
     delay_seconds: float
     timeout_seconds: float
+    accept_expired_certificate: bool
     molecular_weight: MolecularWeightSpec
     properties: tuple[PropertySpec, ...]
     toxicity_values: tuple[ToxicityValueSpec, ...]
@@ -314,6 +319,18 @@ def _comptox_seconds(section: dict[str, object], key: str, minimum: float) -> fl
     return _require_number(section, key, minimum=minimum, name="comptox")
 
 
+def _comptox_paths(section: dict[str, object]) -> dict[str, str]:
+    """The request path templates, each checked for its placeholder."""
+    return {
+        "dtxsid_by_cas_path": _require_template(section, "dtxsid_by_cas_path", "{casrn}"),
+        "detail_by_dtxsid_path": _require_template(section, "detail_by_dtxsid_path", "{dtxsid}"),
+        "properties_by_dtxsid_path": _require_template(
+            section, "properties_by_dtxsid_path", "{dtxsid}"
+        ),
+        "toxval_by_dtxsid_path": _require_template(section, "toxval_by_dtxsid_path", "{dtxsid}"),
+    }
+
+
 def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
     """Load and validate CompTox settings.
 
@@ -330,17 +347,13 @@ def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
     section = _section(_read_toml(path), "comptox")
     return ComptoxSettings(
         base_url=_comptox_str(section, "base_url"),
-        dtxsid_by_cas_path=_require_template(section, "dtxsid_by_cas_path", "{casrn}"),
-        detail_by_dtxsid_path=_require_template(section, "detail_by_dtxsid_path", "{dtxsid}"),
-        properties_by_dtxsid_path=_require_template(
-            section, "properties_by_dtxsid_path", "{dtxsid}"
-        ),
-        toxval_by_dtxsid_path=_require_template(section, "toxval_by_dtxsid_path", "{dtxsid}"),
+        **_comptox_paths(section),
         source_priority=_parse_source_priority(section),
         api_key_header=_comptox_str(section, "api_key_header"),
         api_key_env_var=_comptox_str(section, "api_key_env_var"),
         delay_seconds=_comptox_seconds(section, "delay_seconds", 0),
         timeout_seconds=_comptox_seconds(section, "timeout_seconds", 0.001),
+        accept_expired_certificate=_require_bool(section, "accept_expired_certificate", "comptox"),
         molecular_weight=_parse_molecular_weight(section),
         properties=_parse_properties(section),
         toxicity_values=_parse_toxicity_values(section),

@@ -12,7 +12,7 @@ from pydantic import SecretStr
 
 from config.loader import ComptoxSettings, MolecularWeightSpec, PropertySpec, ToxicityValueSpec
 from tools.credentials import COMPTOX_KEY
-from tools.informatics.helpers.comptox import ComptoxLookup
+from tools.informatics.helpers.comptox import ComptoxLookup, tls_verification
 
 CAS = "71-43-2"  # valid CAS format and check digit; the data below is synthetic
 DTX = "DTXSID0"
@@ -34,6 +34,7 @@ def _settings(
         api_key_env_var="TEST_KEY_VAR",  # pragma: allowlist secret
         delay_seconds=0.5,
         timeout_seconds=1.0,
+        accept_expired_certificate=False,
         molecular_weight=MolecularWeightSpec("averageMass", "g/mol", "g/mol"),
         properties=(
             PropertySpec("vapor_pressure", "Vapor Pressure", "u"),
@@ -88,8 +89,8 @@ def _raw(body: object) -> str:
     return json.dumps(body)
 
 
-def _chem(cas: str = CAS, search: str = "CAS-RN") -> dict[str, object]:
-    return {"dtxsid": DTX, "casrn": cas, "searchName": search}
+def _chem(cas: str = CAS, search: str = "CAS-RN", name: object = "Benzene") -> dict[str, object]:
+    return {"dtxsid": DTX, "casrn": cas, "searchName": search, "preferredName": name}
 
 
 def _detail(mass: object = MASS, dtxsid: object = DTX) -> dict[str, object]:
@@ -262,6 +263,27 @@ def test_result_of_another_kind_is_rejected() -> None:
 def test_cas_match_with_different_cas_is_rejected() -> None:
     lookup, _ = _lookup([_entry("Density", experimental=1.0)], chem=[_chem("50-00-0")])
     assert lookup.get_properties(CAS) == {}
+
+
+def test_the_preferred_name_comes_with_the_match_from_the_same_request() -> None:
+    lookup, requests = _lookup(chem=[_chem(name=" Benzene ")])
+    assert lookup.get_preferred_name(CAS) == "Benzene"
+    assert lookup.get_molecular_weight(CAS) == MASS
+    assert sum(r.url.path.endswith(f"/{CAS}") for r in requests) == 1  # one CAS search
+
+
+@pytest.mark.parametrize("name", [None, "", "  ", "-", 7, ["x"]])
+def test_a_missing_or_unusable_name_leaves_the_match_usable_without_a_name(name: object) -> None:
+    lookup, _ = _lookup(chem=[_chem(name=name)])
+    assert lookup.get_preferred_name(CAS) is None
+    assert lookup.get_molecular_weight(CAS) == MASS
+
+
+def test_no_match_or_invalid_cas_gives_no_name() -> None:
+    lookup, requests = _lookup(chem=[_chem("50-00-0")])
+    assert lookup.get_preferred_name(CAS) is None
+    assert lookup.get_preferred_name("not-a-cas") is None
+    assert len(requests) == 1
 
 
 def test_matching_entry_is_found_among_several() -> None:
@@ -718,3 +740,14 @@ def test_the_key_of_one_request_is_not_kept_for_the_next() -> None:
     with pytest.raises(RuntimeError, match="TEST_KEY_VAR"):
         lookup.get_properties(CAS)
     assert len(requests) == sent
+
+
+def test_certificates_are_fully_verified_unless_only_their_dates_are_waived() -> None:
+    import ssl
+    from dataclasses import replace
+
+    assert tls_verification(_settings()) is True
+    context = tls_verification(replace(_settings(), accept_expired_certificate=True))
+    assert isinstance(context, ssl.SSLContext)
+    assert context.check_hostname and context.verify_mode is ssl.CERT_REQUIRED
+    assert context.verify_flags & 0x200000  # dates skipped, nothing else

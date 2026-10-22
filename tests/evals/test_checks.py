@@ -195,3 +195,57 @@ def test_every_assessed_facility_must_be_named_in_the_report() -> None:
 
 def test_the_manual_site_input_check_does_not_apply_to_the_batch_route() -> None:
     assert _passes(c.site_inputs_per_assessed_facility(), _record(_batch({"frs_id": "F1"})))
+
+
+def _weather(source: str) -> ToolCall:
+    return _call(c.METEOROLOGY, AT_SITE, {"source": source})
+
+
+def _properties(name: object = "Testane", **sources: str) -> ToolCall:
+    output = {"preferred_name": name, "sources": {"rfc": "EPA IRIS: IRIS", **sources}}
+    return _call(c.PROPERTIES, {"cas_number": "1-2-3"}, output)
+
+
+def test_the_report_must_carry_a_distinctive_word_of_each_source() -> None:
+    check = c.report_names_each_source()
+    run = _record(_weather("Open-Meteo era5 reanalysis 2024"), _properties())
+    assert _passes(check, _record(*run.calls, report="Testane; weather: ERA5 2024; RfC from IRIS"))
+    result = check.evaluate(_record(*run.calls, report="Testane; actual local weather; IRIS"))
+    assert not result.passed and "weather source not named" in result.reason
+    result = check.evaluate(_record(*run.calls, report="Testane; ERA5 reanalysis"))
+    assert not result.passed and "benchmark rfc" in result.reason
+
+
+def test_the_screening_default_counts_as_a_source_to_name() -> None:
+    run = _record(_weather("screening default"), report="weather: screening default")
+    assert _passes(c.report_names_each_source(), run)
+    assert not _passes(c.report_names_each_source(), _record(_weather("screening default")))
+
+
+def test_the_chemical_is_called_by_the_name_given_or_by_its_cas_number_alone() -> None:
+    check = c.report_names_each_source()
+    assert not _passes(check, _record(_properties(), report="CAS 1-2-3; IRIS"))
+    unnamed = _properties(name=None)
+    assert _passes(check, _record(unnamed, report="CAS 1-2-3 from IRIS"))
+    result = check.evaluate(_record(unnamed, report="CAS 1-2-3 (Acetoin), IRIS"))
+    assert not result.passed and "no result gave CAS 1-2-3 a name" in result.reason
+    assert not _passes(check, _record(unnamed, report="1-2-3, also known as acetoin; IRIS"))
+
+
+def test_batch_route_sources_are_the_site_weather_and_the_screen() -> None:
+    check = c.report_names_each_source()
+    facility = {"frs_id": "F1", "weather_source": "Open-Meteo era5 reanalysis 2024"}
+    output = {
+        "facilities": [
+            facility,
+            {"frs_id": "F2", "weather_source": "not requested (worst case only)"},
+        ],
+        "worst_case_only": [],
+        "not_assessed": [],
+        "facilities_found": 3,
+        "screening": {"screened_out_at_bound": 1, "screened_out_with_own_stacks": 0},
+    }
+    batch = _call(c.ASSESSMENT, {"cas_number": "1-2-3"}, output)
+    assert _passes(check, _record(batch, report="ERA5 weather; bound: AirToxScreen stack"))
+    result = check.evaluate(_record(batch, report="ERA5 weather only"))
+    assert not result.passed and "screening bound" in result.reason

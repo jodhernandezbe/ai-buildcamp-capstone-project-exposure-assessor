@@ -10,6 +10,7 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
   selected_frs_id: null,
   chemical: {
     cas_number: null,
+    name: null,
     molecular_weight_g_mol: null,
     rfc_mg_m3: null,
     iur_per_ug_m3: null,
@@ -44,14 +45,26 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
  * `epoch` rises when the whole workspace is replaced (a new or restored run), so the map
  * reframes even if the replacement carries the same framing version as the one it replaces.
  */
+/** One facility to frame on the map and open the card of. */
+export interface FacilityFocus {
+  frsId: string;
+  nonce: number;
+}
+
 export function useWorkspaceStore() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(EMPTY_WORKSPACE);
   const [epoch, setEpoch] = useState(0);
+  // A request to show one facility on the map; the nonce makes a repeated request a new one.
+  const [focus, setFocus] = useState<FacilityFocus | null>(null);
+  const focusFacility = useCallback(
+    (frsId: string) => setFocus((now) => ({ frsId, nonce: (now?.nonce ?? 0) + 1 })),
+    [],
+  );
   const apply = useCallback((state: WorkspaceState) => setWorkspace(state), []);
   const replace = useCallback((state: WorkspaceState) => {
     setWorkspace(state);
     setEpoch((now) => now + 1);
   }, []);
   const clear = useCallback(() => replace(EMPTY_WORKSPACE), [replace]);
-  return { workspace, epoch, apply, replace, clear };
+  return { workspace, epoch, focus, focusFacility, apply, replace, clear };
 }

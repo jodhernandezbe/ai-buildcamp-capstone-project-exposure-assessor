@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import ssl
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -21,7 +22,27 @@ from tools.schemas import PropertyValue, ToxicityValue
 logger = logging.getLogger(__name__)
 
 _CAS_MATCH = "CAS-RN"
+_NAME_FIELD = "preferredName"  # of a CAS-search entry; the name CompTox calls the chemical by
 _ZERO_RESULTS = "found 0 results"
+
+
+# OpenSSL's X509_V_FLAG_NO_CHECK_TIME: skip the certificate's validity dates, nothing else.
+# Python's ssl module does not name it.
+_NO_CHECK_TIME = 0x200000
+
+
+def tls_verification(settings: ComptoxSettings) -> ssl.SSLContext | bool:
+    """How the client verifies the service's certificate: fully, or without its dates only.
+
+    With ``accept_expired_certificate`` the chain is still validated against the system's
+    trusted roots and the host name still checked; only an expired or not-yet-valid
+    certificate is accepted. Verification is never turned off.
+    """
+    if not settings.accept_expired_certificate:
+        return True
+    context = ssl.create_default_context()
+    context.verify_flags |= _NO_CHECK_TIME
+    return context
 
 
 @dataclass(frozen=True)
@@ -30,9 +51,11 @@ class Chemical:
 
     Attributes:
         dtxsid: DSSTox substance identifier.
+        preferred_name: The name CompTox reports for it; None when it gave none.
     """
 
     dtxsid: str
+    preferred_name: str | None = None
 
 
 def _number(value: object) -> float | None:
@@ -210,7 +233,9 @@ class ComptoxLookup:
             environ: Environment mapping the API key is read from; defaults to ``os.environ``.
         """
         self._settings = settings or get_comptox_settings()
-        self._client = client or httpx.Client(timeout=self._settings.timeout_seconds)
+        self._client = client or httpx.Client(
+            timeout=self._settings.timeout_seconds, verify=tls_verification(self._settings)
+        )
         self._sleep = sleep
         self._environ = os.environ if environ is None else environ
         self._chemicals: dict[str, Chemical | None] = {}
@@ -246,6 +271,26 @@ class ComptoxLookup:
         if cacheable:
             self._weights[cas] = weight
         return weight
+
+    def get_preferred_name(self, cas_number: str) -> str | None:
+        """The name CompTox calls the chemical by, from the same CAS search as its DTXSID.
+
+        Args:
+            cas_number: CAS registry number, e.g. "71-43-2" (hyphens optional).
+
+        Returns:
+            The preferred name; None if the CAS number is invalid, CompTox has no match or
+            gives no name for it, or a request fails. Never a name from any other source.
+
+        Raises:
+            RuntimeError: If the CAS number is valid and the API-key environment variable is
+                unset or blank.
+        """
+        cas = format_cas(cas_number)
+        if cas is None:
+            return None
+        chemical, _ = self._resolve(cas, self._headers())
+        return chemical.preferred_name if chemical is not None else None
 
     def get_properties(self, cas_number: str) -> dict[str, PropertyValue]:
         """Look up the configured properties for a chemical.
@@ -388,7 +433,7 @@ class ComptoxLookup:
                 continue
             if not isinstance(dtxsid, str) or not dtxsid.strip():
                 continue
-            return Chemical(dtxsid=dtxsid), True
+            return Chemical(dtxsid=dtxsid, preferred_name=_text(entry.get(_NAME_FIELD))), True
         logger.debug("No CAS-number match for %s in the CompTox response", cas)
         return None, True
 

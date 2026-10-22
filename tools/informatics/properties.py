@@ -27,6 +27,7 @@ _NO_COMPTOX_DATA = "no CompTox data retrieved (not found or service unavailable)
 _UNRESOLVED = (
     "CAS number {cas!r} could not be resolved in CompTox (not found or service unavailable)"
 )
+_NO_NAME = "preferred_name: CompTox gave no name; refer to the chemical by its CAS number"
 
 
 def _positive(value: float) -> bool:
@@ -41,15 +42,25 @@ class _Collected:
     sources: dict[str, str]
     details: dict[str, ToxicityDetail]
     warnings: list[str]
+    name: str | None = None
 
     @classmethod
     def empty(cls) -> _Collected:
         fields = ("molecular_weight", *_PROPERTY_FIELDS, *_TOXICITY_FIELDS)
         return cls(dict.fromkeys(fields), {}, {}, [])
 
+    def add_name(self, name: str | None) -> None:
+        """The name CompTox gave, with its source; else a warning (never a name from elsewhere)."""
+        self.name = name
+        if name is None:
+            self.warnings.append(_NO_NAME)
+        else:
+            self.sources["preferred_name"] = "CompTox"
+
     def to_properties(self) -> ChemicalProperties:
         v = self.values
         return {
+            "preferred_name": self.name,
             "molecular_weight": v["molecular_weight"],
             "vapor_pressure": v["vapor_pressure"],
             "density": v["density"],
@@ -196,6 +207,7 @@ def lookup_chemical_properties(
     if weight is None and not found and not toxicity:
         out.warnings.append(_UNRESOLVED.format(cas=cas))
         return out.to_properties()
+    out.add_name(comptox.get_preferred_name(cas))
     _add_molecular_weight(out, weight, settings.molecular_weight, aliases)
     _add_comptox_values(out, found, toxicity, settings, aliases)
     return out.to_properties()
@@ -230,6 +242,8 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
         matching risk cannot be computed and that must be reported, not replaced by a
         guess. Every value is converted to the fixed unit listed below, so results can be
         used directly (pass `rfc` and `iur` to `calculate_exposure_metrics` as they are).
+        `preferred_name` is the only name to call the chemical by; when it is null, refer
+        to the chemical by its CAS number alone and never supply a name for it.
 
     Args:
         cas_number: CAS registry number as the user gave it, e.g. "71-43-2" for benzene
@@ -238,6 +252,8 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
 
     Returns:
         A dict with:
+        - preferred_name: the name CompTox calls the chemical by (null when CompTox gave
+          none: then the chemical is referred to by its CAS number only)
         - molecular_weight: g/mol (average mass)
         - vapor_pressure: mmHg, as reported by the source (typically at 25 C)
         - density: g/cm^3
@@ -245,8 +261,8 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
         - rfc: inhalation reference concentration, mg/m^3 (non-cancer benchmark)
         - sf: oral cancer slope factor, (mg/(kg*day))^-1
         - iur: inhalation unit risk, (ug/m^3)^-1 (cancer potency)
-        - sources: for each value found, "CompTox" (molecular weight), "experimental" or
-          "predicted" (properties), or the toxicity database name
+        - sources: for each value found, "CompTox" (name and molecular weight),
+          "experimental" or "predicted" (properties), or the toxicity database name
         - toxicity_details: for each of rfd, rfc, sf and iur that has a value:
           source (database), exposure_route (the route the value applies to: "oral" for
           rfd and sf, "inhalation" for rfc and iur), route_reported (the route as the

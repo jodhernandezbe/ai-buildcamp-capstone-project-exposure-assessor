@@ -21,7 +21,16 @@ from tools.schemas import ChemicalProperties
 CAS = "71-43-2"
 DTX = "DTXSID0"
 ENV = {get_comptox_settings().api_key_env_var: "test-key"}  # pragma: allowlist secret
-FIELDS = ("molecular_weight", "vapor_pressure", "density", "rfd", "rfc", "sf", "iur")
+FIELDS = (
+    "preferred_name",
+    "molecular_weight",
+    "vapor_pressure",
+    "density",
+    "rfd",
+    "rfc",
+    "sf",
+    "iur",
+)
 
 
 def _prop(
@@ -76,6 +85,7 @@ def _run(
     tox: object = FULL_TOX,
     mass: object = 12.5,
     known: bool = True,
+    name: str | None = "Benzene",
     env: dict[str, str] | None = None,
     settings: ComptoxSettings | None = None,
 ) -> tuple[ChemicalProperties, list[httpx.Request]]:
@@ -92,6 +102,8 @@ def _run(
                 return httpx.Response(400, json=body)
             requested = path.rsplit("/", 1)[-1]  # the hyphenated CAS the helper asked for
             entry = {"dtxsid": DTX, "casrn": requested, "searchName": "CAS-RN"}
+            if name is not None:
+                entry["preferredName"] = name
             return httpx.Response(200, json=[entry])
         if "property/summary" in path:
             return httpx.Response(200, json=props)
@@ -137,9 +149,22 @@ def test_all_values_converted_to_target_units() -> None:
     assert result["warnings"] == []
 
 
+def test_the_name_is_comptoxs_with_its_source_or_none_with_a_warning() -> None:
+    result, _ = _run()
+    assert (
+        result["preferred_name"] == "Benzene" and result["sources"]["preferred_name"] == "CompTox"
+    )
+    result, _ = _run(name=None)
+    assert result["preferred_name"] is None and "preferred_name" not in result["sources"]
+    assert any(w.startswith("preferred_name: CompTox gave no name") for w in result["warnings"])
+    result, _ = _run(known=False)
+    assert result["preferred_name"] is None and "preferred_name" not in result["sources"]
+
+
 def test_sources_reported() -> None:
     result, _ = _run()
     assert result["sources"] == {
+        "preferred_name": "CompTox",
         "molecular_weight": "CompTox",
         "vapor_pressure": "experimental",
         "density": "predicted",
@@ -246,7 +271,8 @@ def test_non_positive_mass_is_rejected(mass: float) -> None:
 def test_no_comptox_data_keeps_molecular_weight() -> None:
     result, _ = _run(props=[], tox=[])
     assert _field(result, "molecular_weight") is not None
-    assert all(_field(result, f) is None for f in FIELDS[1:])
+    assert all(_field(result, f) is None for f in FIELDS[2:])  # the name and mass are kept
+    assert result["preferred_name"] == "Benzene"
     assert len(result["warnings"]) == 1
     assert "no CompTox data retrieved" in result["warnings"][0]
 
@@ -331,6 +357,7 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
         aliases={},
     )
     expected: ChemicalProperties = {
+        "preferred_name": None,
         "molecular_weight": 1.0,
         "vapor_pressure": None,
         "density": None,

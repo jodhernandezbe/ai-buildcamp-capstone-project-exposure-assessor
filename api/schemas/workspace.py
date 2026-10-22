@@ -241,6 +241,8 @@ class Chemical(ContractModel):
 
     Attributes:
         cas_number: CAS number as queried.
+        name: The name the properties result gave (CompTox's preferred name); None when it
+            gave none, and then the CAS number stands alone.
         molecular_weight_g_mol: Molecular weight, g/mol.
         rfc_mg_m3: Inhalation reference concentration, mg/m³.
         iur_per_ug_m3: Inhalation unit risk, (µg/m³)⁻¹.
@@ -248,6 +250,7 @@ class Chemical(ContractModel):
     """
 
     cas_number: str | None = None
+    name: str | None = None
     molecular_weight_g_mol: float | None = None
     rfc_mg_m3: float | None = None
     iur_per_ug_m3: float | None = None

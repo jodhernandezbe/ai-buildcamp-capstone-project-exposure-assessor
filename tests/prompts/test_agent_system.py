@@ -41,7 +41,9 @@ def test_requires_visible_quality_signals_and_limits() -> None:
         "warnings",
         "Limitations",
         "screening default",
-        "never invent",
+        "never invent, estimate, or convert numbers, names or identifiers yourself",
+        "refer to it by its cas number alone, and never add a name of your own",
+        "named as the results name it",
         # The CAS rule, in the wording measured clean in 150 of 150 first turns; a paraphrase
         # ("ask for the CAS number and make that your whole reply") fell to 12 of 30.
         "your whole reply is a request for that number",

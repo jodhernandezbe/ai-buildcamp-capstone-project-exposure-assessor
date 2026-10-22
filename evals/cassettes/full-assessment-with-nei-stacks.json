@@ -5,23 +5,27 @@
     "cas_number": "96-12-8"
    },
    "output": {
+    "preferred_name": "1,2-Dibromo-3-chloropropane",
     "molecular_weight": 236.33,
-    "vapor_pressure": null,
-    "density": null,
+    "vapor_pressure": 0.69,
+    "density": 2.08,
     "rfd": 0.0002,
     "rfc": 0.0002,
     "sf": 7.0,
     "iur": 0.0019,
     "sources": {
+     "preferred_name": "CompTox",
      "molecular_weight": "CompTox",
-     "rfd": "PA DEP: Pennsylvania DEP ToxValues",
+     "vapor_pressure": "experimental",
+     "density": "experimental",
+     "rfd": "EPA RSL: RSL",
      "rfc": "EPA IRIS: IRIS",
      "sf": "Cal OEHHA: Cal OEHHA",
      "iur": "Cal OEHHA: Cal OEHHA"
     },
     "toxicity_details": {
      "rfd": {
-      "source": "PA DEP: Pennsylvania DEP ToxValues",
+      "source": "EPA RSL: RSL",
       "exposure_route": "oral",
       "route_reported": "oral",
       "endpoint": null,
@@ -49,75 +53,16 @@
       "assessment": "cancer"
      }
     },
-    "warnings": [
-     "vapor_pressure: not found in CompTox",
-     "density: not found in CompTox"
-    ]
+    "warnings": []
    }
   }
  ],
  "fetch_stack_parameters_from_nei": [
   {
    "args": {
-    "frs_id": "110027242320"
-   },
-   "output": {
     "eis_ids": [
-     "13429211"
+     "994211"
     ],
-    "candidates": [
-     {
-      "stack_height": 4.571999999999999,
-      "stack_diameter": 1.2191999999999998,
-      "exit_velocity": 4.9775668799999995,
-      "exit_temperature": 576.4833333333333,
-      "source": "NEI",
-      "scc": null,
-      "warnings": []
-     },
-     {
-      "stack_height": 24.383999999999997,
-      "stack_diameter": 0.7619999999999999,
-      "exit_velocity": 8.79299232,
-      "exit_temperature": 283.15000000000003,
-      "source": "NEI",
-      "scc": null,
-      "warnings": []
-     },
-     {
-      "stack_height": 25.51176,
-      "stack_diameter": 1.2496799999999997,
-      "exit_velocity": 11.155679999999998,
-      "exit_temperature": 519.2611111111112,
-      "source": "NEI",
-      "scc": null,
-      "warnings": []
-     },
-     {
-      "stack_height": 30.479999999999997,
-      "stack_diameter": 0.24383999999999997,
-      "exit_velocity": 13.03190688,
-      "exit_temperature": 305.37222222222226,
-      "source": "NEI",
-      "scc": null,
-      "warnings": []
-     },
-     {
-      "stack_height": 45.71999999999999,
-      "stack_diameter": 1.8287999999999998,
-      "exit_velocity": 18.857549279999997,
-      "exit_temperature": 360.9277777777778,
-      "source": "NEI",
-      "scc": null,
-      "warnings": []
-     }
-    ],
-    "total_candidates": 5,
-    "warnings": []
-   }
-  },
-  {
-   "args": {
     "frs_id": "110000521221"
    },
    "output": {
@@ -221,6 +166,68 @@
      "20 distinct stack combinations found (0 near-identical merged); the 10 lowest stacks are returned, 10 taller omitted"
     ]
    }
+  },
+  {
+   "args": {
+    "eis_ids": [
+     "13429211"
+    ],
+    "frs_id": "110027242320"
+   },
+   "output": {
+    "eis_ids": [
+     "13429211"
+    ],
+    "candidates": [
+     {
+      "stack_height": 4.571999999999999,
+      "stack_diameter": 1.2191999999999998,
+      "exit_velocity": 4.9775668799999995,
+      "exit_temperature": 576.4833333333333,
+      "source": "NEI",
+      "scc": null,
+      "warnings": []
+     },
+     {
+      "stack_height": 24.383999999999997,
+      "stack_diameter": 0.7619999999999999,
+      "exit_velocity": 8.79299232,
+      "exit_temperature": 283.15000000000003,
+      "source": "NEI",
+      "scc": null,
+      "warnings": []
+     },
+     {
+      "stack_height": 25.51176,
+      "stack_diameter": 1.2496799999999997,
+      "exit_velocity": 11.155679999999998,
+      "exit_temperature": 519.2611111111112,
+      "source": "NEI",
+      "scc": null,
+      "warnings": []
+     },
+     {
+      "stack_height": 30.479999999999997,
+      "stack_diameter": 0.24383999999999997,
+      "exit_velocity": 13.03190688,
+      "exit_temperature": 305.37222222222226,
+      "source": "NEI",
+      "scc": null,
+      "warnings": []
+     },
+     {
+      "stack_height": 45.71999999999999,
+      "stack_diameter": 1.8287999999999998,
+      "exit_velocity": 18.857549279999997,
+      "exit_temperature": 360.9277777777778,
+      "source": "NEI",
+      "scc": null,
+      "warnings": []
+     }
+    ],
+    "total_candidates": 5,
+    "warnings": []
+   }
   }
  ],
  "get_meteorological_boundary": [
@@ -312,6 +319,11 @@
       "reporting_year": 2024,
       "doc_ctrl_num": "1324222755151",
       "naics_code": "562211",
+      "naics_title": "Hazardous Waste Treatment and Disposal",
+      "eis_ids": [
+       "994211"
+      ],
+      "eis_note": null,
       "total_release": 0.029,
       "unit": "Pounds",
       "emission_rate": 4.1711627124556067e-07,
@@ -331,6 +343,11 @@
       "reporting_year": 2024,
       "doc_ctrl_num": "1324222528895",
       "naics_code": "562213",
+      "naics_title": "Solid Waste Combustors and Incinerators",
+      "eis_ids": [
+       "13429211"
+      ],
+      "eis_note": null,
       "total_release": 0.02,
       "unit": "Pounds",
       "emission_rate": 2.8766639396245566e-07,

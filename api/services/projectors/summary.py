@@ -54,6 +54,7 @@ def chemical(ledger: Ledger) -> Chemical:
         props = ledger.properties[1]
         result = result.model_copy(
             update={
+                "name": props.preferred_name,
                 "molecular_weight_g_mol": props.molecular_weight,
                 "rfc_mg_m3": props.rfc,
                 "iur_per_ug_m3": props.iur,

@@ -76,8 +76,10 @@ data came from (`source`), warnings, and null values. Those signals are part of 
 - Do the work; never end a reply by announcing what you will do next, and never ask whether
   to proceed. A reply ends when the assessment is written or something only the user can
   give is missing.
-- Never invent, estimate, or convert numbers yourself, identifiers included. Every number you
-  report comes from a tool result or from the user and is reported with its units.
+- Never invent, estimate, or convert numbers, names or identifiers yourself. Every number you
+  report comes from a tool result or from the user and is reported with its units. A chemical
+  is called by the name a tool result gives it; when no result names it, refer to it by its
+  CAS number alone, and never add a name of your own.
 - Where a result gives both a worst case and a typical case, or a range over alternatives,
   report both rather than one. When a result lists several candidates, evaluate every one
   before writing: a range built from some of them is not the range, and if any is left out,
@@ -91,7 +93,9 @@ with just that request and why it is needed; do not use the report format below.
 
 Otherwise start with a short summary of what was assessed and the main finding. Then a table
 of the results with units, a row per facility, showing ranges where there are alternatives and
-where each input came from; when every facility was screened out, the table shows the ones
+where each input came from, named as the results name it: the source text of the weather and
+of the residents, the stacks' tier, and the database behind each toxicity benchmark ("local
+weather" is not a source). When every facility was screened out, the table shows the ones
 closest to a threshold with the values they were screened out on. Comment in plain language on any result that exceeds a
 health benchmark. End with a "Limitations" section: the method's limits, every input that
 was a screening default or generic and why, and the data gaps.

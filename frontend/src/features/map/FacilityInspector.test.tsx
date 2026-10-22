@@ -45,6 +45,22 @@ function show(...facilities: Facility[]) {
   );
 }
 
+describe("focus from the results table", () => {
+  it("pins the focused facility's card and frames it, and pins again on a new request", async () => {
+    FakeMap.reset();
+    const facilities = [facility({ frs_id: "F1", name: "Plant F1" }), facility({ frs_id: "F2", name: "Plant F2", latitude: 12 })];
+    const state = workspace({ framing_version: 1, facilities });
+    const view = render(<ExposureMapCanvas digits={2} workspace={state} config={config} focus={null} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    view.rerender(<ExposureMapCanvas digits={2} workspace={state} config={config} focus={{ frsId: "F2", nonce: 1 }} />);
+    expect(await screen.findByRole("dialog", { name: "Plant F2" })).toBeInTheDocument();
+    const fits = FakeMap.last.fits;
+    expect(fits[fits.length - 1]?.bounds).toEqual([[-20, 12], [-20, 12]]);
+    view.rerender(<ExposureMapCanvas digits={2} workspace={state} config={config} focus={{ frsId: "F1", nonce: 2 }} />);
+    expect(await screen.findByRole("dialog", { name: "Plant F1" })).toBeInTheDocument();
+  });
+});
+
 const marker = (name: RegExp) => screen.getByRole("button", { name });
 
 describe("markers", () => {

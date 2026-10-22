@@ -386,3 +386,10 @@ The system SHALL read from an `[frs_eis]` table the bulk FRS-to-EIS lookup and t
 #### Scenario: Invalid entry
 - **WHEN** a path lacks its placeholder or does not start with `/`, a field name is empty, `batch_size` is not a positive integer or the distance is not a positive number
 - **THEN** the loader raises a `ValueError` naming the key
+
+### Requirement: CompTox certificate waiver setting
+The `[comptox]` table SHALL carry `accept_expired_certificate`, a boolean, validated on load, with a comment saying it is for a lapse of the service's certificate and is to be turned off again.
+
+#### Scenario: Not a boolean
+- **WHEN** the value is missing or not a boolean
+- **THEN** the loader raises a `ValueError` naming the key

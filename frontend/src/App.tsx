@@ -54,8 +54,8 @@ export function App() {
             onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
-        overview={<OverviewPanel workspace={store.workspace} digits={digits} />}
-        map={<MapPanel workspace={store.workspace} viewEpoch={store.epoch} digits={digits} map={config?.map} />}
+        overview={<OverviewPanel workspace={store.workspace} digits={digits} onFocusFacility={store.focusFacility} />}
+        map={<MapPanel workspace={store.workspace} viewEpoch={store.epoch} focus={store.focus} digits={digits} map={config?.map} />}
         chat={({ collapse }) => (
           <ChatDock
             messages={chat.messages}

@@ -96,7 +96,7 @@
     },
     "Chemical": {
       "additionalProperties": false,
-      "description": "The chemical as queried, with its properties and read-across provenance.\n\nAttributes:\n    cas_number: CAS number as queried.\n    molecular_weight_g_mol: Molecular weight, g/mol.\n    rfc_mg_m3: Inhalation reference concentration, mg/m\u00b3.\n    iur_per_ug_m3: Inhalation unit risk, (\u00b5g/m\u00b3)\u207b\u00b9.\n    sources: Field name -> source the value came from.",
+      "description": "The chemical as queried, with its properties and read-across provenance.\n\nAttributes:\n    cas_number: CAS number as queried.\n    name: The name the properties result gave (CompTox's preferred name); None when it\n        gave none, and then the CAS number stands alone.\n    molecular_weight_g_mol: Molecular weight, g/mol.\n    rfc_mg_m3: Inhalation reference concentration, mg/m\u00b3.\n    iur_per_ug_m3: Inhalation unit risk, (\u00b5g/m\u00b3)\u207b\u00b9.\n    sources: Field name -> source the value came from.",
       "properties": {
         "cas_number": {
           "anyOf": [
@@ -124,6 +124,17 @@
           "anyOf": [
             {
               "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
@@ -160,6 +171,7 @@
       },
       "required": [
         "cas_number",
+        "name",
         "molecular_weight_g_mol",
         "rfc_mg_m3",
         "iur_per_ug_m3",

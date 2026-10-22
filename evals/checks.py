@@ -8,6 +8,7 @@ the check, so a check stays valid when the recordings change.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
@@ -24,6 +25,7 @@ METEOROLOGY = "get_meteorological_boundary"
 POPULATION = "get_population_receptors"
 EXPOSURE = "calculate_exposure_metrics"
 ASSESSMENT = "assess_facilities"
+PROPERTIES = "fetch_chemical_properties"
 STACK_FIELDS = ("stack_height", "stack_diameter", "exit_velocity", "exit_temperature")
 _REL_TOL = 1e-9
 
@@ -364,3 +366,79 @@ def every_covered_facility_reported() -> Check:
         return _verdict(problems, f"all {len(covered)} assessed facilities reported")
 
     return Check("every assessed facility reported", evaluate)
+
+
+_GENERIC_WORDS = frozenset({"reanalysis", "data", "year", "from", "with", "tracts", "tract"})
+_NOT_A_SOURCE = "not requested"  # a batch facility kept at the worst case has no site weather
+
+
+def _tokens(text: str) -> list[str]:
+    """The distinctive words of a source text: 4+ characters, not generic, lower-cased."""
+    words = re.findall(r"[a-z0-9][a-z0-9-]{3,}", text.lower())
+    return [w for w in words if w not in _GENERIC_WORDS]
+
+
+def _mentions(report: str, text: str) -> bool:
+    """Whether the report carries at least one distinctive word of the source text."""
+    tokens = _tokens(text)
+    return not tokens or any(t in report.lower() for t in tokens)
+
+
+def _batch_sources(record: RunRecord) -> list[tuple[str, str]]:
+    """Source texts the batch assessment reports: site weather, and the screen's own."""
+    found: list[tuple[str, str]] = []
+    for call in record.calls_to(ASSESSMENT):
+        output = _mapping(call.output)
+        for facility in _dicts(output.get("facilities")):
+            source = str(facility.get("weather_source") or "")
+            if source and not source.startswith(_NOT_A_SOURCE):
+                found.append(("weather", source))
+        if screened_out(record):
+            found.append(("screening bound", "AirToxScreen SCREEN3"))
+    return found
+
+
+def input_sources(record: RunRecord) -> list[tuple[str, str]]:
+    """(label, source text) of every input the run obtained, from the record's tool outputs."""
+    found: list[tuple[str, str]] = []
+    for tool, label in ((METEOROLOGY, "weather"), (POPULATION, "residents")):
+        found += [
+            (label, str(_mapping(c.output).get("source") or "")) for c in record.calls_to(tool)
+        ]
+    for call in record.calls_to(PROPERTIES):
+        sources = _mapping(_mapping(call.output).get("sources"))
+        found += [(f"benchmark {k}", str(v)) for k, v in sources.items() if k in ("rfc", "iur")]
+    return [*found, *_batch_sources(record)]
+
+
+def _name_problems(record: RunRecord) -> list[str]:
+    """The chemical is called what the properties result calls it, else by its CAS number."""
+    problems: list[str] = []
+    for call in record.calls_to(PROPERTIES):
+        name = _mapping(call.output).get("preferred_name")
+        cas = str(call.args.get("cas_number") or "").strip()
+        if isinstance(name, str) and name.strip():
+            if name.strip().lower() not in record.report.lower():
+                problems.append(f"the chemical's name {name!r} is not in the report")
+        elif re.search(rf"{re.escape(cas)}\s*\(|\bknown as\b", record.report, re.I):
+            problems.append(
+                f"the report names the chemical although no result gave CAS {cas} a name"
+            )
+    return problems
+
+
+def report_names_each_source() -> Check:
+    """The report names the source of each input as the results give it, and calls the
+    chemical by the name the properties result gave (or by its CAS number alone)."""
+
+    def evaluate(record: RunRecord) -> CheckResult:
+        sources = {text: label for label, text in input_sources(record) if text}
+        problems = [
+            f"{label} source not named: {text!r}"
+            for text, label in sources.items()
+            if not _mentions(record.report, text)
+        ]
+        problems += _name_problems(record)
+        return _verdict(problems, f"all {len(sources)} input sources named")
+
+    return Check("report names each input source", evaluate)

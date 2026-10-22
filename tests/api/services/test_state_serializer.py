@@ -379,6 +379,7 @@ def test_several_facilities_with_nothing_to_tell_them_apart_select_none() -> Non
 
 def properties(cas: str = "1-1-1") -> list[BaseMessage]:
     body: dict[str, object] = {
+        "preferred_name": "Testane",
         "molecular_weight": 50.0,
         "rfc": 0.5,
         "iur": 1e-6,
@@ -414,7 +415,15 @@ def test_the_chemical_shows_the_properties_with_their_sources() -> None:
         0.5,
         1e-6,
     )
-    assert chemical.sources == {"rfc": "IRIS"}
+    assert chemical.sources == {"rfc": "IRIS"} and chemical.name == "Testane"
+
+
+def test_a_chemical_without_a_name_has_none() -> None:
+    messages = properties()
+    body: dict[str, object] = {"molecular_weight": 50.0, "sources": {}, "warnings": ["no name"]}
+    chemical = build(exchange("fetch_chemical_properties", {"cas_number": "1-1-1"}, body)).chemical
+    assert chemical.name is None and chemical.molecular_weight_g_mol == 50.0
+    assert build(messages).chemical.name == "Testane"
 
 
 def test_a_direct_tri_match_is_shown_as_one() -> None:

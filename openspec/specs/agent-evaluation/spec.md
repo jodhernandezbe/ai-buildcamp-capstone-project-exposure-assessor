@@ -175,3 +175,25 @@ the worst and the representative case, the source of each input, and a limitatio
 #### Scenario: Complete assessment
 - **WHEN** the agent follows the chain for every facility it assesses and writes the full report
 - **THEN** every check passes
+
+### Requirement: Cassette current with the tools
+A scenario's cassette SHALL be recorded while every service it needs answers (a recording made during an outage carries the outage, not the data), and SHALL hold a recording for every call the agent can make on either route it may take (the batch assessment, or the chain by hand with the current tool signatures). A replay that hits an unrecorded call SHALL fail the scenario and be answered by re-recording it, never by editing the cassette.
+
+#### Scenario: Tool signature changed
+- **WHEN** a tool the agent calls gains an argument and the agent now passes it
+- **THEN** the replay reports the call as unrecorded and the scenario is re-recorded
+
+#### Scenario: Service outage during recording
+- **WHEN** a service fails while a scenario is being recorded
+- **THEN** the recording is not kept as the cassette
+
+### Requirement: The report names each input's source
+A scenario MAY declare a deterministic check that the final report names the source of each input the run obtained: for every weather, residents and properties result in the record, the distinctive part of its `source` text (for example "era5", "ACS", "CompTox", a benchmark source name) SHALL appear in the report, and the chemical SHALL be referred to by the name the properties result gave or by its CAS number, never by another name. The expected strings SHALL come from the record's tool outputs.
+
+#### Scenario: Weather source paraphrased
+- **WHEN** the weather result's source is "Open-Meteo era5 reanalysis 2024" and the report says only "local weather"
+- **THEN** the check fails and names the missing source
+
+#### Scenario: Invented chemical name
+- **WHEN** the properties result has no name and the report calls the chemical by a name
+- **THEN** the check fails

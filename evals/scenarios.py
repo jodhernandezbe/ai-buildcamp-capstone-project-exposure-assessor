@@ -46,6 +46,7 @@ FULL_ASSESSMENT = Scenario(
         c.called_with("fetch_chemical_properties", cas_number=FULL_ASSESSMENT_CAS),
         c.every_facility_covered(),
         c.every_covered_facility_reported(),
+        c.report_names_each_source(),
         c.site_inputs_per_assessed_facility(),
         c.exposure_covers_every_candidate(),
         c.no_fallback_for_facilities_with_candidates(),

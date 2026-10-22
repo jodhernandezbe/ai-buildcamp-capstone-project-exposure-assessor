@@ -20,6 +20,10 @@ api_key_env_var = "COMPTOX_API_KEY"  # pragma: allowlist secret
 # Seconds to wait before each request.
 delay_seconds = 0.2
 timeout_seconds = 15.0
+# Skip only the validity-dates check of the service's TLS certificate (chain and host name are
+# still verified). For an outage where EPA's certificate has lapsed (2026-10-21); set it back
+# to false once the certificate is renewed.
+accept_expired_certificate = false
 
 # Molecular weight comes from the chemical detail response (detail_by_dtxsid_path). `field` is
 # the response field holding it; `unit` is the unit the API reports it in (the response carries

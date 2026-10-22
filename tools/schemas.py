@@ -11,6 +11,7 @@ class ChemicalProperties(TypedDict):
     A value is None when it could not be obtained or converted; ``warnings`` says why.
     """
 
+    preferred_name: str | None  # the name CompTox calls it by; None = refer to it by CAS only
     molecular_weight: float | None  # g/mol
     vapor_pressure: float | None  # mmHg, as reported by the source (typically 25 C)
     density: float | None  # g/cm^3

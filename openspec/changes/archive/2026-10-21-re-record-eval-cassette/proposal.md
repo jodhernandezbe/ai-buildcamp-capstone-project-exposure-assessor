@@ -12,6 +12,11 @@ of them because the report did not name the weather source).
 
 ## What Changes
 
+- `[comptox].accept_expired_certificate` (default false): when set, the CompTox client skips
+  only the validity-dates check of the service's TLS certificate; the chain is still validated
+  against the system's trusted roots and the host name still checked, so the API key still
+  travels encrypted to EPA's own server. It is the narrow way to reach CompTox during the
+  lapse, turned on for the recording and off again before the commit.
 - Re-record the cassette once CompTox answers again, on a run that covers the calls of both
   routes (the batch assessment, and the chain by hand), and run `uv run pytest -m eval` three
   times.
@@ -27,10 +32,13 @@ of them because the report did not name the weather source).
 
 ### Modified Capabilities
 
+- `comptox-property-lookup`: certificate verification can waive the dates only, by setting.
+- `app-configuration`: the `[comptox]` waiver setting.
 - `agent-evaluation`: a cassette must hold a recording for every call the agent can make on
   either route, and a replay that hits an unrecorded call means the scenario is re-recorded.
 
 ## Impact
 
+- `config/loader.py`, `config/settings.toml`, `tools/informatics/helpers/comptox.py` and tests.
 - `evals/cassettes/full-assessment-with-nei-stacks.json` (re-recorded live; never edited by hand).
 - Costs OpenAI tokens (agent and judge) and needs the CompTox and Census keys.

@@ -285,6 +285,8 @@ export interface BoundingBox {
  *
  * Attributes:
  *     cas_number: CAS number as queried.
+ *     name: The name the properties result gave (CompTox's preferred name); None when it
+ *         gave none, and then the CAS number stands alone.
  *     molecular_weight_g_mol: Molecular weight, g/mol.
  *     rfc_mg_m3: Inhalation reference concentration, mg/m³.
  *     iur_per_ug_m3: Inhalation unit risk, (µg/m³)⁻¹.
@@ -297,6 +299,7 @@ export interface Chemical {
   cas_number: string | null;
   iur_per_ug_m3: number | null;
   molecular_weight_g_mol: number | null;
+  name: string | null;
   read_across: ReadAcross;
   rfc_mg_m3: number | null;
   sources: {

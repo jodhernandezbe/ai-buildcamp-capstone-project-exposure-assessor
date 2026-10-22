@@ -79,6 +79,7 @@ class SccLookupPayload(Payload):
 
 
 class PropertiesPayload(Payload):
+    preferred_name: str | None = None
     molecular_weight: Num | None = None
     rfc: Num | None = None
     iur: Num | None = None

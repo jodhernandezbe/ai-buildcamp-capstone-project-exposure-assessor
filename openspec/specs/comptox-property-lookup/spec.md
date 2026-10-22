@@ -78,11 +78,15 @@ The system SHALL return no properties, rather than raise, when CompTox is unreac
 - **THEN** it is treated as "no match", not as a transient failure
 
 ### Requirement: Resolve CAS number to DTXSID
-The system SHALL resolve a CAS registry number to a DSSTox substance identifier (DTXSID) by querying CompTox's exact CAS search, and SHALL accept a result only if CompTox reports it as a CAS-number match whose CAS equals the requested one. The CAS number SHALL be validated (format and check digit) and normalized to its hyphenated form before any request.
+The system SHALL resolve a CAS registry number to a DSSTox substance identifier (DTXSID) by querying CompTox's exact CAS search, and SHALL accept a result only if CompTox reports it as a CAS-number match whose CAS equals the requested one. The accepted match's preferred name SHALL be kept with the DTXSID when it is a non-empty string, and left absent otherwise (a missing name never rejects the match). The CAS number SHALL be validated (format and check digit) and normalized to its hyphenated form before any request.
 
 #### Scenario: Known CAS number
 - **WHEN** CompTox returns a CAS-number match whose CAS equals the requested CAS
-- **THEN** the system uses the DTXSID of that match for the property request
+- **THEN** the system uses the DTXSID of that match for the property request and keeps its preferred name
+
+#### Scenario: Name absent or not text
+- **WHEN** the accepted match has no preferred name, or it is blank or not a string
+- **THEN** the DTXSID is still used and the name is absent
 
 #### Scenario: Hyphens omitted
 - **WHEN** the CAS number is given without hyphens, e.g. "71432"
@@ -133,3 +137,18 @@ The system SHALL check the type and shape of every CompTox field it uses before 
 #### Scenario: Record for another chemical
 - **WHEN** a ToxVal record's DTXSID differs from the one requested
 - **THEN** the record is ignored
+
+### Requirement: Certificate verification waives the dates only, by setting
+The CompTox client SHALL verify the service's TLS certificate fully by default. When the `accept_expired_certificate` setting is on, it SHALL skip only the certificate's validity-dates check: the chain SHALL still be validated against the trusted roots and the host name SHALL still be checked. Verification SHALL never be turned off, and the API key SHALL never be sent over an unverified connection.
+
+#### Scenario: Default
+- **WHEN** the setting is off
+- **THEN** the client verifies the certificate fully
+
+#### Scenario: Lapsed certificate accepted
+- **WHEN** the setting is on and the service's certificate has expired but is otherwise valid for the host
+- **THEN** the request succeeds
+
+#### Scenario: Wrong host or untrusted chain
+- **WHEN** the setting is on and the certificate is for another host or not signed by a trusted root
+- **THEN** the request fails

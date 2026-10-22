@@ -28,6 +28,8 @@ REQUIRED = {
         "toxicity benchmarks",
         "null means no usable value",
         "must be reported, not replaced by a guess",
+        "`preferred_name` is the only name to call the chemical by",
+        "never supply a name for it",
         "Never a number recalled from a chemical's name",
     ),
     "find_tri_read_across_surrogate": (

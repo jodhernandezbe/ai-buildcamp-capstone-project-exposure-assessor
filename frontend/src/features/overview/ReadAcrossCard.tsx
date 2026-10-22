@@ -38,6 +38,11 @@ export function ReadAcrossCard({ chemical, digits }: { chemical: Chemical; digit
   const { read_across: match, sources } = chemical;
   return (
     <CardFrame title="Chemical & provenance" badge={<Badge kind={match.kind} />}>
+      {chemical.name !== null && (
+        <p className="m-0 mb-1.5 text-sm font-medium" data-testid="chemical-name">
+          {chemical.name}
+        </p>
+      )}
       <dl className="m-0 grid grid-cols-2 gap-2">
         <Metric label="CAS number">{orNotReported(chemical.cas_number)}</Metric>
         <Metric label="Molecular weight">
