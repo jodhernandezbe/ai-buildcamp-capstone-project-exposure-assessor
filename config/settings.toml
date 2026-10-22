@@ -821,3 +821,40 @@ cached_input_usd_per_mtok = 0.50
 output_usd_per_mtok = 8.00
 priced_on = 2026-10-20
 source_url = "https://platform.openai.com/docs/pricing"
+
+# Census Bureau Quarterly Survey of Plant Capacity Utilization (QPC): the developer script
+# scripts/build_census_qpc_baseline.py downloads one quarterly workbook and writes the average
+# plant hours per week by four-digit NAICS code to `output_path`. Run it with:
+# uv run python -m scripts.build_census_qpc_baseline
+[qpc]
+# Workbook of a release; {year} is four digits, {quarter} is 1-4. Only https on `allowed_host`.
+url_template = "https://www2.census.gov/programs-surveys/qpc/tables/{year}/{year}-qtr-table-final-q{quarter}.xlsx"
+allowed_host = "www2.census.gov"
+# A release is published about 2.5 months after its quarter ends, so the newest quarter is not
+# there yet: use the one this many quarters before the current one (2026 Q4 -> 2026 Q2).
+lag_quarters = 2
+# The tab, the header labels (whitespace and case ignored) and the title cell (A1) to look for.
+sheet_name = "FULL Utilization Rates"
+code_header = "NAICS Code(s)"
+hours_header = "Average plant hours per week in operation"
+# Named groups `year` and `quarter` of the sheet title, e.g. "... Full Rates: 2026 Quarter 2".
+title_pattern = "(?P<year>\\d{4}) Quarter (?P<quarter>[1-4])"
+# The workbook must state this NAICS edition; the pattern's group `edition` is searched for in
+# `intro_sheet_name`. The four-digit codes of another edition are not comparable.
+intro_sheet_name = "Introduction"
+naics_edition = 2022
+# Column of the NAICS titles table ([industry].titles_path) that says which edition a code is from;
+# the four-digit children of a three-digit row are the codes of `naics_edition` under it.
+titles_vintage_column = "vintage"
+naics_edition_pattern = "(?P<edition>\\d{4}) edition of the North American Industry Classification"
+# Plausible hours per week: more than `min_hours` (exclusive) and at most `max_hours_per_week`
+# (24 h x 7 d = 168, continuous operation, is valid).
+min_hours = 0
+max_hours_per_week = 168
+# Fewer four-digit codes than this means the layout changed; the file is not written.
+min_codes = 50
+# How many rows from the top the header row may be.
+header_search_rows = 15
+timeout_seconds = 30
+max_bytes = 5_000_000
+output_path = "data/census_qpc_baseline.parquet"
