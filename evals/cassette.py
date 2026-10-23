@@ -104,8 +104,33 @@ class Recorder:
         """Return the tools with each network tool recording its live outputs."""
         return [t if t.name in live_tools else _clone(t, self._recorder(t)) for t in tools]
 
+    def seed(self, path: Path) -> None:
+        """Start from the recordings of the cassette file ``path`` (none if it is missing).
+
+        What is recorded afterwards is added to them; for the same tool and arguments the new
+        output replaces the old one.
+        """
+        if not path.is_file():
+            return
+        raw = cast(dict[str, list[dict[str, object]]], json.loads(path.read_text()))
+        for tool, rows in raw.items():
+            for row in rows:
+                args = cast(Mapping[str, object], row["args"])
+                self._rows.setdefault(tool, {})[call_key(args)] = row
+
+    def invoke(self, tools: Sequence[BaseTool], name: str, args: Mapping[str, object]) -> None:
+        """Call the wrapped tool ``name`` (a recording clone from ``wrap``) with ``args``.
+
+        The clone receives every field of the tool's argument schema, defaults included, so the
+        recording carries the key of an agent call that leaves its optional arguments out.
+        """
+        chosen = next((t for t in tools if t.name == name), None)
+        if chosen is None:
+            raise KeyError(f"no tool named {name!r} to record")
+        chosen.invoke(dict(args))
+
     def save(self, path: Path) -> None:
-        """Write everything recorded as a cassette file (replaces an existing one)."""
+        """Write everything recorded (and seeded) as a cassette file, replacing the file."""
         rows = {tool: list(calls.values()) for tool, calls in sorted(self._rows.items())}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(rows, indent=1, ensure_ascii=False, default=str) + "\n")

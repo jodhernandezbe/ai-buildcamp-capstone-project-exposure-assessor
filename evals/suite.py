@@ -47,10 +47,34 @@ def evaluate(scenario: Scenario, run_dir: Path | None = None) -> tuple[RunRecord
     return record, score_run(record, scenario.checks, scenario.judges, settings, folder)
 
 
+def record_extras(scenario: Scenario, recorder: Recorder, tools: Sequence[BaseTool]) -> None:
+    """Make the scenario's extra calls live through the recording ``tools``."""
+    for extra in scenario.extra_calls:
+        recorder.invoke(tools, extra.tool, extra.args)
+
+
 def record_live(scenario: Scenario) -> RunRecord:
-    """Run ``scenario`` against the live services and save every network tool output."""
+    """Run ``scenario`` against the live services and save every network tool output.
+
+    The cassette is replaced by this run's recordings plus the scenario's extra calls.
+    """
     recorder = Recorder()
     tools = recorder.wrap(get_all_tools(), get_evaluation_settings().live_tools)
     record = run_with(scenario, tools)
+    record_extras(scenario, recorder, tools)
     recorder.save(cassette_path(scenario))
     return record
+
+
+def record_extra_live(scenario: Scenario) -> int:
+    """Make only the scenario's extra calls live and add them to its cassette.
+
+    Returns:
+        The number of extra calls made.
+    """
+    recorder = Recorder()
+    recorder.seed(cassette_path(scenario))
+    tools = recorder.wrap(get_all_tools(), get_evaluation_settings().live_tools)
+    record_extras(scenario, recorder, tools)
+    recorder.save(cassette_path(scenario))
+    return len(scenario.extra_calls)

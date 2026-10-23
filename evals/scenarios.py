@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from evals import checks as c
 from evals.judges import ASKS_FOR_CAS, COMPLETE_ASSESSMENT_REPORT, Judge
+
+
+@dataclass(frozen=True)
+class ExtraCall:
+    """A tool call made once when recording, to cover a route the agent may take."""
+
+    tool: str
+    args: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -17,6 +26,7 @@ class Scenario:
     checks: tuple[c.Check, ...] = ()
     judges: tuple[Judge, ...] = ()
     blocked: str | None = None
+    extra_calls: tuple[ExtraCall, ...] = ()
 
 
 _NOT_WRITTEN = "checks and cassette not written yet"
@@ -52,6 +62,8 @@ FULL_ASSESSMENT = Scenario(
         c.no_fallback_for_facilities_with_candidates(),
     ),
     judges=(COMPLETE_ASSESSMENT_REPORT,),
+    # The agent may assess the facilities by the batch tool instead of by hand; record it too.
+    extra_calls=(ExtraCall(c.ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS}),),
 )
 
 CATALOGUE: tuple[Scenario, ...] = (

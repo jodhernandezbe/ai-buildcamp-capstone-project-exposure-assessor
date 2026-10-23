@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from langchain_core.tools import BaseTool, tool
 
 from evals.cassette import UNRECORDED_KEY, Cassette, Recorder, call_key, replay_tools
@@ -71,3 +72,62 @@ def test_recording_round_trip(tmp_path: Path) -> None:
     CALLS.clear()
     assert _replayed(Cassette.load(path))["network_tool"].invoke({"site_id": 9}) == live
     assert CALLS == []
+
+
+@tool
+def optional_tool(site_id: str, region: str | None = None) -> dict[str, object]:
+    """A stand-in tool with an optional argument."""
+    return {"site": site_id, "region": region}
+
+
+def _recorded_path(tmp_path: Path, recorder: Recorder) -> Path:
+    path = tmp_path / "scenario.json"
+    recorder.save(path)
+    return path
+
+
+def test_seeded_recordings_are_kept_and_new_ones_added(tmp_path: Path) -> None:
+    first = Recorder()
+    first_tools = first.wrap([network_tool], set())
+    first.invoke(first_tools, "network_tool", {"site_id": "1"})
+    path = _recorded_path(tmp_path, first)
+
+    second = Recorder()
+    second.seed(path)
+    second.invoke(second.wrap([network_tool], set()), "network_tool", {"site_id": "2"})
+    kept = Cassette.load(_recorded_path(tmp_path, second)).outputs["network_tool"]
+    assert set(kept) == {call_key({"site_id": "1"}), call_key({"site_id": "2"})}
+
+
+def test_a_new_recording_replaces_the_seeded_one_for_the_same_arguments(tmp_path: Path) -> None:
+    first = Recorder()
+    first.invoke(first.wrap([network_tool], set()), "network_tool", {"site_id": "1"})
+    path = _recorded_path(tmp_path, first)
+    second = Recorder()
+    second.seed(path)
+    second.invoke(second.wrap([network_tool], set()), "network_tool", {"site_id": "1"})
+    rows = Cassette.load(_recorded_path(tmp_path, second)).outputs["network_tool"]
+    assert len(rows) == 1
+
+
+def test_seeding_from_a_missing_file_starts_empty(tmp_path: Path) -> None:
+    recorder = Recorder()
+    recorder.seed(tmp_path / "none.json")
+    path = _recorded_path(tmp_path, recorder)
+    assert Cassette.load(path).outputs == {}
+
+
+def test_extra_call_key_equals_the_key_of_an_agent_call_omitting_optional_arguments(
+    tmp_path: Path,
+) -> None:
+    recorder = Recorder()
+    recorder.invoke(recorder.wrap([optional_tool], set()), "optional_tool", {"site_id": "7"})
+    cassette = Cassette.load(_recorded_path(tmp_path, recorder))
+    replayed = replay_tools([optional_tool], cassette, set())[0]
+    assert replayed.invoke({"site_id": "7"}) == {"site": "7", "region": None}
+
+
+def test_recording_an_unknown_tool_is_an_error() -> None:
+    recorder = Recorder()
+    with pytest.raises(KeyError, match="no tool named"):
+        recorder.invoke(recorder.wrap([network_tool], set()), "missing", {})

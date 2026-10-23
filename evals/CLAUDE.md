@@ -13,6 +13,9 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - Only `scoring.py` imports `evidently`, so a version change touches one file.
 - Cassettes in `evals/cassettes/` are recorded from live tools with
   `uv run python -m evals record <scenario>`; never write or edit tool outputs by hand.
+  A scenario lists `extra_calls` for routes the agent may take instead of the one it took (the
+  batch `assess_facilities` beside the per-facility tools); `record` makes them after the run,
+  and `record-extra <scenario>` makes only them and adds them to the cassette.
   A replayed call with no recording fails closed and fails the scenario.
 - Checks take expected values from the record's tool outputs, never from numbers written
   into the check. Judges answer one narrow PASS/FAIL criterion each.
