@@ -2,7 +2,9 @@
 
 A facility is left out only when its screening value is below both thresholds; facilities
 that go on are ordered by how far they exceed a threshold, not by how much they emit. Without
-any benchmark nothing can be screened out, and the order is the emission rate.
+any benchmark nothing can be screened out, and the order is the emission rate. Every facility
+that reaches a threshold is refined; ``max_refined`` is only a safety bound, and what it
+leaves over is reported.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ Candidate = tuple[EmissionRecord, ScreeningBound | None]
 
 @dataclass(frozen=True)
 class Screen:
-    """The outcome of the bound: facilities to refine, those left out, those over the cap."""
+    """The outcome of the bound: facilities to refine, left out, and past the safety bound."""
 
     candidates: list[Candidate]
     screened_out: list[ScreenedOut]
@@ -68,14 +70,14 @@ def _out_at_bound(
 
 
 def _over(kept: Sequence[Candidate], cap: int) -> list[NotAssessed]:
-    reason = f"its bound reaches a threshold, but only {cap} facilities are refined per call"
+    reason = f"more than {cap} facilities reach a threshold; refining them all was not attempted"
     return [NotAssessed(frs_id=record["frs_id"], reason=reason) for record, _ in kept[cap:]]
 
 
 def screen(
     records: Sequence[EmissionRecord], unit: Worst | None, settings: AssessmentSettings
 ) -> Screen:
-    """Tier 1: the bound of every facility; the ones reaching a threshold, largest first.
+    """Tier 1: the bound of every facility; the ones reaching a threshold all go on, largest first.
 
     ``unit`` is the unit-rate worst case of the generic stack, or None when nothing can be
     screened (no benchmark): then every facility goes on, by emission rate.

@@ -40,6 +40,7 @@ describe("assessment outcome", () => {
     ["worst_case_only", true, false],
     ["screened_out_at_bound", false, true],
     ["screened_out_with_own_stacks", false, true],
+    ["not_assessed", false, false],
   ] as const)("follows the screen's outcome %s", (outcome, assessed, screened) => {
     const f = facility({ screening: screening(outcome), exposure });
     expect([outcomeOf(f), isAssessed(f), isScreenedOut(f)]).toEqual([outcome, assessed, screened]);

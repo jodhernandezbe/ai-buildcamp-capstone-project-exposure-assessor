@@ -124,7 +124,11 @@ class Polygon(ContractModel):
 
 
 ScreeningOutcome = Literal[
-    "full", "worst_case_only", "screened_out_at_bound", "screened_out_with_own_stacks"
+    "full",
+    "worst_case_only",
+    "screened_out_at_bound",
+    "screened_out_with_own_stacks",
+    "not_assessed",
 ]
 
 
@@ -134,13 +138,14 @@ class Screening(ContractModel):
     Attributes:
         outcome: Fully assessed; kept at its own-stack worst case only (no weather, residents
             or representative case); or screened out on the conservative bound (a generic
-            short, cold stack) or on its own-stack worst case, below both thresholds.
+            short, cold stack) or on its own-stack worst case, below both thresholds; or not
+            assessed, with the reason in ``reason``.
         bound_hq: The bound's hazard quotient (unitless), when computed.
         bound_cancer_risk: The bound's lifetime excess cancer risk (unitless), when computed.
         value_hq: The screening value compared with the threshold (the bound, or the own-stack
             worst case), unitless.
         value_cancer_risk: Likewise for the cancer risk.
-        reason: Why the facility was screened out, in words; None otherwise.
+        reason: Why the facility was screened out or not assessed, in words; None otherwise.
     """
 
     outcome: ScreeningOutcome

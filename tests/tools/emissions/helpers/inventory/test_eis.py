@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from urllib.parse import unquote
 
 import httpx
@@ -20,13 +21,16 @@ SETTINGS = FrsEisSettings(
     registry_field="registry_id",
     eis_id_field="pgm_sys_id",
     sites_path="/sites/{frs_ids}",
-    twins_path="/twins/{name}/{state}",
+    twins_path="/twins/{names}/{state}",
+    twin_single_path="/twin/{name}/{state}",
     name_field="primary_name",
     state_field="state_code",
     latitude_field="latitude",
     longitude_field="longitude",
     batch_size=2,
     max_twin_distance_km=0.5,
+    twin_list_pattern=re.compile(r"^[A-Za-z0-9 .-]+$"),
+    twin_batch_size=2,
     twin_workers=2,
     cache_seconds=0.0,
 )
@@ -60,11 +64,13 @@ class Service:
         sites: dict[str, Row] | None = None,
         twins: dict[tuple[str, str], list[Row]] | None = None,
         failing: str | None = None,
+        rejects: str | None = None,
     ) -> None:
         self.registrations = registrations or {}
         self.sites = sites or {}
         self.twins = twins or {}
         self.failing = failing
+        self.rejects = rejects  # a name the service cannot parse inside a list
         self.paths: list[str] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -78,8 +84,17 @@ class Service:
         elif kind == "sites":
             rows = [self.sites[i] for i in rest.split(",") if i in self.sites]
         else:
-            name, _, state = rest.rpartition("/")
-            rows = self.twins.get((name, state), [])
+            names, _, state = rest.rpartition("/")
+            if kind == "twins" and self.rejects and self.rejects in names.split(","):
+                return httpx.Response(500, json={"error": "The query could not be parsed."})
+            rows = [
+                r
+                for n in names.split(",")
+                if kind == "twins"
+                for r in self.twins.get((n, state), [])
+            ]
+            if kind == "twin":
+                rows = self.twins.get((names, state), [])
         return httpx.Response(200, json=rows)
 
     def resolve(self, *frs_ids: str) -> list[EmissionRecord]:
@@ -172,7 +187,7 @@ def test_the_twins_of_several_facilities_have_their_registrations_read_together(
     assert _ids(service.resolve(B, C)) == [["77"], ["88"]]
     registrations = [p for p in service.paths if p.startswith("/eis/")]
     assert registrations == [f"/eis/{B},{C}", f"/eis/{TWIN},{FAR}"]  # own, then every twin
-    assert sum(p.startswith("/twins/") for p in service.paths) == 2  # one search per facility
+    assert sum(p.startswith("/twins/") for p in service.paths) == 1  # one request, both names
 
 
 def test_two_twins_with_registrations_are_ambiguous_and_none_is_used() -> None:
@@ -230,3 +245,52 @@ def test_rows_for_ids_not_asked_or_without_digits_are_ignored() -> None:
     )
     records = EisResolver(client, SETTINGS)([emission_record(A, 1.0)])
     assert records[0]["eis_ids"] == []
+
+
+def _many(count: int) -> tuple[dict[str, Row], dict[tuple[str, str], list[Row]], list[str]]:
+    ids = [f"1100000001{i:02d}" for i in range(count)]
+    sites = {i: _site(i, name=f"PLANT {n}") for n, i in enumerate(ids)}
+    twins = {(f"PLANT {n}", "TX"): [sites[i]] for n, i in enumerate(ids)}
+    return sites, twins, ids
+
+
+def test_twin_searches_go_by_batch_of_names_not_by_facility() -> None:
+    sites, twins, ids = _many(5)
+    service = Service({}, sites=sites, twins=twins)
+    service.resolve(*ids)
+    searches = [p for p in service.paths if p.startswith("/twin")]
+    assert len(searches) == 3  # 5 names: lists of 2 and 2, and the last one alone
+    assert sum(p.startswith("/twins/") for p in searches) == 2
+
+
+def test_a_name_the_service_cannot_parse_is_not_searched() -> None:
+    name = "PLANT, ONE"
+    twin = _site(TWIN, name=name, lat=30.001)
+    service = Service({TWIN: ["77"]}, sites={B: _site(B, name=name)}, twins={(name, "TX"): [twin]})
+    record = service.resolve(B)[0]
+    assert record["eis_ids"] == []
+    assert not [p for p in service.paths if p.startswith("/twin")]
+
+
+def test_a_rejected_batch_is_split_until_the_bad_name_is_alone() -> None:
+    sites, twins, ids = _many(4)
+    twins[("PLANT 3", "TX")] = [sites[ids[3]], _site(TWIN, name="PLANT 3", lat=30.001)]
+    service = Service({TWIN: ["77"]}, sites=sites, twins=twins, rejects="PLANT 1")
+    records = service.resolve(*ids)
+    assert records[3]["eis_ids"] == ["77"]  # the other names were still searched
+    assert records[1]["eis_ids"] == []  # PLANT 1 alone is rejected only inside a list
+    assert any(p.startswith("/twin/PLANT 1/") for p in service.paths)
+
+
+def test_a_failing_twin_search_leaves_a_note_and_no_exception() -> None:
+    service = Service({}, sites={B: _site(B)}, failing="/twin")
+    record = service.resolve(B)[0]
+    assert record["eis_ids"] == [] and "no other FRS record" in (record["eis_note"] or "")
+
+
+def test_names_with_characters_the_service_rejects_cost_no_request() -> None:
+    odd = ["A&B CO", "O'BRIEN CO", "PLANT (USA)"]
+    sites = {f"11000000020{n}": _site(f"11000000020{n}", name=name) for n, name in enumerate(odd)}
+    service = Service({}, sites=sites, twins={})
+    service.resolve(*sites)
+    assert not [p for p in service.paths if p.startswith("/twin")]

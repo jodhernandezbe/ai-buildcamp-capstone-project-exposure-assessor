@@ -79,12 +79,21 @@ export function FacilityInspector({
   const radii = facilityCollection(facilities, scale).features;
   const placed = (facility: Facility, x: number, y: number, pinned: boolean): Active => {
     const box = overlay.current?.getBoundingClientRect();
+    if (!box) {
+      return { frsId: facility.frs_id, flipX: false, flipY: false, pinned, maxHeight: CARD_HEIGHT_PX };
+    }
+    // The card grows from the marker, up by default and down when there is little room above,
+    // so it may be no taller than the room on that side: the overlay clips what sticks out, and
+    // a clipped part cannot be scrolled to.
+    const above = Math.max(y - GAP_PX, 0);
+    const below = Math.max(box.height - y - GAP_PX, 0);
+    const flipY = above < CARD_HEIGHT_PX && below > above;
     return {
       frsId: facility.frs_id,
-      flipX: box ? box.width - x < CARD_WIDTH_PX + GAP_PX : false,
-      flipY: y < CARD_HEIGHT_PX + GAP_PX,
+      flipX: box.width - x < CARD_WIDTH_PX + GAP_PX,
+      flipY,
       pinned,
-      maxHeight: box ? Math.max(box.height - 2 * GAP_PX, 0) : CARD_HEIGHT_PX,
+      maxHeight: flipY ? below : above,
     };
   };
   // Hovering or focusing shows a facility unless another one is pinned.

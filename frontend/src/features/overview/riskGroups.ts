@@ -4,12 +4,10 @@ import { isAssessed, isScreenedOut } from "./assessment";
 
 /** What facilities are grouped by: NAICS subsector, TSCA condition of use, TSCA life cycle stage. */
 export type GroupBy = "subsector" | "condition" | "stage";
-/** Which risk quotient orders the groups. */
-export type RankBy = "hq" | "risk";
-/** The two bars of a group. */
-export type Quantity = RankBy;
+/** The two quantities, each with a chart of its own: hazard quotient and lifetime cancer risk. */
+export type Quantity = "hq" | "risk";
 
-/** The facility a bar comes from: one of the values the API sent, never a combination of them. */
+/** The facility a value comes from: one of the values the API sent, never a combination of them. */
 export interface Best {
   value: number;
   frsId: string;
@@ -27,7 +25,9 @@ export interface Group {
   assessed: number;
   /** Of those, the ones screened out (their numbers are bounds, so they are never a bar). */
   screenedOut: number;
+  /** Highest worst-case hazard quotient (unitless). */
   hq: Best | null;
+  /** Highest worst-case lifetime cancer risk (unitless). */
   risk: Best | null;
 }
 
@@ -84,9 +84,10 @@ function addTo(group: Group, facility: Facility): void {
 }
 
 /**
- * Group the facilities. A group's bars are the highest worst-case values among its assessed
- * facilities, selected from what the API sent; nothing is added, averaged or converted. A
- * facility is counted once per group it belongs to (several conditions of use are possible).
+ * Group the facilities. A group's bars are the highest worst-case hazard quotient and the highest
+ * worst-case cancer risk among its assessed facilities, selected from what the API sent; nothing is
+ * added, averaged or converted. A facility is counted once per group it belongs to (several
+ * conditions of use are possible).
  */
 export function groupFacilities(facilities: Facility[], by: GroupBy): Grouping {
   const groups = new Map<string, Group>();
@@ -103,33 +104,58 @@ export function groupFacilities(facilities: Facility[], by: GroupBy): Grouping {
   return { groups: [...groups.values()], ungrouped };
 }
 
-/** The `limit` groups with the highest value of the ranking quantity (ties by label). */
+/** The `limit` groups with the highest value of `quantity` (ties by label), and how many were cut. */
 export function topGroups(
   groups: Group[],
-  rankBy: RankBy,
+  quantity: Quantity,
   limit: number = TOP_N,
 ): { shown: Group[]; hidden: number } {
   const ranked = groups
-    .filter((g) => g[rankBy] !== null)
-    .sort((a, b) => (b[rankBy]?.value ?? 0) - (a[rankBy]?.value ?? 0) || a.label.localeCompare(b.label));
+    .filter((g) => g[quantity] !== null)
+    .sort((a, b) => (b[quantity]?.value ?? 0) - (a[quantity]?.value ?? 0) || a.label.localeCompare(b.label));
   return { shown: ranked.slice(0, limit), hidden: Math.max(ranked.length - limit, 0) };
 }
 
-const NAME: Record<Quantity, string> = { hq: "Hazard quotient", risk: "Lifetime cancer risk" };
+export const QUANTITY_NAME: Record<Quantity, string> = {
+  hq: "hazard quotient",
+  risk: "lifetime cancer risk",
+};
 
-/** The lines of a bar's tooltip. */
-export function describeBar(group: Group, quantity: Quantity, digits: number): string[] {
-  const best = group[quantity];
-  const counts = `${group.facilities} ${group.facilities === 1 ? "facility" : "facilities"}, ${group.assessed} assessed`;
+/** One line of a bar's tooltip. */
+export interface BarLine {
+  label: string;
+  value: string;
+  /** What the value belongs to (a facility and its concentration); null when there is nothing to add. */
+  detail: string | null;
+}
+
+export interface BarDetail {
+  group: string;
+  lines: BarLine[];
+  counts: string;
+}
+
+function facilityText(best: Best, digits: number): string {
+  const concentration =
+    best.concentration === null
+      ? "concentration not reported"
+      : `${formatNumber(best.concentration, digits)} µg/m³ worst case`;
+  return `${best.name ?? `FRS ${best.frsId}`} · ${concentration}`;
+}
+
+/** What a group's bar stands for: the highest value of `quantity`, the facility behind it, the counts. */
+export function describeBar(group: Group, quantity: Quantity, digits: number): BarDetail {
+  const facilities = `${group.facilities} ${group.facilities === 1 ? "facility" : "facilities"}`;
   const screened = group.screenedOut > 0 ? `, ${group.screenedOut} screened out` : "";
-  if (best === null) {
-    return [group.label, `${NAME[quantity]}: ${NOT_REPORTED}`, counts + screened];
-  }
-  return [
-    group.label,
-    `Highest ${NAME[quantity].toLowerCase()}: ${formatNumber(best.value, digits)}`,
-    `Facility: ${best.name ?? "unnamed"} (FRS ${best.frsId})`,
-    `Worst-case concentration: ${best.concentration === null ? NOT_REPORTED : `${formatNumber(best.concentration, digits)} µg/m³`}`,
-    counts + screened,
-  ];
+  const best = group[quantity];
+  const label = `Highest ${QUANTITY_NAME[quantity]}`;
+  return {
+    group: group.label,
+    lines: [
+      best
+        ? { label, value: formatNumber(best.value, digits), detail: facilityText(best, digits) }
+        : { label, value: NOT_REPORTED, detail: null },
+    ],
+    counts: `${facilities} in this group · ${group.assessed} assessed${screened}`,
+  };
 }

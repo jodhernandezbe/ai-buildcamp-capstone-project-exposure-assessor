@@ -2,16 +2,17 @@ import { formatNumber, formatWithUnit, orNotReported } from "../../lib/format";
 import type { Chemical, ReadAcross } from "../../types/workspace";
 import { CardFrame, Metric } from "./Metric";
 
-const BADGES: Record<ReadAcross["kind"], { label: string; tone: string }> = {
+// "not_evaluated" has no badge: nothing was looked up yet, which the empty card already says.
+const BADGES: Partial<Record<ReadAcross["kind"], { label: string; tone: string }>> = {
   direct_tri_match: { label: "Direct TRI match", tone: "bg-ok/15 text-ok" },
   read_across: { label: "Read-across surrogate", tone: "bg-accent/15 text-accent" },
   unresolved: { label: "Unresolved", tone: "bg-bad/15 text-bad" },
-  not_evaluated: { label: "Not evaluated", tone: "bg-fg2/10 text-fg2" },
 };
 
 function Badge({ kind }: { kind: ReadAcross["kind"] }) {
-  const { label, tone } = BADGES[kind];
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>{label}</span>;
+  const badge = BADGES[kind];
+  if (!badge) return null;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.tone}`}>{badge.label}</span>;
 }
 
 function Surrogate({ match, digits }: { match: ReadAcross; digits: number }) {

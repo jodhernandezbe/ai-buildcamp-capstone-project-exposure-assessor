@@ -5,7 +5,7 @@ import type { Thresholds } from "../../types/api";
 import type { Facility } from "../../types/workspace";
 import { isAssessed } from "./assessment";
 import { RiskGroupChart } from "./RiskGroupChart";
-import { groupFacilities, type GroupBy, type RankBy, topGroups, TOP_N } from "./riskGroups";
+import { groupFacilities, type GroupBy, type Quantity, topGroups, TOP_N } from "./riskGroups";
 
 const COPY: Record<GroupBy, { title: string; ungrouped: string; overlap: boolean }> = {
   subsector: { title: "Risk by industry (NAICS subsector)", ungrouped: "industry not reported", overlap: false },
@@ -13,9 +13,19 @@ const COPY: Record<GroupBy, { title: string; ungrouped: string; overlap: boolean
   stage: { title: "Risk by life cycle stage", ungrouped: "no life cycle stage reported", overlap: true },
 };
 
-const RANKINGS: { key: RankBy; label: string }[] = [
-  { key: "hq", label: "Hazard quotient" },
-  { key: "risk", label: "Cancer risk" },
+const CHARTS: { quantity: Quantity; label: string; title: string; missing: string }[] = [
+  {
+    quantity: "hq",
+    label: "Hazard quotient",
+    title: "Hazard quotient (non-cancer, unitless)",
+    missing: "No group has a worst-case hazard quotient to rank.",
+  },
+  {
+    quantity: "risk",
+    label: "Cancer risk",
+    title: "Lifetime cancer risk (unitless)",
+    missing: "No group has a worst-case lifetime cancer risk to rank (the chemical may have no unit risk).",
+  },
 ];
 
 const SHORT_LABEL_CHARS = 16;
@@ -24,8 +34,9 @@ const LONG_LABEL_CHARS = 30;
 interface Props {
   by: GroupBy;
   facilities: Facility[];
-  rankBy: RankBy;
-  onRankBy: (rankBy: RankBy) => void;
+  /** Which quantity the chart shows; chosen with the switch in the section's header. */
+  quantity: Quantity;
+  onQuantity: (quantity: Quantity) => void;
   expanded: boolean;
   /** Another section is expanded: this one stays mounted but is not shown. */
   hidden: boolean;
@@ -34,30 +45,12 @@ interface Props {
   digits: number;
 }
 
-function RankSwitch({ rankBy, onRankBy }: { rankBy: RankBy; onRankBy: (rankBy: RankBy) => void }) {
-  return (
-    <div role="group" aria-label="Rank groups by" className="inline-flex rounded-full bg-fg2/10 p-0.5 text-[11px]">
-      {RANKINGS.map(({ key, label }) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={rankBy === key}
-          onClick={() => onRankBy(key)}
-          className={`spring rounded-full px-2 py-0.5 ${rankBy === key ? "bg-solid font-medium text-fg shadow-sm" : "text-fg2 hover:text-fg"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Notes({ by, ungrouped, hidden, rankBy }: { by: GroupBy; ungrouped: number; hidden: number; rankBy: RankBy }) {
+function Notes({ by, ungrouped, cut }: { by: GroupBy; ungrouped: number; cut: number }) {
   const copy = COPY[by];
   const lines = [
-    `Highest worst-case value among assessed facilities in each group; top ${TOP_N} by ${rankBy === "hq" ? "hazard quotient" : "cancer risk"}.`,
+    `The ${TOP_N} groups with the highest value of the chosen quantity; a bar is the highest worst-case value among the group's assessed facilities.`,
     copy.overlap ? "A facility with several conditions of use appears in each, so bars can overlap." : null,
-    hidden > 0 ? `${hidden} more ${hidden === 1 ? "group" : "groups"} not shown.` : null,
+    cut > 0 ? `${cut} more ${cut === 1 ? "group" : "groups"} not shown.` : null,
     ungrouped > 0 ? `${ungrouped} ${ungrouped === 1 ? "facility" : "facilities"}: ${copy.ungrouped}.` : null,
   ].filter((line): line is string => line !== null);
   return (
@@ -69,14 +62,50 @@ function Notes({ by, ungrouped, hidden, rankBy }: { by: GroupBy; ungrouped: numb
   );
 }
 
-/** One top-5 chart of the worst-case HQ and cancer risk by a grouping of the facilities. */
+function QuantitySwitch({ quantity, onQuantity }: { quantity: Quantity; onQuantity: (quantity: Quantity) => void }) {
+  return (
+    <div role="group" aria-label="Quantity shown" className="inline-flex rounded-full bg-fg2/10 p-0.5 text-[11px]">
+      {CHARTS.map(({ quantity: key, label }) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={quantity === key}
+          onClick={() => onQuantity(key)}
+          className={`spring rounded-full px-2 py-0.5 ${quantity === key ? "bg-solid font-medium text-fg shadow-sm" : "text-fg2 hover:text-fg"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EmptyChart({ title, text, tall }: { title: string; text: string; tall: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <h3 className="m-0 text-xs font-medium">{title}</h3>
+      <div className={`grid place-items-center rounded-lg border border-dashed border-hairline px-3 text-center ${tall ? "h-[56vh] min-h-56" : "h-52"}`}>
+        <p className="m-0 text-sm text-fg2">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Two charts of the worst-case hazard quotient and cancer risk by a grouping of the facilities. */
 export function RiskGroupSection(props: Props) {
-  const { by, facilities, rankBy, expanded, hidden, thresholds, digits } = props;
+  const { by, facilities, quantity, expanded, hidden, thresholds, digits } = props;
   const copy = COPY[by];
   const grouping = useMemo(() => groupFacilities(facilities, by), [facilities, by]);
-  const { shown, hidden: cut } = useMemo(() => topGroups(grouping.groups, rankBy), [grouping, rankBy]);
+  const { shown, hidden: cut } = useMemo(() => topGroups(grouping.groups, quantity), [grouping, quantity]);
+  const chart = CHARTS.find((c) => c.quantity === quantity) ?? CHARTS[0];
   const anyAssessed = useMemo(() => facilities.some(isAssessed), [facilities]);
   const Icon = expanded ? Minimize2 : Maximize2;
+  const emptyText = (missing: string) =>
+    facilities.length === 0
+      ? "Nothing to show yet. Run an assessment and this chart ranks its facilities."
+      : anyAssessed
+        ? missing
+        : "Nothing assessed yet: no facility has a worst-case result.";
   return (
     <section
       aria-label={copy.title}
@@ -86,7 +115,7 @@ export function RiskGroupSection(props: Props) {
       <header className="flex items-start justify-between gap-2">
         <h2 className="m-0 text-xs font-semibold uppercase tracking-wide text-fg2">{copy.title}</h2>
         <div className="flex items-center gap-1.5">
-          <RankSwitch rankBy={rankBy} onRankBy={props.onRankBy} />
+          <QuantitySwitch quantity={quantity} onQuantity={props.onQuantity} />
           <button
             type="button"
             aria-label={expanded ? "Restore section" : "Expand section"}
@@ -98,28 +127,21 @@ export function RiskGroupSection(props: Props) {
           </button>
         </div>
       </header>
-      {shown.length > 0 ? (
+      {chart && shown.length > 0 ? (
         <RiskGroupChart
           groups={shown}
+          quantity={chart.quantity}
+          title={chart.title}
           thresholds={thresholds}
           digits={digits}
-          caption={copy.title}
           labelChars={expanded ? LONG_LABEL_CHARS : SHORT_LABEL_CHARS}
-          heightClass={expanded ? "h-[62vh] min-h-72" : "h-56"}
+          heightClass={expanded ? "h-[56vh] min-h-56" : "h-52"}
           angled={!expanded}
         />
       ) : (
-        <div className="grid h-56 place-items-center rounded-lg border border-dashed border-hairline px-3 text-center">
-          <p className="m-0 text-sm text-fg2">
-            {facilities.length === 0
-              ? "Nothing to show yet. Run an assessment and this chart ranks its facilities."
-              : anyAssessed
-                ? `No group has a worst-case ${rankBy === "hq" ? "hazard quotient" : "cancer risk"} to rank.`
-                : "Nothing assessed yet: no facility has a worst-case result."}
-          </p>
-        </div>
+        <EmptyChart title={chart?.title ?? ""} text={emptyText(chart?.missing ?? "")} tall={expanded} />
       )}
-      <Notes by={by} ungrouped={grouping.ungrouped} hidden={cut} rankBy={rankBy} />
+      <Notes by={by} ungrouped={grouping.ungrouped} cut={cut} />
     </section>
   );
 }

@@ -15,13 +15,16 @@ eis_path = "/e/{frs_ids}/EIS"
 registry_field = "id"
 eis_id_field = "eis"
 sites_path = "/s/{frs_ids}"
-twins_path = "/t/{name}/{state}"
+twins_path = "/t/{names}/{state}"
+twin_single_path = "/t1/{name}/{state}"
 name_field = "name"
 state_field = "st"
 latitude_field = "lat"
 longitude_field = "lon"
 batch_size = 25
 max_twin_distance_km = 0.25
+twin_list_pattern = "^[A-Z ]+$"
+twin_batch_size = 12
 twin_workers = 3
 cache_seconds = 60
 """
@@ -39,7 +42,7 @@ def test_explicit_values(tmp_path: Path) -> None:
         "https://frs.test/svc",
         "/e/{frs_ids}/EIS",
         "/s/{frs_ids}",
-        "/t/{name}/{state}",
+        "/t/{names}/{state}",
     )
     assert (s.registry_field, s.eis_id_field, s.name_field, s.state_field) == (
         "id",
@@ -49,14 +52,17 @@ def test_explicit_values(tmp_path: Path) -> None:
     )
     assert (s.latitude_field, s.longitude_field) == ("lat", "lon")
     assert (s.batch_size, s.max_twin_distance_km) == (25, 0.25)
-    assert (s.twin_workers, s.cache_seconds) == (3, 60.0)
+    assert (s.twin_batch_size, s.twin_workers, s.cache_seconds) == (12, 3, 60.0)
+    assert s.twin_single_path == "/t1/{name}/{state}"
+    assert s.twin_list_pattern.fullmatch("AB C") and not s.twin_list_pattern.fullmatch("A&B")
 
 
 def test_default_file_loads() -> None:
     s = load_frs_eis_settings()
     assert s.base_url.startswith("https://")
     assert "{frs_ids}" in s.eis_path and "{frs_ids}" in s.sites_path
-    assert "{name}" in s.twins_path and "{state}" in s.twins_path
+    assert "{names}" in s.twins_path and "{state}" in s.twins_path
+    assert "{name}" in s.twin_single_path and 1 <= s.twin_batch_size <= 30
     assert 1 <= s.batch_size < 200  # 200 IDs were answered, 400 refused, by this service
     assert 0 < s.max_twin_distance_km <= 1.0
 
@@ -67,7 +73,10 @@ def test_default_file_loads() -> None:
         ('"/e/{frs_ids}/EIS"', '"/e/x/EIS"', "eis_path"),
         ('"/e/{frs_ids}/EIS"', '"e/{frs_ids}"', "eis_path"),
         ('"/s/{frs_ids}"', '"/s/x"', "sites_path"),
-        ('"/t/{name}/{state}"', '"/t/{name}"', "twins_path"),
+        ('"/t/{names}/{state}"', '"/t/{names}"', "twins_path"),
+        ('"/t1/{name}/{state}"', '"/t1/{name}"', "twin_single_path"),
+        ("twin_batch_size = 12", "twin_batch_size = 0", "twin_batch_size"),
+        ('twin_list_pattern = "^[A-Z ]+$"', 'twin_list_pattern = "["', "twin_list_pattern"),
         ('registry_field = "id"', "", "registry_field"),
         ('eis_id_field = "eis"', 'eis_id_field = " "', "eis_id_field"),
         ('name_field = "name"', "", "name_field"),

@@ -53,6 +53,7 @@ const show = (fs: Facility[] = facilities) => {
 };
 
 const section = (name: RegExp) => screen.getByRole("region", { name });
+/** The rows of a section's chart (its text table). */
 const rowsOf = (name: RegExp) =>
   within(within(section(name)).getByRole("table", { hidden: true })).getAllByRole("row", { hidden: true }).slice(1);
 
@@ -72,15 +73,33 @@ describe("risk-by-group sections", () => {
     expect(screen.getAllByRole("region", { name: /Risk by/ })).toHaveLength(3);
   });
 
-  it("keeps the top five industries by hazard quotient and re-ranks by cancer risk", async () => {
+  it("keeps the top five industries by hazard quotient, highest first", () => {
     show();
     const industry = /Risk by industry/;
-    expect(rowsOf(industry).map((r) => r.textContent)).toHaveLength(5);
-    expect(rowsOf(industry)[0]).toHaveTextContent("306 · Industry 306");
+    const rows = rowsOf(industry);
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toHaveTextContent("306 · Industry 306");
     expect(within(section(industry)).getByText("1 more group not shown.")).toBeInTheDocument();
-    await userEvent.click(within(section(industry)).getByRole("button", { name: "Cancer risk" }));
+    expect(within(section(industry)).getByRole("heading", { name: /Hazard quotient/ })).toBeInTheDocument();
+  });
+
+  it("switches to the cancer risk, on its own chart and ranking, never both at once", () => {
+    show();
+    const industry = /Risk by industry/;
+    fireEvent.click(within(section(industry)).getByRole("button", { name: "Cancer risk" }));
+    expect(within(section(industry)).getByRole("heading", { name: /Lifetime cancer risk/ })).toBeInTheDocument();
+    expect(within(section(industry)).queryByRole("heading", { name: /Hazard quotient/ })).toBeNull();
     expect(rowsOf(industry)[0]).toHaveTextContent("301 · Industry 301");
-    expect(rowsOf(industry)[0]).not.toHaveTextContent("306");
+    expect(within(section(industry)).getByRole("button", { name: "Cancer risk" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(section(industry)).getByRole("button", { name: "Hazard quotient" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("changes all three sections together", () => {
+    show();
+    fireEvent.click(within(section(/Risk by industry/)).getByRole("button", { name: "Cancer risk" }));
+    for (const name of [/condition of use/, /life cycle stage/]) {
+      expect(within(section(name)).getByRole("heading", { name: /Lifetime cancer risk/ })).toBeInTheDocument();
+    }
   });
 
   it("explains that a facility with several conditions appears in each", () => {
@@ -116,13 +135,14 @@ describe("overview views", () => {
     expect(screen.queryByRole("group", { name: "Executive summary" })).toBeNull();
   });
 
-  it("goes back to the summary and keeps the charts' ranking", () => {
+  it("goes back to the summary and returns to the charts, keeping the quantity chosen", () => {
     render0(facilities);
     fireEvent.click(screen.getByRole("button", { name: "Risk by group" }));
     fireEvent.click(within(section(/Risk by industry/)).getByRole("button", { name: "Cancer risk" }));
     fireEvent.click(screen.getByRole("button", { name: "Summary" }));
     expect(screen.getByRole("group", { name: "Executive summary" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Risk by group" }));
+    expect(screen.getAllByRole("region", { name: /Risk by/ })).toHaveLength(3);
     expect(within(section(/Risk by industry/)).getByRole("button", { name: "Cancer risk" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -166,14 +186,5 @@ describe("expanding a section", () => {
     await userEvent.keyboard("{Escape}");
     expect(reached.mock.calls.filter(([e]) => e.key === "Escape")).toHaveLength(1); // nothing expanded: not ours
     window.removeEventListener("keydown", reached);
-  });
-
-  it("keeps the ranking choice while a section is expanded", async () => {
-    show();
-    const industry = section(/Risk by industry/);
-    await userEvent.click(within(industry).getByRole("button", { name: "Cancer risk" }));
-    await userEvent.click(within(industry).getByRole("button", { name: "Expand section" }));
-    await userEvent.click(within(industry).getByRole("button", { name: "Restore section" }));
-    expect(within(section(/condition of use/)).getByRole("button", { name: "Cancer risk" })).toHaveAttribute("aria-pressed", "true");
   });
 });

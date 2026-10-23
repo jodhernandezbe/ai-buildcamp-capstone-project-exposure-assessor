@@ -2,12 +2,13 @@
 
 The artifact holds the assessed facilities (fully, or at their own-stack worst case only) and
 the screened-out ones with their screening value; an earlier form was the list of assessed
-facilities alone, and is still read.
+facilities alone, and is still read. A facility the batch did not assess travels with its
+reason; it never replaces a real result for the same facility.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import cast
 
 from api.schemas.workspace import Screening, ScreeningOutcome
@@ -15,6 +16,7 @@ from api.services.projectors.ledger import Ledger, Located, Receptor, ToolExchan
 from api.services.projectors.payloads import (
     AssessedPayload,
     EmissionPayload,
+    NotAssessedPayload,
     ScreenedOutPayload,
     validate,
 )
@@ -77,17 +79,41 @@ def _file_out(item: ScreenedOutPayload, ledger: Ledger, cas: str | None) -> None
     )
 
 
-def _parts(artifact: object) -> tuple[list[object], list[object]] | None:
-    """The assessed and screened-out items; None when the artifact has neither shape."""
+def _list(body: Mapping[str, object], key: str) -> list[object] | None:
+    value = body.get(key, [])
+    return cast(list[object], value) if isinstance(value, list) else None
+
+
+def _parts(artifact: object) -> tuple[list[object], list[object], list[object]] | None:
+    """The assessed, screened-out and not-assessed items; None when the artifact has no shape."""
     if isinstance(artifact, list):
-        return cast(list[object], artifact), []
+        return cast(list[object], artifact), [], []
     if not isinstance(artifact, Mapping):
         return None
     body = cast(Mapping[str, object], artifact)
-    assessed, out = body.get("assessed"), body.get("screened_out", [])
-    if not isinstance(assessed, list) or not isinstance(out, list):
+    assessed, out, left = (
+        _list(body, "assessed"),
+        _list(body, "screened_out"),
+        _list(body, "not_assessed"),
+    )
+    if assessed is None or out is None or left is None or "assessed" not in body:
         return None
-    return cast(list[object], assessed), cast(list[object], out)
+    return assessed, out, left
+
+
+def _file_unassessed(item: NotAssessedPayload, ledger: Ledger) -> None:
+    """A facility with no result: its reason, unless a real result is already filed for it."""
+    if item.frs_id not in ledger.screening:
+        ledger.screening[item.frs_id] = Screening(outcome="not_assessed", reason=item.reason)
+
+
+def _each[T](model: type[T], raws: list[object], ledger: Ledger, file: Callable[[T], None]) -> None:
+    for raw in raws:
+        item = validate(model, raw)
+        if item is None:
+            ledger.warnings.append(_LEFT_OUT)
+        else:
+            file(item)
 
 
 def project_assessment(exchange: ToolExchange, ledger: Ledger) -> None:
@@ -98,15 +124,6 @@ def project_assessment(exchange: ToolExchange, ledger: Ledger) -> None:
         return
     ledger.note_cas(exchange)
     cas = text(exchange.args, "cas_number")
-    for raw in parts[0]:
-        item = validate(AssessedPayload, raw)
-        if item is None:
-            ledger.warnings.append(_LEFT_OUT)
-        else:
-            _file(item, ledger, cas)
-    for raw in parts[1]:
-        out = validate(ScreenedOutPayload, raw)
-        if out is None:
-            ledger.warnings.append(_LEFT_OUT)
-        else:
-            _file_out(out, ledger, cas)
+    _each(AssessedPayload, parts[0], ledger, lambda item: _file(item, ledger, cas))
+    _each(ScreenedOutPayload, parts[1], ledger, lambda item: _file_out(item, ledger, cas))
+    _each(NotAssessedPayload, parts[2], ledger, lambda item: _file_unassessed(item, ledger))

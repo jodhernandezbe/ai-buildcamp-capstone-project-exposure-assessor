@@ -55,18 +55,27 @@ function Conditions({ facility }: { facility: Facility }) {
   }
   return (
     <>
-      <ul aria-label="Life cycle stages" className="m-0 mb-1.5 flex list-none flex-wrap gap-1 p-0">
+      <p className="m-0 text-[11px] font-medium uppercase tracking-wide text-fg2">Life cycle stages</p>
+      <ul aria-label="Life cycle stages" className="m-0 mb-2 mt-1 flex list-none flex-wrap gap-1 p-0">
         {stages.map((stage) => (
           <li key={stage} className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent">
             {stage}
           </li>
         ))}
       </ul>
-      <ul aria-label="Conditions of use" className="m-0 grid list-none gap-1 p-0">
+      <p className="m-0 text-[11px] font-medium uppercase tracking-wide text-fg2">
+        Conditions of use
+      </p>
+      <ul aria-label="Conditions of use" className="m-0 mt-1 grid list-none gap-1 p-0">
         {conditions.map((c) => (
           <li key={`${c.tri_section}-${c.lifecycle_stage}`} className="rounded-lg bg-fg2/5 p-2 text-xs">
-            <span className="font-medium">{c.tri_activity}</span> · {c.cou_category}
-            <span className="text-fg2"> ({c.lifecycle_stage}; {c.mapping_strength})</span>
+            <p className="m-0 font-medium">{c.cou_category}</p>
+            <p className="m-0 text-fg2">
+              Life cycle stage: {c.lifecycle_stage}
+            </p>
+            <p className="m-0 text-[11px] text-fg2">
+              From TRI “{c.tri_activity}” (Form R {c.tri_section}) · mapping {c.mapping_strength}
+            </p>
           </li>
         ))}
       </ul>
@@ -74,17 +83,20 @@ function Conditions({ facility }: { facility: Facility }) {
   );
 }
 
-/** Why a facility has no stacks: screened out on the bound, or not assessed (yet). */
+/** Why a facility has no stacks: screened out on the bound, not assessed (with the reason), or not covered. */
 function noStacks(screening: Screening | null): string {
   if (screening?.outcome === "screened_out_at_bound") {
     return "None needed: screened out on a conservative bound with a generic stack.";
   }
-  return "Not assessed yet: no stack parameters were obtained for this facility.";
+  if (screening?.outcome === "not_assessed") {
+    return `Not assessed: ${screening.reason ?? "no reason was given"}`;
+  }
+  return "Not assessed yet: the batch assessment has not covered this facility.";
 }
 
 /** What the screen decided, when it limited or skipped the assessment. */
 function ScreeningNote({ screening, digits }: { screening: Screening | null; digits: number }) {
-  if (screening === null || screening.outcome === "full") return null;
+  if (screening === null || screening.outcome === "full" || screening.outcome === "not_assessed") return null;
   if (screening.outcome === "worst_case_only") {
     return (
       <p className="m-0 mt-1 text-xs text-fg2">
@@ -208,7 +220,7 @@ export function FacilityHoverCard({ facility, digits, id, pinned, onClose, maxHe
           <Metric label="CAS number">{orNotReported(facility.cas_number)}</Metric>
         </dl>
         <Section
-          title="Conditions of use"
+          title="TSCA conditions of use"
           aside={<span className="text-xs text-fg2">{facility.conditions_of_use.length}</span>}
           initiallyOpen={facility.conditions_of_use.length <= CONDITIONS_SHOWN_OPEN}
         >

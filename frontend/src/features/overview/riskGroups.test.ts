@@ -123,11 +123,11 @@ describe("topGroups", () => {
     expect(hidden).toBe(2);
   });
 
-  it("re-ranks by cancer risk", () => {
+  it("ranks the cancer risk on its own", () => {
     expect(topGroups(groups, "risk").shown.map((g) => g.risk?.value)).toEqual([10, 9, 8, 7, 6]);
   });
 
-  it("breaks ties by label and drops groups without the ranking value", () => {
+  it("breaks ties by label and drops groups without the quantity", () => {
     const tied = groupFacilities(
       [
         make("A", { ...sub("200", "Zeta"), exposure: exposure(1, null) }),
@@ -144,27 +144,30 @@ describe("topGroups", () => {
 describe("describeBar", () => {
   const [group] = groupFacilities(
     [
-      make("A", { ...sub("325", "Chemicals"), exposure: exposure(5, null, 12) }),
+      make("A", { ...sub("325", "Chemicals"), exposure: exposure(5, 2e-4, 12) }),
       make("B", { ...sub("325", "Chemicals"), screening: screenedOut }),
     ],
     "subsector",
   ).groups;
 
-  it("names the value, the facility, its concentration and the counts", () => {
-    expect(describeBar(must(group), "hq", 2)).toEqual([
-      "325 · Chemicals",
-      "Highest hazard quotient: 5",
-      "Facility: Plant A (FRS A)",
-      "Worst-case concentration: 12 µg/m³",
-      "2 facilities, 1 assessed, 1 screened out",
+  it("tells the quantity's value, its facility and the counts", () => {
+    expect(describeBar(must(group), "hq", 2)).toEqual({
+      group: "325 · Chemicals",
+      lines: [{ label: "Highest hazard quotient", value: "5", detail: "Plant A · 12 µg/m³ worst case" }],
+      counts: "2 facilities in this group · 1 assessed, 1 screened out",
+    });
+    expect(describeBar(must(group), "risk", 2).lines).toEqual([
+      { label: "Highest lifetime cancer risk", value: "2 × 10⁻⁴", detail: "Plant A · 12 µg/m³ worst case" },
     ]);
   });
 
-  it("says not reported for a quantity the group has no value for", () => {
-    expect(describeBar(must(group), "risk", 2)).toEqual([
-      "325 · Chemicals",
-      "Lifetime cancer risk: not reported",
-      "2 facilities, 1 assessed, 1 screened out",
-    ]);
+  it("says not reported for a missing quantity and when the concentration was not sent", () => {
+    const [g] = groupFacilities([make("C", { ...sub("311"), exposure: exposure(3, null, null) })], "subsector").groups;
+    expect(describeBar(must(g), "hq", 2).lines[0]?.detail).toBe("Plant C · concentration not reported");
+    expect(describeBar(must(g), "risk", 2).lines[0]).toEqual({
+      label: "Highest lifetime cancer risk",
+      value: "not reported",
+      detail: null,
+    });
   });
 });

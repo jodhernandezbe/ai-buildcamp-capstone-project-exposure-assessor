@@ -7,10 +7,10 @@ import "./maplibreWorker";
 import { useEffect, useRef, useState } from "react";
 
 import { DARK_MODE, REDUCED_MOTION, matches, usePrefers } from "../../lib/usePrefers";
-import type { ClientConfig, WorkspaceState } from "../../types/workspace";
+import type { ClientConfig, Facility, WorkspaceState } from "../../types/workspace";
 import { SOURCES, addOverlays, readPalette, setSourceData } from "./layers";
 import { FacilityInspector } from "./FacilityInspector";
-import { MapLegend } from "./MapLegend";
+import { MapLegend, statusKey, type StatusKey } from "./MapLegend";
 import { bufferCollection, facilityCollection, sectorCollection } from "./mapData";
 
 const FIT_PADDING_PX = 64;
@@ -36,12 +36,12 @@ const corners = (box: Box): [[number, number], [number, number]] => [
   [box.east, box.north],
 ];
 
-function useOverlayData(workspace: WorkspaceState, config: Props["config"]) {
+function useOverlayData(shown: Facility[], config: Props["config"]) {
   const scale = { minPx: config.marker_min_px, maxPx: config.marker_max_px };
   return {
-    [SOURCES.facilities]: facilityCollection(workspace.facilities, scale),
-    [SOURCES.buffers]: bufferCollection(workspace.facilities),
-    [SOURCES.sectors]: sectorCollection(workspace.facilities),
+    [SOURCES.facilities]: facilityCollection(shown, scale),
+    [SOURCES.buffers]: bufferCollection(shown),
+    [SOURCES.sectors]: sectorCollection(shown),
   };
 }
 
@@ -91,7 +91,10 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
   const [notice, setNotice] = useState<string | null>(null);
   const dark = usePrefers(DARK_MODE);
   const styleUrl = dark ? config.dark_style : config.light_style;
-  const data = useOverlayData(workspace, config);
+  // Statuses the user switched off in the legend; their markers and shapes leave the map.
+  const [hidden, setHidden] = useState<ReadonlySet<StatusKey>>(new Set<StatusKey>());
+  const shown = workspace.facilities.filter((f) => !hidden.has(statusKey(f)));
+  const data = useOverlayData(shown, config);
   const latest = useRef({ data, styleUrl, start: config.initial_view, bounds: workspace.bounds });
   useEffect(() => {
     latest.current = { data, styleUrl, start: config.initial_view, bounds: workspace.bounds };
@@ -199,7 +202,7 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
       {instance && (
         <FacilityInspector
           map={instance}
-          facilities={workspace.facilities}
+          facilities={shown}
           scale={{ minPx: config.marker_min_px, maxPx: config.marker_max_px }}
           digits={digits}
         />
@@ -214,7 +217,18 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
         <Earth size={14} aria-hidden="true" />
         USA
       </button>
-      <MapLegend ref={legend} facilities={workspace.facilities} />
+      <MapLegend
+        ref={legend}
+        facilities={workspace.facilities}
+        hidden={hidden}
+        onToggle={(key) =>
+          setHidden((now) => {
+            const next = new Set(now);
+            if (!next.delete(key)) next.add(key);
+            return next;
+          })
+        }
+      />
       {notice && (
         <p role="status" className="glass absolute left-3 top-3 m-0 rounded-xl px-3 py-1.5 text-xs text-fg2">
           {notice}

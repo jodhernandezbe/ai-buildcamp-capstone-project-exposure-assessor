@@ -136,11 +136,41 @@ def test_facilities_asked_for_by_id_are_assessed_without_screening(_offline: Fak
     assert view["screening"] is None and artifact["screened_out"] == []
 
 
-def test_facilities_asked_for_by_id_beyond_the_cap_are_reported() -> None:
-    view, artifact = _run([r["frs_id"] for r in RECORDS])
-    assert len(artifact["assessed"]) == 3
-    assert [n["frs_id"] for n in view["not_assessed"]] == ["TALL_ONLY", "TINY"]
-    assert "only 3 facilities are assessed per call" in view["not_assessed"][0]["reason"]
+def test_facilities_asked_for_by_id_beyond_the_cap_keep_their_worst_case() -> None:
+    ids = [r["frs_id"] for r in RECORDS]
+    view, artifact = _run(ids)
+    assert [i["record"]["frs_id"] for i in artifact["assessed"]] == ids
+    levels = [i["level"] for i in artifact["assessed"]]
+    assert levels == ["full"] * 3 + ["worst case only"] * (len(ids) - 3)
+    assert view["not_assessed"] == [] and artifact["not_assessed"] == []
+    assert all(
+        i["meteorology"] is None for i in artifact["assessed"] if i["level"] == "worst case only"
+    )
+
+
+def test_the_artifact_lists_the_facilities_not_assessed_with_their_reasons(
+    _offline: FakeSteps,
+) -> None:
+    view, artifact = _run(["MID", "NOPE"])
+    reason = "not in the inventory of this chemical (and place)"
+    assert artifact["not_assessed"] == [{"frs_id": "NOPE", "reason": reason}]
+    assert view["not_assessed"] == artifact["not_assessed"]
+
+
+def test_over_the_safety_bound_the_rest_is_not_assessed_and_the_call_warns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace
+
+    monkeypatch.setattr(
+        facilities, "get_assessment_settings", lambda: replace(SETTINGS, max_refined=1)
+    )
+    view, artifact = _run()
+    assert len(artifact["not_assessed"]) >= 1
+    assert all(
+        "more than 1 facilities reach a threshold" in n["reason"] for n in artifact["not_assessed"]
+    )
+    assert any("safety bound of 1" in w for w in view["warnings"])
 
 
 def test_the_scc_search_is_made_once_per_industry_title(
@@ -163,7 +193,7 @@ def test_an_invalid_cas_number_assesses_nothing() -> None:
     view, artifact = run_assessment(
         "not-a-cas", None, (None, None), None, None, facilities.default_steps()
     )
-    assert artifact == {"assessed": [], "screened_out": []}
+    assert artifact == {"assessed": [], "screened_out": [], "not_assessed": []}
     assert view["assessed"] == 0 and "not a valid CAS" in view["warnings"][0]
     assert PROPERTIES_CALLS == []
 

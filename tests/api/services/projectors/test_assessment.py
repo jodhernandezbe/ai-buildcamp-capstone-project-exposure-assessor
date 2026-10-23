@@ -143,9 +143,15 @@ def test_an_invalid_item_is_left_out_with_a_warning_and_no_artifact_is_skipped()
 
 
 def _tiered(
-    assessed: list[dict[str, object]], screened_out: list[dict[str, object]]
+    assessed: list[dict[str, object]],
+    screened_out: list[dict[str, object]],
+    not_assessed: list[dict[str, object]] | None = None,
 ) -> list[BaseMessage]:
-    artifact = {"assessed": assessed, "screened_out": screened_out}
+    artifact = {
+        "assessed": assessed,
+        "screened_out": screened_out,
+        "not_assessed": not_assessed or [],
+    }
     return exchange(
         "assess_facilities", {"cas_number": "1-1-1"}, {"assessed": 1}, artifact=artifact
     )
@@ -201,3 +207,32 @@ def test_an_invalid_screened_out_item_is_left_out_and_a_bad_shape_is_skipped() -
     assert any("batch assessment was left out" in w for w in state.warnings)
     bad = exchange("assess_facilities", {"cas_number": "1-1-1"}, {}, artifact={"assessed": "nope"})
     assert any("carried no facility details" in w for w in _build(bad).warnings)
+
+
+def test_a_facility_not_assessed_carries_its_reason_and_no_status() -> None:
+    left: list[dict[str, object]] = [
+        {"frs_id": "F0", "reason": "more than 5 facilities reach a threshold"}
+    ]
+    state = _build(inventory(record("F0")), _tiered([], [], left))
+    screening = state.facilities[0].screening
+    assert screening is not None and screening.outcome == "not_assessed"
+    assert screening.reason == "more than 5 facilities reach a threshold"
+    assert state.facilities[0].status is None and state.facilities[0].exposure is None
+
+
+def test_a_not_assessed_reason_never_replaces_a_real_result() -> None:
+    left: list[dict[str, object]] = [{"frs_id": "F1", "reason": "should not show"}]
+    item = _item("F1", 1.0, [stack(10.0)], level="full")
+    state = _build(_tiered([item], [], left))
+    screening = state.facilities[0].screening
+    assert screening is not None and screening.outcome == "full" and screening.reason is None
+
+
+def test_a_not_assessed_facility_unknown_to_the_workspace_is_ignored() -> None:
+    state = _build(_tiered([], [], [{"frs_id": "GHOST", "reason": "x"}]))
+    assert state.facilities == [] and state.warnings == []
+
+
+def test_an_invalid_not_assessed_item_is_left_out_with_a_warning() -> None:
+    state = _build(_tiered([], [], [{"frs_id": 5}]))
+    assert any("batch assessment was left out" in w for w in state.warnings)

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 
@@ -199,6 +199,72 @@ describe("legend", () => {
     const legend = screen.getByRole("complementary", { name: "Map legend" });
     expect(legend).toHaveTextContent("Above concern");
     expect(legend).toHaveTextContent("Marker size follows the emission rate");
+  });
+
+  it("has no em dash in its caption", () => {
+    const ring = { type: "Polygon" as const, coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
+    render(
+      <ExposureMapCanvas
+        digits={2}
+        workspace={placed(1, { facilities: [facility({ buffer: ring, sector: ring })] })}
+        config={config}
+      />,
+    );
+    expect(screen.getByRole("complementary", { name: "Map legend" }).textContent).not.toContain("\u2014");
+  });
+
+  describe("hiding markers", () => {
+    const shown = () => {
+      const data = FakeMap.last.sources.get("facilities")?.data as { features: unknown[] } | undefined;
+      return data?.features.length ?? 0;
+    };
+    const entry = (name: RegExp) => within(screen.getByRole("complementary", { name: "Map legend" })).getByRole("button", { name });
+    const two = () =>
+      placed(1, {
+        facilities: [
+          facility({ frs_id: "A", name: "Plant A", status: "above" }),
+          facility({ frs_id: "B", name: "Plant B", status: "below", latitude: 11 }),
+          facility({ frs_id: "C", name: "Plant C", status: null, latitude: 12 }),
+        ],
+      });
+
+    it("counts the facilities of each status in the legend", () => {
+      render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
+      expect(entry(/Above concern/)).toHaveTextContent("1");
+      expect(entry(/Below concern/)).toHaveTextContent("1");
+      expect(entry(/Near concern/)).toHaveTextContent("0");
+      expect(entry(/Not computed/)).toHaveTextContent("1");
+    });
+
+    it("hides a status's markers when its entry is pressed, and shows them again when pressed again", async () => {
+      render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
+      load();
+      expect(shown()).toBe(3);
+      await userEvent.click(entry(/Above concern/));
+      expect(entry(/Above concern/)).toHaveAttribute("aria-pressed", "false");
+      expect(shown()).toBe(2);
+      await userEvent.click(entry(/Above concern/));
+      expect(entry(/Above concern/)).toHaveAttribute("aria-pressed", "true");
+      expect(shown()).toBe(3);
+    });
+
+    it("hides several statuses independently and keeps their counts", async () => {
+      render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
+      load();
+      await userEvent.click(entry(/Above concern/));
+      await userEvent.click(entry(/Not computed/));
+      expect(shown()).toBe(1);
+      expect(entry(/Above concern/)).toHaveTextContent("1");
+    });
+
+    it("takes a hidden facility's card away with its marker", async () => {
+      render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
+      load();
+      expect(screen.getByRole("button", { name: /Plant A/ })).toBeInTheDocument();
+      await userEvent.click(entry(/Above concern/));
+      expect(screen.queryByRole("button", { name: /Plant A/ })).toBeNull();
+      expect(screen.getByRole("button", { name: /Plant B/ })).toBeInTheDocument();
+    });
   });
 
   it("labels the downwind sector as schematic only when one is drawn", () => {

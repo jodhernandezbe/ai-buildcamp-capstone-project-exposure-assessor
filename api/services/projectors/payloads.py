@@ -210,6 +210,13 @@ class ScreenedOutPayload(Payload):
     reason: str
 
 
+class NotAssessedPayload(Payload):
+    """A facility the batch assessment did not assess, and why."""
+
+    frs_id: str
+    reason: str
+
+
 def decode_json(content: object) -> object | None:
     """The JSON value of a tool message's text; None when it is not valid JSON text."""
     if not isinstance(content, str):

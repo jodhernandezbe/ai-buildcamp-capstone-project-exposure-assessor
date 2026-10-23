@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -23,8 +24,10 @@ class FrsEisSettings:
         eis_id_field: Answer column holding the EIS facility ID of a registration row.
         sites_path: Path template with ``{frs_ids}``; the FRS site rows (name, state,
             coordinates) of those FRS IDs.
-        twins_path: Path template with ``{name}`` and ``{state}`` (URL-encoded); the FRS site
-            rows registered under exactly that site name in that state.
+        twins_path: Path template with ``{names}`` (comma-separated, URL-encoded) and
+            ``{state}``; the FRS site rows registered under any of those site names in that state.
+        twin_single_path: Path template with ``{name}`` and ``{state}`` (URL-encoded); the same
+            for one exact name, used for names that cannot go in a list (they contain a comma).
         name_field: Site-row column holding the site name.
         state_field: Site-row column holding the state postal code.
         latitude_field: Site-row column with the latitude, decimal degrees.
@@ -32,7 +35,10 @@ class FrsEisSettings:
         batch_size: Most FRS IDs asked in one request.
         max_twin_distance_km: Farthest a same-named FRS record may lie from the facility to
             count as the same site.
-        twin_workers: Same-site searches run at the same time.
+        twin_list_pattern: Regular expression a site name must fully match to be searched
+            (the service rejects the others, listed or alone).
+        twin_batch_size: Most site names asked in one same-site request.
+        twin_workers: Same-site requests run at the same time.
         cache_seconds: How long a facility's EIS IDs (or the reason it has none) are reused.
     """
 
@@ -42,12 +48,15 @@ class FrsEisSettings:
     eis_id_field: str
     sites_path: str
     twins_path: str
+    twin_single_path: str
     name_field: str
     state_field: str
     latitude_field: str
     longitude_field: str
     batch_size: int
     max_twin_distance_km: float
+    twin_list_pattern: re.Pattern[str]
+    twin_batch_size: int
     twin_workers: int
     cache_seconds: float
 
@@ -62,6 +71,14 @@ def _template(table: dict[str, object], key: str, *slots: str) -> str:
 
 def _text(table: dict[str, object], key: str) -> str:
     return require_str(table, key, _NAME).strip()
+
+
+def _pattern(table: dict[str, object]) -> re.Pattern[str]:
+    text = _text(table, "twin_list_pattern")
+    try:
+        return re.compile(text)
+    except re.error as exc:
+        raise ValueError(f"{_NAME}.twin_list_pattern is not a valid regular expression") from exc
 
 
 def _fields(table: dict[str, object]) -> dict[str, str]:
@@ -82,12 +99,15 @@ def load_frs_eis_settings(path: Path | None = None) -> FrsEisSettings:
         base_url=_text(table, "base_url"),
         eis_path=_template(table, "eis_path", "{frs_ids}"),
         sites_path=_template(table, "sites_path", "{frs_ids}"),
-        twins_path=_template(table, "twins_path", "{name}", "{state}"),
+        twins_path=_template(table, "twins_path", "{names}", "{state}"),
+        twin_single_path=_template(table, "twin_single_path", "{name}", "{state}"),
         **_fields(table),
         batch_size=require_int(table, "batch_size", minimum=1, name=_NAME),
         max_twin_distance_km=require_number(
             table, "max_twin_distance_km", minimum=1e-9, name=_NAME
         ),
+        twin_list_pattern=_pattern(table),
+        twin_batch_size=require_int(table, "twin_batch_size", minimum=1, name=_NAME),
         twin_workers=require_int(table, "twin_workers", minimum=1, name=_NAME),
         cache_seconds=require_number(table, "cache_seconds", minimum=0, name=_NAME),
     )

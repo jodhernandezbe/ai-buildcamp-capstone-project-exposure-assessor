@@ -128,14 +128,23 @@ eis_path = "/frs.frs_program_facility/registry_id/in/{frs_ids}/pgm_sys_acrnm/equ
 registry_field = "registry_id"
 eis_id_field = "pgm_sys_id"
 sites_path = "/lookups.mv_new_geo_best_picks/registry_id/in/{frs_ids}"
-twins_path = "/lookups.mv_new_geo_best_picks/primary_name/equals/{name}/state_code/equals/{state}"
+# Same-site search: site names of one state, `twin_batch_size` per request (`{names}` is the
+# comma-separated, URL-encoded list). The service's list parser accepts only letters, digits,
+# spaces, "-" and "." (measured: & ' ( ) / # ; : " + = and the comma all fail with "could not be
+# parsed", alone or in a list, and each rejection costs the client's retries), so a name outside
+# `twin_list_pattern` is not searched; one name alone is asked with `twin_single_path`, and a
+# batch the service still cannot parse is split in halves.
+twin_list_pattern = "^[A-Za-z0-9 .-]+$"
+twins_path = "/lookups.mv_new_geo_best_picks/primary_name/in/{names}/state_code/equals/{state}"
+twin_single_path = "/lookups.mv_new_geo_best_picks/primary_name/equals/{name}/state_code/equals/{state}"
+twin_batch_size = 20
 name_field = "primary_name"
 state_field = "state_code"
 latitude_field = "latitude"
 longitude_field = "longitude"
 batch_size = 100
 max_twin_distance_km = 0.5
-# Same-site searches run this many at a time (each is one request); EIS IDs found are reused
+# Same-site searches run this many at a time (each is one batch request); EIS IDs found are reused
 # for cache_seconds (registrations change rarely).
 twin_workers = 4
 cache_seconds = 86400
@@ -559,9 +568,10 @@ subsectors_title_column = "title"
 # highest own-stack worst-case risk first. One year of hourly ERA5 weather costs ~26 Open-Meteo
 # calls (7 variables, 365 days); the free tier allows 600 a minute and 5000 an hour.
 max_facilities = 25
-# Own stacks and worst case (no weather or Census request) for at most this many facilities
-# whose bound reaches a screening threshold, largest bound first.
-max_refined = 500
+# Safety bound, not a selection: every facility whose bound reaches a screening threshold gets
+# its own stacks and worst case (no weather or Census request). Only the excess over this many
+# is left unassessed, with the reason and a warning. Above any chemical in the TRI window.
+max_refined = 5000
 max_workers = 4
 scc_min_score = 0.55
 max_scc_stacks = 3

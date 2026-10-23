@@ -57,6 +57,7 @@ def test_default_file_loads_with_the_screening_thresholds() -> None:
     assert 0 < s.scc_min_score <= 1 and s.max_workers >= 1 and s.inventory_cache_seconds >= 0
     assert (s.screening.hq, s.screening.cancer_risk) == (0.1, 1e-6)
     assert s.max_refined >= s.max_facilities and s.weather_cell_deg == 0.25
+    assert s.max_refined == 5000  # a safety bound above any chemical, not a selection
 
 
 def test_a_cache_of_zero_seconds_is_allowed(tmp_path: Path) -> None:

@@ -125,9 +125,9 @@ def _once_per_title(scc: Callable[[str], SccLookupResult]) -> Callable[[str], Sc
 
 
 def _chosen(
-    records: list[EmissionRecord], frs_ids: list[str], settings: AssessmentSettings
+    records: list[EmissionRecord], frs_ids: list[str]
 ) -> tuple[list[EmissionRecord], list[NotAssessed]]:
-    """The facilities asked for, up to ``max_facilities``; those not found or over the cap."""
+    """The facilities asked for that are in the inventory, and those that are not."""
     wanted = list(dict.fromkeys(i.strip() for i in frs_ids if i.strip()))
     by_id = {r["frs_id"]: r for r in records}
     skipped = [
@@ -135,13 +135,7 @@ def _chosen(
         for i in wanted
         if i not in by_id
     ]
-    found = [by_id[i] for i in wanted if i in by_id]
-    cap = settings.max_facilities
-    skipped += [
-        NotAssessed(frs_id=r["frs_id"], reason=f"only {cap} facilities are assessed per call")
-        for r in found[cap:]
-    ]
-    return found[:cap], skipped
+    return [by_id[i] for i in wanted if i in by_id], skipped
 
 
 def _resolved(records: list[EmissionRecord]) -> list[EmissionRecord]:
@@ -168,14 +162,16 @@ class _Call:
 
 
 def _by_id(call: _Call, frs_ids: list[str]) -> Findings:
-    """The facilities asked for, fully assessed without screening."""
-    chosen, skipped = _chosen(call.records, frs_ids, call.settings)
+    """The facilities asked for, without screening: the first ``max_facilities`` fully assessed."""
+    chosen, skipped = _chosen(call.records, frs_ids)
     candidates = [(r, None) for r in _resolved(chosen)]
     refined = refine_all(candidates, call.toxicity, call.steps, call.settings)
-    full = assess_all(refined, call.toxicity, call.radius_km, call.steps, call.settings)
+    cap = call.settings.max_facilities
+    full = assess_all(refined[:cap], call.toxicity, call.radius_km, call.steps, call.settings)
+    worst = [worst_case_only(item, call.radius_km) for item in refined[cap:]]
     tox = (call.toxicity, call.source)
     return Findings(
-        call.cas, tox, len(call.records), full, [], [], None, True, skipped, call.warnings
+        call.cas, tox, len(call.records), full, worst, [], None, True, skipped, call.warnings
     )
 
 
@@ -185,6 +181,12 @@ def _refined(call: _Call, first: Screen, possible: bool) -> Split:
     candidates = [(r, bound) for r, (_, bound) in zip(resolved, first.candidates, strict=True)]
     refined = refine_all(candidates, call.toxicity, call.steps, call.settings)
     return split(refined, possible, call.settings)
+
+
+def _bound_warning(over: list[NotAssessed], bound: int) -> list[str]:
+    if not over:
+        return []
+    return [f"{len(over)} facilities beyond the safety bound of {bound} were not assessed"]
 
 
 def _found(call: _Call, possible: bool, first: Screen, tiers: Split) -> Findings:
@@ -201,7 +203,7 @@ def _found(call: _Call, possible: bool, first: Screen, tiers: Split) -> Findings
         thresholds=s.screening,
         possible=possible,
         skipped=first.over,
-        warnings=call.warnings,
+        warnings=[*call.warnings, *_bound_warning(first.over, s.max_refined)],
     )
 
 
@@ -215,7 +217,11 @@ def _screened(call: _Call) -> Findings:
 
 
 def _artifact(f: Findings) -> AssessmentArtifact:
-    return AssessmentArtifact(assessed=[*f.full, *f.worst_only], screened_out=list(f.screened_out))
+    return AssessmentArtifact(
+        assessed=[*f.full, *f.worst_only],
+        screened_out=list(f.screened_out),
+        not_assessed=list(f.skipped),
+    )
 
 
 def run_assessment(

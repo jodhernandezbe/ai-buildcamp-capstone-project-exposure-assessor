@@ -37,10 +37,12 @@ describe("risk card", () => {
 });
 
 describe("provenance card", () => {
-  it("is not evaluated until the read-across tool ran", () => {
+  it("shows no badge until the read-across tool ran", () => {
     render(<EpaOverviewRibbon workspace={EMPTY_WORKSPACE} digits={2} />);
-    expect(within(card("Chemical & provenance")).getByText("Not evaluated")).toBeInTheDocument();
-    expect(screen.queryByText("Direct TRI match")).toBeNull();
+    const provenance = within(card("Chemical & provenance"));
+    expect(provenance.queryByText("Not evaluated")).toBeNull();
+    expect(provenance.queryByText("Direct TRI match")).toBeNull();
+    expect(provenance.queryByText("Unresolved")).toBeNull();
   });
 
   it("shows the properties with their sources, and absent ones as not reported", () => {

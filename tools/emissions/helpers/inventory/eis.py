@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -83,9 +83,9 @@ def _site(row: Row, settings: FrsEisSettings) -> Site | None:
 class EisResolver:
     """Finds the EIS IDs of facilities in bulk, and of their FRS twins when they have none.
 
-    One request answers up to ``batch_size`` facilities; the same-site searches (one request
-    each) run ``twin_workers`` at a time. A failed request leaves those facilities without EIS
-    IDs and a note, never an exception.
+    One request answers up to ``batch_size`` facilities; the same-site searches (one request per
+    ``twin_batch_size`` site names of a state) run ``twin_workers`` at a time. A failed request
+    leaves those facilities without EIS IDs and a note, never an exception.
     """
 
     def __init__(self, client: EfserviceClient, settings: FrsEisSettings) -> None:
@@ -147,40 +147,101 @@ class EisResolver:
                     sites.setdefault(site.frs_id, site)
         return sites
 
-    def _twins(self, site: Site) -> list[tuple[Site, float]]:
-        """Other FRS records of the same name and state within reach, nearest first."""
-        path = self._settings.twins_path.format(
-            name=quote(site.name, safe=""), state=quote(site.state, safe="")
+    def _search(self, job: tuple[str, tuple[str, ...]]) -> list[Site]:
+        """The FRS sites registered in a state under any of these names (usable rows only).
+
+        The service's query parser rejects names outside ``twin_list_pattern`` whether they are
+        listed or asked alone (each rejection also costs the client's retries), so those names
+        are not searched. A batch it still rejects is split in halves and asked again, down to
+        one name; a name still rejected is left without sites (the failure is logged).
+        """
+        pattern = self._settings.twin_list_pattern
+        names = tuple(n for n in job[1] if pattern.fullmatch(n))
+        if len(names) == 1:
+            return self._ask(self._single(names[0], job[0]))
+        return self._batch(job[0], names) if names else []
+
+    def _batch(self, state: str, names: tuple[str, ...]) -> list[Site]:
+        rows = self._rows(self._batch_path(names, state))
+        if rows is not None:
+            return self._usable(rows)
+        half = len(names) // 2
+        return self._search((state, names[:half])) + self._search((state, names[half:]))
+
+    def _single(self, name: str, state: str) -> str:
+        return self._settings.twin_single_path.format(
+            name=quote(name, safe=""), state=quote(state, safe="")
         )
-        rows = self._rows(path) or []
-        nearby: list[tuple[Site, float]] = []
-        for row in rows:
-            other = _site(row, self._settings)
-            if other is None or other.frs_id == site.frs_id:
-                continue
-            if other.name != site.name or other.state != site.state:
-                continue
-            apart = distance_km(site.latitude, site.longitude, other.latitude, other.longitude)
-            if apart <= self._settings.max_twin_distance_km:
-                nearby.append((other, apart))
-        return sorted(nearby, key=lambda item: item[1])
+
+    def _batch_path(self, names: Sequence[str], state: str) -> str:
+        listed = ",".join(quote(n, safe="") for n in names)
+        return self._settings.twins_path.format(names=listed, state=quote(state, safe=""))
+
+    def _ask(self, path: str) -> list[Site]:
+        return self._usable(self._rows(path) or [])
+
+    def _usable(self, rows: Sequence[Row]) -> list[Site]:
+        sites = (_site(row, self._settings) for row in rows)
+        return [site for site in sites if site is not None]
+
+    def _nearby(self, sites: dict[str, Site]) -> dict[str, list[tuple[Site, float]]]:
+        """Per facility, other FRS records of the same name and state within reach, nearest first.
+
+        The names of one state are asked ``twin_batch_size`` at a time, ``twin_workers`` requests
+        at a time; each answer is then filtered here by exact name, state and distance.
+        """
+        jobs = _jobs(sites.values(), self._settings.twin_batch_size)
+        workers = max(1, min(self._settings.twin_workers, len(jobs)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            answers = [site for found in pool.map(self._search, jobs) for site in found]
+        by_name: dict[tuple[str, str], list[Site]] = {}
+        for other in answers:
+            by_name.setdefault((other.name, other.state), []).append(other)
+        return {
+            frs_id: _within(site, by_name.get((site.name, site.state), []), self._settings)
+            for frs_id, site in sites.items()
+        }
 
     def _twins_of(self, frs_ids: Sequence[str]) -> dict[str, Twin]:
         """What the same-site search found for each facility without its own registration.
 
-        The searches run ``twin_workers`` at a time; the registrations of every twin found are
-        then read together.
+        The names are searched in batches; the registrations of every twin found are then read
+        together.
         """
         sites = self._sites(frs_ids)
-        workers = max(1, min(self._settings.twin_workers, len(sites)))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            nearby = dict(zip(sites, pool.map(self._twins, sites.values()), strict=True))
+        nearby = self._nearby(sites) if sites else {}
         others = [other.frs_id for near in nearby.values() for other, _ in near]
         registered = (self._registrations(others) or {}) if others else {}
         return {
             frs_id: _pick(frs_id, frs_id in sites, nearby.get(frs_id, []), registered)
             for frs_id in frs_ids
         }
+
+
+def _jobs(sites: Iterable[Site], size: int) -> list[tuple[str, tuple[str, ...]]]:
+    """(state, names) requests: each distinct name once, at most ``size`` names per request."""
+    by_state: dict[str, dict[str, None]] = {}
+    for site in sites:
+        by_state.setdefault(site.state, {})[site.name] = None
+    jobs: list[tuple[str, tuple[str, ...]]] = []
+    for state, names in by_state.items():
+        listed = tuple(names)
+        jobs += [(state, listed[i : i + size]) for i in range(0, len(listed), size)]
+    return jobs
+
+
+def _within(
+    site: Site, candidates: Sequence[Site], settings: FrsEisSettings
+) -> list[tuple[Site, float]]:
+    """The candidates other than the site itself within the twin distance, nearest first."""
+    nearby: list[tuple[Site, float]] = []
+    for other in dict.fromkeys(candidates):
+        if other.frs_id == site.frs_id:
+            continue
+        apart = distance_km(site.latitude, site.longitude, other.latitude, other.longitude)
+        if apart <= settings.max_twin_distance_km:
+            nearby.append((other, apart))
+    return sorted(nearby, key=lambda item: item[1])
 
 
 def _pick(

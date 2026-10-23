@@ -35,7 +35,9 @@ class AssessmentSettings:
 
     Attributes:
         max_facilities: Most facilities fully assessed (site weather, residents) in one call.
-        max_refined: Most facilities given their own stacks and worst case in one call.
+        max_refined: Safety bound on the facilities given their own stacks and worst case in one
+            call. Every facility reaching a threshold is refined; only the excess over this bound
+            is left unassessed, and that is reported.
         max_workers: Facilities processed at the same time (each makes its own requests).
         scc_min_score: Lowest similarity (0-1) of an SCC match to the facility's industry for
             its PSTK stack to be used; below it the EPA global default stack is used.

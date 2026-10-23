@@ -26,12 +26,19 @@ def test_a_facility_below_both_thresholds_at_the_bound_is_screened_out_with_it()
     assert "AirToxScreen global default stack" in out["reason"] and "SCREEN3" in out["reason"]
 
 
-def test_candidates_go_largest_first_and_the_cap_is_reported() -> None:
+def test_no_candidate_is_dropped_below_the_safety_bound_and_they_go_largest_first() -> None:
+    records = [record(f"F{i}", emission_rate=1.0 + i) for i in range(3)]
+    result = screen(records, UNIT, replace(SETTINGS, max_refined=3))
+    assert [r["frs_id"] for r, _ in result.candidates] == ["F2", "F1", "F0"]
+    assert result.over == []
+
+
+def test_beyond_the_safety_bound_the_rest_is_returned_as_not_assessed() -> None:
     records = [record(f"F{i}", emission_rate=1.0 + i) for i in range(3)]
     result = screen(records, UNIT, replace(SETTINGS, max_refined=2))
     assert [r["frs_id"] for r, _ in result.candidates] == ["F2", "F1"]
     assert [o["frs_id"] for o in result.over] == ["F0"]
-    assert "only 2 facilities are refined per call" in result.over[0]["reason"]
+    assert "more than 2 facilities reach a threshold" in result.over[0]["reason"]
 
 
 def test_without_a_unit_bound_nothing_is_screened_out() -> None:

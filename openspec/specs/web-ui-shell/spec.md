@@ -45,7 +45,8 @@ The top of the left pane SHALL show four cards updated from each `workspace_upda
    (green below, amber near, red above the threshold of concern, each also labelled in words);
 2. Chemical and read-across provenance: name (when the state has one; otherwise the CAS number stands alone, never a name from elsewhere), CAS, molecular weight, RfC/IUR with sources, and a badge
    "Direct TRI match", "Read-across surrogate" (surrogate CAS/name, hybrid score, cosine,
-   Tanimoto, in/out of applicability domain), "Unresolved" or "Not evaluated";
+   Tanimoto, in/out of applicability domain) or "Unresolved"; before the read-across tool has
+   run the card shows no badge;
 3. Exposed population: total within the radius `r` km and a horizontal stacked bar of the age
    bands 0-4, 5-17, 18-64, 65+, with the data source;
 4. Meteorology: the facility it is for (or, for a point that is not one of the facilities, its
@@ -70,7 +71,9 @@ The analysis area SHALL show a vector basemap (light and dark styles from config
 as the page loads, framed on the configured initial view (the contiguous United States), even
 when no facility has been placed. It SHALL draw one marker per placed facility, coloured by its
 risk status (or neutral when not computed) and sized by emission rate on a configured scale,
-with a legend. When the framing version changes, the camera SHALL animate to fit the bounding
+with a legend whose entries (below, near, above concern, not computed) each show how many
+facilities have that status and hide or show the markers of that status, with their circles,
+sectors and cards, when pressed. When the framing version changes, the camera SHALL animate to fit the bounding
 box, with padding that keeps the framed facilities clear of the legend. The map SHALL redraw at
 its new size whenever its container changes size (splitter drag, rail or chat collapse, panel
 fullscreen, window resize), leaving no blank or stretched area. A "Reset to USA view" control
@@ -78,11 +81,19 @@ on the map SHALL return the camera to the configured initial view. It SHALL anim
 when the user prefers reduced motion. For a facility with receptors the map SHALL draw the
 receptor radius circle. With meteorology it SHALL draw a sector toward
 `(wind_direction + 180) % 360` with a configured half-angle and the radius as length, labelled
-"schematic downwind sector — not a modelled plume footprint".
+"schematic downwind sector, not a modelled plume footprint".
 
 #### Scenario: Before any query
 - **WHEN** the page has loaded and no assessment has run
 - **THEN** the basemap is visible, framed on the contiguous United States, with no markers
+
+#### Scenario: Hide and show a status
+- **WHEN** the user presses the "Above concern" legend entry and later presses it again
+- **THEN** the markers of facilities above concern leave the map, with their circles, sectors and cards, and the entry reads as off with its count unchanged; pressing it again brings them back
+
+#### Scenario: Legend counts
+- **WHEN** the workspace holds one facility below concern, two above and one not computed
+- **THEN** the legend entries show 1, 0, 2 and 1
 
 #### Scenario: Fit to facilities
 - **WHEN** a dashboard event raises the framing version
@@ -104,12 +115,15 @@ receptor radius circle. With meteorology it SHALL draw a sector toward
 Hovering or keyboard-focusing a marker SHALL open a translucent inspector anchored to it, and
 it SHALL close on leave, blur or Escape. It SHALL show: facility name, FRS ID, TRI document
 control number, NAICS code and title; reported release with its unit, emission rate (g/s),
-operating hours (h/yr) and CAS; the TSCA life cycle stages and conditions of use the API sent
-(each condition with its TRI activity and COU category), or "not reported" with the API's note
-when there are none; each stack's height (m), diameter (m), exit velocity (m/s), exit
+operating hours (h/yr) and CAS; the TSCA life cycle stages and conditions of use the API sent,
+under visible labels naming them and TSCA (each condition with its COU category, its life cycle
+stage, and the TRI activity and Form R item it was mapped from with the mapping's strength), or
+"not reported" with the API's note when there are none; each stack's height (m), diameter (m), exit velocity (m/s), exit
 temperature (K) with its provenance tier pill; and receptor metrics: worst-case and
 representative maximum concentration (µg/m³), HQ, cancer risk and population within the
-radius. Markers SHALL be reachable by keyboard and announce the facility name to screen readers.
+radius. The card SHALL be no taller than the space between the marker and the edge of the map on
+the side it opens, so that a long card scrolls inside itself and no part of it is clipped out of
+reach. Markers SHALL be reachable by keyboard and announce the facility name to screen readers.
 
 #### Scenario: Keyboard focus
 - **WHEN** a marker receives keyboard focus
@@ -126,6 +140,14 @@ radius. Markers SHALL be reachable by keyboard and announce the facility name to
 #### Scenario: No conditions
 - **WHEN** the facility has no conditions of use
 - **THEN** the inspector shows "not reported" with the note, never an empty list that looks like a result
+
+#### Scenario: Long card scrolls
+- **WHEN** a facility's card has more content than the room between its marker and the edge of the map
+- **THEN** the card is capped at that room and scrolls inside itself, with nothing clipped out of reach
+
+#### Scenario: Labelled provenance
+- **WHEN** the card shows conditions of use
+- **THEN** a visible label names them as TSCA conditions of use, another names the life cycle stages, and each condition states the TRI activity and Form R item it was mapped from
 
 #### Scenario: Click pins the card
 - **WHEN** the user clicks a marker
@@ -336,35 +358,43 @@ streaming turn or discard the draft in the composer.
 - **THEN** the analysis area takes the full width and, on restore, the streamed answer is complete or still streaming with nothing lost
 
 ### Requirement: Risk by industry, condition of use and life cycle stage
-Once the workspace has facilities, the Overview panel SHALL show a switch between its Summary view (the ribbon, the default) and a "Risk by group" view, and the Risk by group view SHALL show three bar-chart sections, one grouping the facilities by NAICS 3-digit subsector (code and title), one by TSCA condition of use (life cycle stage and COU category), and one by TSCA life cycle stage. Each SHALL show the top five groups on the x-axis with two bars per group: the highest worst-case hazard quotient and the highest worst-case lifetime cancer risk among the group's fully assessed facilities, both unitless, each on its own logarithmic axis (hazard quotient on the left, cancer risk on the right, so each bar is measured from a baseline that means something for its own quantity), with the configured thresholds of concern drawn as dashed reference lines on the axis of their quantity. A group's value SHALL be one of the values the API sent for a facility (a selection, never a sum, mean or conversion), and a facility with no worst-case value, or screened out, SHALL not contribute to it. The groups SHALL be ranked by the highest hazard quotient, or by the highest cancer risk when the user switches the ranking, ties broken by the group label; a group with no value for the ranking quantity SHALL not be ranked. A facility with several conditions of use SHALL appear in each of them, and that section SHALL say so. Hovering or focusing a bar SHALL show the group, the value, the facility it comes from, that facility's worst-case concentration (µg/m³), and the number of facilities in the group with how many of them were assessed. Every bar SHALL also be available as text (a visually hidden table), and a section with nothing to rank SHALL say why instead of showing an empty chart.
+The Overview panel SHALL have a switch between its Summary view (the ribbon, the default) and a "Risk by group" view, available before anything has run, and the Risk by group view SHALL always show three sections, one grouping the facilities by NAICS 3-digit subsector (code and title), one by TSCA condition of use (life cycle stage and COU category), and one by TSCA life cycle stage. Each section SHALL hold one bar chart and a switch in its header, "Hazard quotient" / "Cancer risk" (hazard quotient by default), that chooses which of the two quantities it shows, never both at once; the choice is shared by the three sections and kept while the user goes to the summary and back. The chart SHALL show the top five groups by the chosen quantity, one bar per group, all bars in one colour, on a logarithmic axis of its own with the quantity's thresholds drawn as labelled dashed lines (near concern and concern for the hazard quotient; the lower and upper cancer-risk thresholds for the cancer risk), and SHALL name those lines under its title, which names the quantity (hazard quotient, non-cancer, unitless; lifetime cancer risk, unitless). A bar's value SHALL be the highest worst-case value of that quantity among the group's fully assessed facilities, one of the values the API sent for a facility (a selection, never a sum, mean or conversion); a facility with no worst-case value, or screened out, SHALL not contribute to it, and a group with no value for the quantity SHALL not be ranked in that chart. Where the chart has nothing to rank it SHALL say why in place of the chart: that nothing is there to show yet before a run, that nothing was assessed, or that no group has the quantity (the chemical may have no unit risk). Hovering or focusing a bar SHALL show an opaque card with the group, that quantity's highest value, the facility it comes from and that facility's worst-case concentration (µg/m³), and the number of facilities in the group with how many were assessed and how many screened out. A facility with several conditions of use SHALL appear in each of them, and that section SHALL say so. Every bar SHALL also be available as text (a visually hidden table), and a count of the facilities in the run and of those with a worst-case result SHALL be shown above the sections.
 
-#### Scenario: Two bars per group
+#### Scenario: One quantity at a time
 - **WHEN** the workspace has assessed facilities in three industries
-- **THEN** the industry section shows those groups with a hazard-quotient bar and a cancer-risk bar each, and the threshold lines
+- **THEN** the industry section shows one chart, of the hazard quotient, with one bar per industry in one colour and its own dashed threshold lines, and the switch offers "Cancer risk"
 
-#### Scenario: Top five
-- **WHEN** there are eight groups with values
-- **THEN** only the five highest by the chosen ranking are shown
+#### Scenario: Switching the quantity
+- **WHEN** the user chooses "Cancer risk" in any section
+- **THEN** all three sections show their cancer-risk chart, ranked by cancer risk with its own axis and thresholds, and the hazard quotient is not drawn; the choice survives going to the summary and back
+
+#### Scenario: Each quantity ranks on its own
+- **WHEN** there are eight groups with a hazard quotient and six with a cancer risk
+- **THEN** the hazard-quotient chart shows the five highest hazard quotients and the cancer-risk chart the five highest cancer risks, each saying how many groups were not shown
 
 #### Scenario: Value is a selected one
 - **WHEN** a group has two assessed facilities with worst-case HQ 2 and 5
-- **THEN** its bar is 5 and no combined figure is shown
+- **THEN** its hazard-quotient bar is 5 and no combined figure is shown
 
 #### Scenario: Hover details
-- **WHEN** the user hovers or focuses a group's hazard-quotient bar
-- **THEN** a tooltip names the facility, its worst-case concentration in µg/m³, and "n facilities, m assessed"
+- **WHEN** the user hovers or focuses a bar
+- **THEN** an opaque card names the group, that chart's highest value with its facility and concentration in µg/m³, and "n facilities in this group, m assessed"
+
+#### Scenario: No unit risk
+- **WHEN** no facility has a worst-case cancer risk
+- **THEN** choosing "Cancer risk" shows a message that no group has a lifetime cancer risk to rank, and the hazard-quotient chart is unaffected
 
 #### Scenario: Several conditions of use
 - **WHEN** a facility has two conditions of use
 - **THEN** it counts in both groups of the condition-of-use section, which notes that facilities can appear in several bars
 
-#### Scenario: Ranking switch
-- **WHEN** the user switches the ranking to cancer risk
-- **THEN** the groups are reordered and re-cut to the top five by cancer risk
+#### Scenario: Before anything has run
+- **WHEN** the workspace has no facilities and the user opens "Risk by group"
+- **THEN** the three sections are shown, each with its chart replaced by a message that there is nothing to show yet, with "0 facilities in this run"
 
 #### Scenario: Nothing assessed
-- **WHEN** no facility has a worst-case result
-- **THEN** each section says that nothing was assessed yet, with no empty chart
+- **WHEN** facilities exist but none has a worst-case result
+- **THEN** each chart says that nothing was assessed yet, with no empty plot
 
 #### Scenario: Unknown industry
 - **WHEN** a facility has no subsector
@@ -372,15 +402,11 @@ Once the workspace has facilities, the Overview panel SHALL show a switch betwee
 
 #### Scenario: Summary first, charts one click away
 - **WHEN** the workspace has facilities and the Overview panel opens
-- **THEN** the summary ribbon is shown with a "Summary" / "Risk by group" switch above it, and choosing "Risk by group" shows the three chart sections at the top of the panel without scrolling past the ribbon
+- **THEN** the summary ribbon is shown with a "Summary" / "Risk by group" switch above it, and choosing "Risk by group" shows the three sections at the top of the panel without scrolling past the ribbon
 
-#### Scenario: No facilities, no switch
-- **WHEN** the workspace has no facilities
-- **THEN** the panel shows only the ribbon, filling the panel, with no switch and no chart sections
-
-#### Scenario: Switching keeps the ranking
-- **WHEN** the user ranks by cancer risk, returns to the summary and opens the charts again
-- **THEN** the ranking is still cancer risk
+#### Scenario: Switching views
+- **WHEN** the user goes to the summary and back to the charts
+- **THEN** the three sections are shown again
 
 ### Requirement: Expandable chart sections
 Each of the three chart sections SHALL have a control with an accessible name ("Expand section" / "Restore section") that makes it fill the Overview panel's area, hiding the other sections without unmounting them, and restoring the previous layout on the same control or Escape. Escape SHALL close an open inspector or drawer first. In a wide panel the sections SHALL sit side by side and in a narrow one stack, by the panel's width, without horizontal page scroll.

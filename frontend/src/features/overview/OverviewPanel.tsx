@@ -5,7 +5,7 @@ import type { WorkspaceState } from "../../types/workspace";
 import { EpaOverviewRibbon } from "./EpaOverviewRibbon";
 import { isAssessed } from "./assessment";
 import { RiskGroupSection } from "./RiskGroupSection";
-import type { GroupBy, RankBy } from "./riskGroups";
+import type { GroupBy, Quantity } from "./riskGroups";
 
 interface Props {
   workspace: WorkspaceState;
@@ -44,12 +44,12 @@ function ViewSwitch({ view, onView }: { view: View; onView: (view: View) => void
  * The Overview panel has two views of one workspace: the executive summary ribbon, and the three
  * risk-by-group charts (the switch is always there; the charts say what is missing). The ribbon stays
  * mounted; the charts are drawn only on their own view (Recharts cannot measure a hidden box), and
- * their ranking is kept here. A chart section can expand to fill the panel, hiding the others.
+ *  The quantity shown (hazard quotient or cancer risk) is kept here, so the three sections agree. A chart section can expand to fill the panel, hiding the others.
  */
 export function OverviewPanel({ workspace, digits, thresholds }: Props) {
   const [view, setView] = useState<View>("summary");
   const [expanded, setExpanded] = useState<GroupBy | null>(null);
-  const [rankBy, setRankBy] = useState<RankBy>("hq");
+  const [quantity, setQuantity] = useState<Quantity>("hq");
   const showRisk = view === "risk";
   const assessed = workspace.facilities.filter(isAssessed).length;
   const open = showRisk && expanded !== null;
@@ -80,8 +80,8 @@ export function OverviewPanel({ workspace, digits, thresholds }: Props) {
                 key={by}
                 by={by}
                 facilities={workspace.facilities}
-                rankBy={rankBy}
-                onRankBy={setRankBy}
+                quantity={quantity}
+                onQuantity={setQuantity}
                 expanded={expanded === by}
                 hidden={open && expanded !== by}
                 onToggleExpand={() => setExpanded((now) => (now === by ? null : by))}

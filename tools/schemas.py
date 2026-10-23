@@ -372,6 +372,7 @@ class AssessmentArtifact(TypedDict):
 
     assessed: list[FacilityAssessment]  # fully assessed first, then worst case only
     screened_out: list[ScreenedOut]
+    not_assessed: list[NotAssessed]  # asked for or reaching a threshold, but with no result
 
 
 class NotAssessed(TypedDict):

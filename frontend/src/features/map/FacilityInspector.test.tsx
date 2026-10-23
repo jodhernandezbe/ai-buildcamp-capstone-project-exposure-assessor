@@ -293,7 +293,30 @@ describe("card content", () => {
     const card = screen.getByRole("tooltip");
     expect(card).toHaveTextContent("HQ, worst casenot reported");
     expect(card).toHaveTextContent("Not computed");
-    expect(card).toHaveTextContent("Not assessed yet: no stack parameters were obtained");
+    expect(card).toHaveTextContent("Not assessed yet: the batch assessment has not covered this facility.");
+    expect(card).not.toHaveTextContent("no stack parameters were obtained");
+  });
+
+  it("gives the real reason when the batch did not assess the facility", async () => {
+    const user = userEvent.setup();
+    const reason = "more than 5000 facilities reach a threshold; refining them all was not attempted";
+    show(
+      facility({
+        screening: {
+          outcome: "not_assessed",
+          bound_hq: null,
+          bound_cancer_risk: null,
+          value_hq: null,
+          value_cancer_risk: null,
+          reason,
+        },
+      }),
+    );
+    await user.tab();
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent(`Not assessed: ${reason}`);
+    expect(card).not.toHaveTextContent("Screened out");
+    expect(card).not.toHaveTextContent("Not assessed yet");
   });
 });
 
@@ -306,11 +329,14 @@ describe("conditions of use in the facility card", () => {
     ];
     show(facility({ conditions_of_use: conditions, lifecycle_stages: ["Processing", "Industrial use"] }));
     await userEvent.hover(screen.getByRole("button", { name: /Plant F1/ }));
-    const stages = await screen.findByRole("list", { name: "Life cycle stages" });
+    expect(await screen.findByText("Life cycle stages")).toBeInTheDocument();
+    const stages = screen.getByRole("list", { name: "Life cycle stages" });
     expect(stages).toHaveTextContent("Processing");
     expect(stages).toHaveTextContent("Industrial use");
     const list = screen.getByRole("list", { name: "Conditions of use" });
-    expect(list).toHaveTextContent("As a reactant · Processing as a reactant (Processing; Direct)");
+    expect(list).toHaveTextContent("Processing as a reactant");
+    expect(list).toHaveTextContent("Life cycle stage: Processing");
+    expect(list).toHaveTextContent("From TRI “As a reactant” (Form R 3.2a) · mapping Direct");
     expect(list.querySelectorAll("li")).toHaveLength(2);
   });
 
@@ -319,5 +345,22 @@ describe("conditions of use in the facility card", () => {
     await userEvent.hover(screen.getByRole("button", { name: /Plant F1/ }));
     expect(await screen.findByText(/Not reported: TRI reported no activity/)).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Conditions of use" })).toBeNull();
+  });
+});
+
+describe("card height", () => {
+  it("is no taller than the room on the side it opens, so nothing is clipped out of reach", async () => {
+    FakeMap.reset();
+    show(facility({ frs_id: "F1", name: "Plant F1" }));
+    const overlay = document.querySelector('[class*="absolute inset-0"]') as HTMLElement | null;
+    expect(overlay).not.toBeNull();
+    vi.spyOn(overlay as HTMLElement, "getBoundingClientRect").mockReturnValue({
+      width: 800, height: 600, top: 0, left: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => "",
+    });
+    await userEvent.hover(screen.getByRole("button", { name: /Plant F1/ }));
+    const card = await screen.findByRole("tooltip");
+    const maxHeight = Number.parseFloat(card.style.maxHeight);
+    expect(maxHeight).toBeGreaterThan(0);
+    expect(maxHeight).toBeLessThanOrEqual(600);
   });
 });
