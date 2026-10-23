@@ -103,6 +103,8 @@ class ComptoxSettings:
         api_key_env_var: Name of the environment variable holding the API key.
         delay_seconds: Wait before each request, in seconds.
         timeout_seconds: Per-request timeout, in seconds.
+        max_retries: Retries after a timeout, a connection error, HTTP 429 or HTTP 5xx.
+        backoff_seconds: First retry wait in seconds; doubles on each further retry.
         accept_expired_certificate: Skip only the validity-dates check of the service's TLS
             certificate (its chain and host name are still verified); for an outage where
             the certificate has lapsed. Off unless set, and to be turned off again after.
@@ -121,6 +123,8 @@ class ComptoxSettings:
     api_key_env_var: str
     delay_seconds: float
     timeout_seconds: float
+    max_retries: int
+    backoff_seconds: float
     accept_expired_certificate: bool
     molecular_weight: MolecularWeightSpec
     properties: tuple[PropertySpec, ...]
@@ -353,6 +357,8 @@ def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
         api_key_env_var=_comptox_str(section, "api_key_env_var"),
         delay_seconds=_comptox_seconds(section, "delay_seconds", 0),
         timeout_seconds=_comptox_seconds(section, "timeout_seconds", 0.001),
+        max_retries=_require_int(section, "max_retries", minimum=0, name="comptox"),
+        backoff_seconds=_comptox_seconds(section, "backoff_seconds", 0),
         accept_expired_certificate=_require_bool(section, "accept_expired_certificate", "comptox"),
         molecular_weight=_parse_molecular_weight(section),
         properties=_parse_properties(section),

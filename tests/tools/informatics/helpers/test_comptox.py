@@ -34,6 +34,8 @@ def _settings(
         api_key_env_var="TEST_KEY_VAR",  # pragma: allowlist secret
         delay_seconds=0.5,
         timeout_seconds=1.0,
+        max_retries=0,
+        backoff_seconds=1.0,
         accept_expired_certificate=False,
         molecular_weight=MolecularWeightSpec("averageMass", "g/mol", "g/mol"),
         properties=(

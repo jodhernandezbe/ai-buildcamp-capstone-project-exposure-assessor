@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from config.loader import ComptoxSettings, load_comptox_settings, load_unit_settings
+from config.loader import (
+    ComptoxSettings,
+    get_comptox_settings,
+    load_comptox_settings,
+    load_unit_settings,
+)
 
 OTHER = """
 [other]
@@ -26,6 +31,8 @@ api_key_header = "x-key"  # pragma: allowlist secret
 api_key_env_var = "SOME_KEY_VAR"  # pragma: allowlist secret
 delay_seconds = 0
 timeout_seconds = 2
+max_retries = 3
+backoff_seconds = 1.5
 accept_expired_certificate = false
 
 [comptox.molecular_weight]
@@ -217,6 +224,33 @@ def test_comptox_certificate_waiver_must_be_a_boolean(tmp_path: Path) -> None:
 def test_comptox_non_numeric_timeout(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="comptox.timeout_seconds"):
         _load(tmp_path, COMPTOX.replace("timeout_seconds = 2", 'timeout_seconds = "x"'))
+
+
+def test_comptox_retry_settings(tmp_path: Path) -> None:
+    settings = _load(tmp_path, COMPTOX)
+    assert (settings.max_retries, settings.backoff_seconds) == (3, 1.5)
+    assert _load(tmp_path, COMPTOX.replace("max_retries = 3", "max_retries = 0")).max_retries == 0
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ("max_retries = 3", "max_retries = -1", "comptox.max_retries"),
+        ("max_retries = 3", "max_retries = 1.5", "comptox.max_retries"),
+        ("max_retries = 3", "max_retries = true", "comptox.max_retries"),
+        ("max_retries = 3\n", "", "comptox.max_retries"),
+        ("backoff_seconds = 1.5", "backoff_seconds = -1", "comptox.backoff_seconds"),
+        ("backoff_seconds = 1.5", 'backoff_seconds = "x"', "comptox.backoff_seconds"),
+        ("backoff_seconds = 1.5\n", "", "comptox.backoff_seconds"),
+    ],
+)
+def test_comptox_invalid_retry_settings(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _load(tmp_path, COMPTOX.replace(old, new))
+
+
+def test_shipped_source_priority_names_iris_as_the_api_does() -> None:
+    assert get_comptox_settings().source_priority[0] == "EPA IRIS: IRIS"
 
 
 def test_source_priority_optional_but_validated(tmp_path: Path) -> None:

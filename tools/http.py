@@ -12,7 +12,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 class HttpRequestError(RuntimeError):
@@ -62,7 +62,7 @@ class _Retry:
     status: int | None = None
 
 
-def _retry_after(response: httpx.Response) -> float | None:
+def retry_after(response: httpx.Response) -> float | None:
     """Return the ``Retry-After`` header as seconds if it is a non-negative number."""
     raw = response.headers.get("Retry-After", "").strip()
     try:
@@ -133,9 +133,9 @@ class RetryingClient:
             response = self._client.get(url, params=params, timeout=self._policy.timeout_seconds)
         except httpx.HTTPError as exc:
             return _Retry(f"{type(exc).__name__}")
-        if response.status_code in _RETRYABLE_STATUS:
+        if response.status_code in RETRYABLE_STATUS:
             return _Retry(
-                f"HTTP {response.status_code}", _retry_after(response), response.status_code
+                f"HTTP {response.status_code}", retry_after(response), response.status_code
             )
         if response.status_code != 200:
             raise HttpRequestError(

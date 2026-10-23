@@ -12,8 +12,14 @@ properties_by_dtxsid_path = "/chemical/property/summary/search/by-dtxsid/{dtxsid
 # {dtxsid} is replaced with the DTXSID; the response is a list of ToxVal records.
 toxval_by_dtxsid_path = "/hazard/toxval/search/by-dtxsid/{dtxsid}"
 # When several ToxVal records match a toxicity value, prefer these `source` names in order;
-# sources not listed rank after all listed ones.
-source_priority = ["IRIS"]
+# sources not listed rank after all listed ones. Names are matched exactly as ToxVal reports
+# them in `source` ("EPA IRIS: IRIS", not "IRIS"); a name that matches nothing is silently
+# ignored, so a test pins the shipped one.
+source_priority = ["EPA IRIS: IRIS"]
+# Retries after a timeout, a connection error, HTTP 429 or HTTP 5xx, and the first retry wait in
+# seconds (doubles on each further retry; Retry-After is honoured up to timeout_seconds).
+max_retries = 2
+backoff_seconds = 2.0
 # Header carrying the API key, and the environment variable (e.g. in .env) that holds it.
 api_key_header = "x-api-key"  # pragma: allowlist secret
 api_key_env_var = "COMPTOX_API_KEY"  # pragma: allowlist secret

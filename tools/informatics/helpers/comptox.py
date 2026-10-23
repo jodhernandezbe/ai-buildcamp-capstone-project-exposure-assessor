@@ -17,6 +17,7 @@ import httpx
 from commons.cas import format_cas
 from config.loader import ComptoxSettings, ToxicityValueSpec, get_comptox_settings
 from tools.credentials import COMPTOX_KEY
+from tools.http import RETRYABLE_STATUS, retry_after
 from tools.schemas import PropertyValue, ToxicityValue
 
 logger = logging.getLogger(__name__)
@@ -381,13 +382,41 @@ class ComptoxLookup:
         self, url: str, headers: Mapping[str, str], what: str, *, miss_on_zero_results: bool = False
     ) -> tuple[object | None, bool]:
         """Return (parsed JSON or None, definitive); definitive False means a transient failure."""
-        self._sleep(self._settings.delay_seconds)
-        try:
-            response = self._client.get(url, headers=dict(headers))
-        except httpx.HTTPError as exc:
-            logger.debug("CompTox %s request failed: %s", what, exc)
+        response = self._request(url, headers, what)
+        if response is None:
             return None, False
         return self._parse(response, what, miss_on_zero_results)
+
+    def _request(self, url: str, headers: Mapping[str, str], what: str) -> httpx.Response | None:
+        """GET ``url``, retrying a timeout, connection error, HTTP 429 or 5xx.
+
+        Returns the last response, or None if the last attempt got none. A response that is not
+        retryable (a success, a 404, a 400) is returned at once.
+        """
+        retries = self._settings.max_retries
+        response: httpx.Response | None = None
+        for attempt in range(retries + 1):
+            self._sleep(self._settings.delay_seconds)
+            response = self._attempt(url, headers, what)
+            if response is not None and response.status_code not in RETRYABLE_STATUS:
+                return response
+            if attempt < retries:
+                self._sleep(self._retry_wait(attempt, response))
+        return response
+
+    def _attempt(self, url: str, headers: Mapping[str, str], what: str) -> httpx.Response | None:
+        try:
+            return self._client.get(url, headers=dict(headers))
+        except httpx.HTTPError as exc:
+            logger.debug("CompTox %s request failed: %s", what, exc)
+            return None
+
+    def _retry_wait(self, attempt: int, response: httpx.Response | None) -> float:
+        """Seconds to wait before retry ``attempt``: Retry-After (capped), else the backoff."""
+        requested = retry_after(response) if response is not None else None
+        if requested is None:
+            return self._settings.backoff_seconds * 2**attempt
+        return min(requested, self._settings.timeout_seconds)
 
     def _parse(
         self, response: httpx.Response, what: str, miss_on_zero_results: bool
