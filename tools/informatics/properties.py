@@ -189,6 +189,7 @@ def _collect_from_comptox(
     weight = comptox.get_molecular_weight(cas)
     found = comptox.get_properties(cas)
     toxicity = comptox.get_toxicity_values(cas)
+    out.warnings.extend(comptox.get_toxicity_notes(cas))
     if weight is None and not found and not toxicity:
         out.warnings.append(_UNRESOLVED.format(cas=cas))
         return

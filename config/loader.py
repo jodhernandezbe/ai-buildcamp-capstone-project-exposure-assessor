@@ -9,6 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, cast
 
+from config.iris import IrisSettings, parse_iris
 from config.parsing import DEFAULT_SETTINGS_PATH as DEFAULT_SETTINGS_PATH
 from config.parsing import names as _names
 from config.parsing import read_toml as _read_toml
@@ -111,6 +112,7 @@ class ComptoxSettings:
         molecular_weight: Where molecular weight is read from and its units.
         properties: Properties to extract, in order.
         toxicity_values: Toxicity values to extract, in order.
+        iris: The CompTox IRIS endpoint read ahead of ToxVal; None leaves it unused.
     """
 
     base_url: str
@@ -129,6 +131,7 @@ class ComptoxSettings:
     molecular_weight: MolecularWeightSpec
     properties: tuple[PropertySpec, ...]
     toxicity_values: tuple[ToxicityValueSpec, ...]
+    iris: IrisSettings | None = None
 
     @property
     def dtxsid_by_cas_url(self) -> str:
@@ -149,6 +152,11 @@ class ComptoxSettings:
     def toxval_by_dtxsid_url(self) -> str:
         """Full URL template containing the ``{dtxsid}`` placeholder."""
         return self.base_url.rstrip("/") + self.toxval_by_dtxsid_path
+
+    @property
+    def iris_by_dtxsid_url(self) -> str | None:
+        """Full IRIS-endpoint URL template with ``{dtxsid}``; None when it is not configured."""
+        return self.base_url.rstrip("/") + self.iris.path if self.iris else None
 
 
 TRI_FIELD_KEYS = (
@@ -308,6 +316,11 @@ def _parse_toxicity_values(section: dict[str, object]) -> tuple[ToxicityValueSpe
     return specs
 
 
+def _parse_iris(section: dict[str, object]) -> IrisSettings | None:
+    keys = tuple(spec.key for spec in _parse_toxicity_values(section))
+    return parse_iris(section, keys)
+
+
 def _require_template(section: dict[str, object], key: str, placeholder: str) -> str:
     template = _require_str(section, key, "comptox")
     if placeholder not in template:
@@ -363,6 +376,7 @@ def load_comptox_settings(path: Path | None = None) -> ComptoxSettings:
         molecular_weight=_parse_molecular_weight(section),
         properties=_parse_properties(section),
         toxicity_values=_parse_toxicity_values(section),
+        iris=_parse_iris(section),
     )
 
 

@@ -18,6 +18,7 @@ from commons.cas import format_cas
 from config.loader import ComptoxSettings, ToxicityValueSpec, get_comptox_settings
 from tools.credentials import COMPTOX_KEY
 from tools.http import RETRYABLE_STATUS, retry_after
+from tools.informatics.helpers.iris_values import disagreement, iris_values
 from tools.schemas import PropertyValue, ToxicityValue
 
 logger = logging.getLogger(__name__)
@@ -243,6 +244,7 @@ class ComptoxLookup:
         self._weights: dict[str, float | None] = {}
         self._properties: dict[str, dict[str, PropertyValue]] = {}
         self._toxicity: dict[str, dict[str, ToxicityValue]] = {}
+        self._notes: dict[str, list[str]] = {}
 
     def get_molecular_weight(self, cas_number: str) -> float | None:
         """Look up the molecular weight CompTox holds for a chemical.
@@ -353,11 +355,26 @@ class ComptoxLookup:
         chemical, cacheable = self._resolve(cas, headers)
         result: dict[str, ToxicityValue] = {}
         if chemical is not None:
-            records, cacheable = self._fetch_toxval(chemical.dtxsid, headers)
-            result = self._extract_toxicity(records) if records is not None else {}
+            result, notes, found = self._toxicity_of(chemical.dtxsid, headers)
+            cacheable = cacheable and found
+            self._notes[cas] = notes
         if cacheable:
             self._toxicity[cas] = result
         return _copy_toxicity(result)
+
+    def get_toxicity_notes(self, cas_number: str) -> list[str]:
+        """Notes on the toxicity values last looked up for a chemical.
+
+        Args:
+            cas_number: CAS registry number, e.g. "71-43-2" (hyphens optional).
+
+        Returns:
+            A note for each IRIS-endpoint text that could not be read exactly and for each
+            endpoint value that differs from ToxVal's copy of IRIS; empty if there is none or
+            the values have not been looked up.
+        """
+        cas = format_cas(cas_number)
+        return list(self._notes.get(cas, [])) if cas is not None else []
 
     def _headers(self) -> dict[str, str]:
         provided = COMPTOX_KEY.get()
@@ -508,6 +525,51 @@ class ComptoxLookup:
         if len(own) != len(entries):
             logger.debug("Ignored %d ToxVal records for another chemical", len(entries) - len(own))
         return own, True
+
+    def _fetch_iris(
+        self, dtxsid: str, headers: Mapping[str, str]
+    ) -> tuple[Mapping[str, object] | None, bool]:
+        template = self._settings.iris_by_dtxsid_url
+        if template is None:
+            return None, True
+        payload, definitive = self._get_json(
+            template.format(dtxsid=quote(dtxsid, safe="")), headers, "IRIS search"
+        )
+        entries = _entries(payload) if payload is not None else None
+        if payload is not None and entries is None:
+            logger.debug("Malformed CompTox IRIS response")
+            return None, False
+        own = [r for r in entries or [] if r.get("dtxsid") in (None, dtxsid)]
+        return (own[0] if own else None), definitive
+
+    def _toxicity_of(
+        self, dtxsid: str, headers: Mapping[str, str]
+    ) -> tuple[dict[str, ToxicityValue], list[str], bool]:
+        """(values, notes, definitive): the IRIS endpoint's chronic values ahead of ToxVal's."""
+        records, toxval_done = self._fetch_toxval(dtxsid, headers)
+        record, iris_done = self._fetch_iris(dtxsid, headers)
+        toxval = self._extract_toxicity(records) if records is not None else {}
+        values, notes = self._with_iris(toxval, records or [], record)
+        return values, notes, toxval_done and iris_done
+
+    def _with_iris(
+        self,
+        toxval: dict[str, ToxicityValue],
+        records: Sequence[Mapping[str, object]],
+        record: Mapping[str, object] | None,
+    ) -> tuple[dict[str, ToxicityValue], list[str]]:
+        iris = self._settings.iris
+        if iris is None or record is None:
+            return toxval, []
+        read, notes = iris_values(record, iris, self._settings.toxicity_values)
+        specs = {spec.key: spec for spec in self._settings.toxicity_values}
+        for key, value in read.items():
+            copy = select_toxicity(records, specs[key], (iris.toxval_source,))
+            if copy is not None and copy["source"] != iris.toxval_source:
+                copy = None
+            note = disagreement(key, value, copy, iris.agreement_tolerance)
+            notes.extend([note] if note else [])
+        return {**toxval, **read}, notes
 
     def _extract(self, summary: Sequence[Mapping[str, object]]) -> dict[str, PropertyValue]:
         by_name: dict[str, Mapping[str, object]] = {}

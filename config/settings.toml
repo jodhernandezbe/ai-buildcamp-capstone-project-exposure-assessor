@@ -87,6 +87,32 @@ routes = ["inhalation"]
 prefer = "highest"
 target_unit = "1/(ug/m^3)"
 
+# CompTox's own IRIS endpoint: fresher than the ToxVal copy of IRIS, so its chronic RfD and RfC
+# rank ahead of every ToxVal source. {dtxsid} is replaced with the DTXSID; the response is a list
+# with one record whose values are free text such as "4 x 10 -3 mg/kg-day" or "5 mg/m3". A text
+# is read only if it is one number followed by one of the field's `units`, spelled exactly so.
+# `key` is a [[comptox.toxicity_values]] key (its route and target unit apply). A value that
+# differs from the ToxVal IRIS record (`toxval_source`) by more than `agreement_tolerance`
+# (relative) is used all the same, with a warning.
+[comptox.iris]
+path = "/hazard/iris/search/by-dtxsid/{dtxsid}"
+source = "EPA IRIS: IRIS (CompTox IRIS endpoint)"
+source_revised = "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision {revision})"
+toxval_source = "EPA IRIS: IRIS"
+effects_field = "criticalEffectsSystems"
+revision_field = "lastSignificantRevision"
+agreement_tolerance = 0.05
+
+[[comptox.iris.fields]]
+key = "rfd"
+field = "rfdChronic"
+units = ["mg/kg-day"]
+
+[[comptox.iris.fields]]
+key = "rfc"
+field = "rfcChronic"
+units = ["mg/m3"]
+
 # EPA Envirofacts (efservice): one place for the service root and how politely it is called.
 # Every query (TRI, FRS) goes through it. Seconds to wait before each request, per-request
 # timeout, and retries on HTTP 429/5xx or timeouts with a wait of backoff_seconds doubling

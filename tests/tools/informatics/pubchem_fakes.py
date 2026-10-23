@@ -40,12 +40,14 @@ class StubComptox(ComptoxLookup):
         properties: Mapping[str, PropertyValue] | None = None,
         toxicity: Mapping[str, ToxicityValue] | None = None,
         name: str | None = None,
+        notes: Sequence[str] = (),
     ) -> None:
         super().__init__()
         self._stub_weight = weight
         self._stub_properties: dict[str, PropertyValue] = dict(properties) if properties else {}
         self._stub_toxicity: dict[str, ToxicityValue] = dict(toxicity) if toxicity else {}
         self._stub_name = name
+        self._stub_notes = list(notes)
 
     def get_molecular_weight(self, cas_number: str) -> float | None:
         return self._stub_weight
@@ -58,3 +60,6 @@ class StubComptox(ComptoxLookup):
 
     def get_toxicity_values(self, cas_number: str) -> dict[str, ToxicityValue]:
         return dict(self._stub_toxicity)
+
+    def get_toxicity_notes(self, cas_number: str) -> list[str]:
+        return list(self._stub_notes)

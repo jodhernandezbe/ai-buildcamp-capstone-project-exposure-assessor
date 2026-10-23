@@ -42,9 +42,12 @@ class Service:
                 return item
         raise AssertionError(f"unscripted {request.url.path}")
 
-    def lookup(self, retries: int = 2, backoff: float = 3.0) -> ComptoxLookup:
+    def lookup(
+        self, retries: int = 2, backoff: float = 3.0, with_iris: bool = False
+    ) -> ComptoxLookup:
         settings = replace(
             get_comptox_settings(),
+            iris=get_comptox_settings().iris if with_iris else None,
             max_retries=retries,
             backoff_seconds=backoff,
             delay_seconds=0.2,
