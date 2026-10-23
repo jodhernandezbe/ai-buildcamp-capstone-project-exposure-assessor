@@ -29,7 +29,7 @@ dist/
 evals/reports/
 
 # Frontend toolchain and build output (the backend serves frontend/dist/)
-frontend/node_modules/
+node_modules/
 frontend/dist/
 
 # Raw downloads: only the compact derived files in data/ are committed
