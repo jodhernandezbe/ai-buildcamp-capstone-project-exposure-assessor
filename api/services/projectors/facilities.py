@@ -173,6 +173,8 @@ def _identity(record: EmissionPayload) -> dict[str, object]:
         "latitude": record.latitude,
         "longitude": record.longitude,
         "doc_ctrl_num": record.doc_ctrl_num,
+        "naics_subsector": record.naics_subsector,
+        "naics_subsector_title": record.naics_subsector_title,
     }
 
 

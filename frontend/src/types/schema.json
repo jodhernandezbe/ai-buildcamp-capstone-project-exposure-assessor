@@ -452,7 +452,7 @@
     },
     "Facility": {
       "additionalProperties": false,
-      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.\n    lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.\n    conditions_note: Why ``conditions_of_use`` is empty; None when it is not.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
+      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    naics_subsector: First three digits of the inventory's NAICS code (e.g. \"325\").\n    naics_subsector_title: That subsector's title from the Census lists; None if unknown.\n    conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.\n    lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.\n    conditions_note: Why ``conditions_of_use`` is empty; None when it is not.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
       "properties": {
         "address": {
           "anyOf": [
@@ -591,6 +591,28 @@
           ],
           "default": null
         },
+        "naics_subsector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "naics_subsector_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "name": {
           "anyOf": [
             {
@@ -715,6 +737,8 @@
         "longitude",
         "cas_number",
         "doc_ctrl_num",
+        "naics_subsector",
+        "naics_subsector_title",
         "medium",
         "reporting_year",
         "total_release",

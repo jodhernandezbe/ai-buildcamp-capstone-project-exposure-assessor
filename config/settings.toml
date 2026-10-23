@@ -538,6 +538,13 @@ placeholder_codes = ["999999"]
 titles_path = "data/naics_titles.csv"
 titles_code_column = "naics_code"
 titles_title_column = "naics_title"
+# Titles of three-digit NAICS subsectors (e.g. 325 Chemical Manufacturing), built from the Census
+# "2-6 digit" code workbooks in data/raw/naics (not committed) with:
+# uv run python -m scripts.build_naics_subsectors
+# Every emission record carries its subsector, which the dashboard groups facilities by.
+subsectors_path = "data/naics_subsectors.csv"
+subsectors_code_column = "naics_subsector"
+subsectors_title_column = "title"
 
 # Batch facility assessment (tools/assessment/): the whole chain (stacks, weather, residents,
 # exposure) for every listed facility in code, so no facility depends on the model repeating

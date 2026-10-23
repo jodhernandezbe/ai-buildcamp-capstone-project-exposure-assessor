@@ -153,6 +153,20 @@ def test_conditions_of_use_are_carried_unchanged() -> None:
     assert facility.conditions_note is None
 
 
+def test_the_subsector_is_carried_unchanged() -> None:
+    facility = build(inventory(record())).facilities[0]
+    assert (facility.naics_subsector, facility.naics_subsector_title) == (
+        "325",
+        "Chemical Manufacturing",
+    )
+
+
+def test_a_record_without_a_subsector_gives_nulls() -> None:
+    bare = {k: v for k, v in record().items() if not k.startswith("naics_subsector")}
+    facility = build(inventory(bare)).facilities[0]
+    assert (facility.naics_subsector, facility.naics_subsector_title) == (None, None)
+
+
 def test_the_note_explains_missing_conditions() -> None:
     note = "TRI reported no activity for this submission"
     facility = build(inventory(record() | {"conditions_note": note})).facilities[0]

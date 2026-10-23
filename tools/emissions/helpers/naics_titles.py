@@ -18,7 +18,7 @@ from tools.schemas import EmissionRecord
 
 
 @lru_cache(maxsize=4)
-def _read(path: Path, code_column: str, title_column: str) -> Mapping[str, str]:
+def read_titles(path: Path, code_column: str, title_column: str) -> Mapping[str, str]:
     """Read the table once. A missing file or column is a setup error and raises."""
     with path.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -41,7 +41,9 @@ def naics_titles(settings: IndustrySettings) -> Mapping[str, str]:
         FileNotFoundError: If the table does not exist.
         ValueError: If it lacks the configured columns.
     """
-    return _read(settings.titles_path, settings.titles_code_column, settings.titles_title_column)
+    return read_titles(
+        settings.titles_path, settings.titles_code_column, settings.titles_title_column
+    )
 
 
 def with_titles(

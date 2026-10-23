@@ -478,14 +478,19 @@ class LatestReports:
         )
 
 
-class _Reported(TypedDict):
+class _Industry(TypedDict):
+    naics_code: str | None
+    naics_title: str | None
+    naics_subsector: str | None
+    naics_subsector_title: str | None
+
+
+class _Reported(_Industry):
     frs_id: str
     facility_name: str | None
     environmental_medium: str
     reporting_year: int
     doc_ctrl_num: str | None
-    naics_code: str | None
-    naics_title: str | None
     eis_ids: list[str]
     eis_note: str | None
     total_release: float
@@ -511,6 +516,16 @@ class _Where(TypedDict):
     zip_code: str | None
 
 
+def _industry(slot: Slot) -> _Industry:
+    """The code; the titles are filled by the tool from the local Census tables."""
+    return {
+        "naics_code": slot.naics_code,
+        "naics_title": None,
+        "naics_subsector": None,
+        "naics_subsector_title": None,
+    }
+
+
 def _reported(
     key: tuple[str, str], slot: Slot, amount: _Amount, rate: float, hours: OperatingHours
 ) -> _Reported:
@@ -521,8 +536,7 @@ def _reported(
         "environmental_medium": medium,
         "reporting_year": slot.year,
         "doc_ctrl_num": slot.doc_ctrl_num,
-        "naics_code": slot.naics_code,
-        "naics_title": None,  # filled by the tool from the local code lists
+        **_industry(slot),
         "eis_ids": [],  # filled by the tool for the listed facilities
         "eis_note": None,
         "total_release": amount.quantity,

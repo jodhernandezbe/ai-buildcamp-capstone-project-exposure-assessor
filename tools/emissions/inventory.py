@@ -30,6 +30,7 @@ from tools.emissions.helpers.inventory.lookup import lookup_emissions
 from tools.emissions.helpers.inventory.plant_hours import PlantHours, get_baseline
 from tools.emissions.helpers.inventory.rate import HoursFor, operating_hours_per_year
 from tools.emissions.helpers.inventory.tri import TriFetcher
+from tools.emissions.helpers.naics_subsectors import subsector_titles, with_subsectors
 from tools.emissions.helpers.naics_titles import naics_titles, with_titles
 from tools.schemas import EmissionRecord, InventoryResult
 
@@ -140,6 +141,9 @@ def query_emissions_inventory(
           - eis_note: null, or why `eis_ids` is empty, or that the IDs are those of another
             FRS record of the same site (TRI's FRS ID had no EIS registration): report that
             with the stacks
+          - naics_subsector, naics_subsector_title: the first three digits of the NAICS code and
+            that subsector's title (e.g. 325, Chemical Manufacturing), null when the code has
+            fewer than three digits; what facilities are grouped by in the dashboard
           - naics_title: that code's title in words, from the Census code lists (null when
             the code is missing or not a six-digit code of a listed vintage); this is what the
             SCC process search needs. Only when it is null is `fetch_facility_industry`
@@ -249,5 +253,7 @@ def with_eis_ids(records: list[EmissionRecord]) -> list[EmissionRecord]:
 
 
 def _titled(records: list[EmissionRecord]) -> list[EmissionRecord]:
-    """The records with each NAICS code's title from the local Census code lists."""
-    return with_titles(records, naics_titles(get_industry_settings()))
+    """The records with each NAICS code's title and subsector from the local Census lists."""
+    settings = get_industry_settings()
+    titled = with_titles(records, naics_titles(settings))
+    return with_subsectors(titled, subsector_titles(settings))

@@ -77,6 +77,8 @@ class EmissionRecord(TypedDict):
         str | None
     )  # primary NAICS code of that submission (2-6 digits); None if TRI has none
     naics_title: str | None  # that code's title in words (Census code lists); None if unknown
+    naics_subsector: str | None  # first three digits of `naics_code`; None if it has fewer
+    naics_subsector_title: str | None  # that subsector's title (Census); None if unknown
     eis_ids: list[str]  # the facility's NEI (EIS) facility IDs; empty when FRS has none
     eis_note: str | None  # why `eis_ids` is empty, or that they were borrowed from an FRS twin
     total_release: float  # annual quantity, in `unit`, exactly as reported

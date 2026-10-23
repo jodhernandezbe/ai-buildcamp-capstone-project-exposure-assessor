@@ -8,7 +8,7 @@ wins, and the row says which vintage it came from. Only the standard library is 
 workbook is a zip of XML sheets whose text cells point into a shared-strings list.
 
 Usage: ``uv run python -m scripts.build_naics_titles [workbook ...] [-o output]``
-Defaults: every ``*.xlsx`` in ``data/raw/naics`` -> ``[industry].titles_path``.
+Defaults: every ``6-digit_*.xlsx`` in ``data/raw/naics`` -> ``[industry].titles_path``.
 """
 
 from __future__ import annotations
@@ -32,13 +32,13 @@ VINTAGE = re.compile(r"(?<!\d)(\d{4})(?!\d)")
 CODE_LENGTH = 6
 
 
-def _shared_strings(book: zipfile.ZipFile) -> list[str]:
+def shared_strings(book: zipfile.ZipFile) -> list[str]:
     """The workbook's shared-strings list, in index order (rich text joined)."""
     root = ElementTree.fromstring(book.read("xl/sharedStrings.xml"))  # noqa: S314  # trusted local file
     return ["".join(t.text or "" for t in si.iter(f"{{{NS['m']}}}t")) for si in root]
 
 
-def _cells(row: ElementTree.Element, strings: list[str]) -> list[str]:
+def row_cells(row: ElementTree.Element, strings: list[str]) -> list[str]:
     """The row's cell texts in column order (a shared string is resolved, a number kept)."""
     out: list[str] = []
     for cell in row.findall("m:c", NS):
@@ -51,10 +51,10 @@ def _cells(row: ElementTree.Element, strings: list[str]) -> list[str]:
 def read_workbook(path: Path) -> Iterator[tuple[str, str]]:
     """Yield (code, title) pairs from the first sheet; rows without both are skipped."""
     with zipfile.ZipFile(path) as book:
-        strings = _shared_strings(book)
+        strings = shared_strings(book)
         sheet = ElementTree.fromstring(book.read("xl/worksheets/sheet1.xml"))  # noqa: S314
     for row in sheet.iter(f"{{{NS['m']}}}row"):
-        cells = _cells(row, strings)
+        cells = row_cells(row, strings)
         if len(cells) < 2:
             continue
         code = digit_string(cells[0])
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("workbooks", nargs="*", type=Path, help="Census six-digit code workbooks")
     parser.add_argument("-o", "--output", type=Path, default=get_industry_settings().titles_path)
     args = parser.parse_args(argv)
-    books = args.workbooks or sorted(RAW_DIR.glob("*.xlsx"))
+    books = args.workbooks or sorted(RAW_DIR.glob("6-digit_*.xlsx"))
     if not books:
         print(f"no workbooks given and none found in {RAW_DIR}", file=sys.stderr)
         return 1

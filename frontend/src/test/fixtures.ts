@@ -19,6 +19,8 @@ export function facility(over: Partial<Facility> = {}): Facility {
     longitude: -20,
     cas_number: "1-1-1",
     doc_ctrl_num: "DOC1",
+    naics_subsector: null,
+    naics_subsector_title: null,
     medium: "AIR STACK",
     reporting_year: 2020,
     total_release: 100,

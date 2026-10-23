@@ -170,6 +170,8 @@ class Facility(ContractModel):
         emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
         operating_hours_source: Where those hours came from (industry survey or default); None
             when the record predates the field.
+        naics_subsector: First three digits of the inventory's NAICS code (e.g. "325").
+        naics_subsector_title: That subsector's title from the Census lists; None if unknown.
         conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
         lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.
         conditions_note: Why ``conditions_of_use`` is empty; None when it is not.
@@ -193,6 +195,8 @@ class Facility(ContractModel):
     longitude: float
     cas_number: str | None = None
     doc_ctrl_num: str | None = None
+    naics_subsector: str | None = None
+    naics_subsector_title: str | None = None
     medium: str
     reporting_year: int
     total_release: float

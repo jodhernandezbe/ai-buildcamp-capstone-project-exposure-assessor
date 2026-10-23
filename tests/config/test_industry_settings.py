@@ -24,6 +24,9 @@ placeholder_codes = ["999999", " 000000 "]
 titles_path = "data/naics_titles.csv"
 titles_code_column = "code"
 titles_title_column = "title"
+subsectors_path = "data/s.csv"
+subsectors_code_column = "sub"
+subsectors_title_column = "name"
 """
 
 
@@ -52,6 +55,8 @@ def test_explicit_values(tmp_path: Path) -> None:
     assert s.placeholder_codes == ("999999", "000000")
     assert s.titles_path.is_absolute() and s.titles_path.parts[-2:] == ("data", "naics_titles.csv")
     assert (s.titles_code_column, s.titles_title_column) == ("code", "title")
+    assert s.subsectors_path.is_absolute() and s.subsectors_path.name == "s.csv"
+    assert (s.subsectors_code_column, s.subsectors_title_column) == ("sub", "name")
 
 
 def test_default_file_loads() -> None:
@@ -66,6 +71,8 @@ def test_default_file_loads() -> None:
     assert (s.reported_value, s.assigned_value) == ("Reported", "ASSIGNED")
     assert s.titles_path.is_file()
     assert (s.titles_code_column, s.titles_title_column) == ("naics_code", "naics_title")
+    assert s.subsectors_path.name == "naics_subsectors.csv"
+    assert (s.subsectors_code_column, s.subsectors_title_column) == ("naics_subsector", "title")
 
 
 def test_no_placeholders_is_allowed(tmp_path: Path) -> None:
@@ -91,6 +98,13 @@ def test_no_placeholders_is_allowed(tmp_path: Path) -> None:
         ('["999999", " 000000 "]', '"999999"', "placeholder_codes"),
         ('titles_path = "data/naics_titles.csv"', 'titles_path = ""', "industry.titles_path"),
         ('titles_code_column = "code"', "", "industry.titles_code_column"),
+        ('subsectors_path = "data/s.csv"', 'subsectors_path = ""', "industry.subsectors_path"),
+        ('subsectors_code_column = "sub"', "", "industry.subsectors_code_column"),
+        (
+            'subsectors_title_column = "name"',
+            'subsectors_title_column = " "',
+            "industry.subsectors_title_column",
+        ),
         (
             'titles_title_column = "title"',
             'titles_title_column = " "',

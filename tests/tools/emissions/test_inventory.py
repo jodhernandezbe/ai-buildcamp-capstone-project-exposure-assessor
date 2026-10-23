@@ -84,6 +84,8 @@ def test_docstring_describes_every_returned_field() -> None:
         "unit",
         "operating_hours_per_year",
         "operating_hours_source",
+        "naics_subsector",
+        "naics_subsector_title",
         "conditions_of_use",
         "lifecycle_stages",
         "conditions_note",
@@ -308,3 +310,11 @@ def test_the_program_gets_each_facilitys_conditions_of_use(
 def test_rows_without_activity_data_are_explained(requests_seen: list[httpx.Request]) -> None:
     record = _all({"cas_number": "50-00-0"})[0]
     assert record["conditions_of_use"] == [] and "did not return" in str(record["conditions_note"])
+
+
+def test_the_program_gets_each_facilitys_subsector(requests_seen: list[httpx.Request]) -> None:
+    for record in _all({"cas_number": "50-00-0"}):
+        code = record["naics_code"]
+        assert record["naics_subsector"] == (code[:3] if code else None)
+        if code and len(code) >= 3:
+            assert record["naics_subsector_title"]  # in the committed table

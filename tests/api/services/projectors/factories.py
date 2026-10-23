@@ -56,6 +56,8 @@ def record(
         "environmental_medium": "AIR STACK",
         "reporting_year": 2020,
         "doc_ctrl_num": f"DOC{frs_id}",
+        "naics_subsector": "325",
+        "naics_subsector_title": "Chemical Manufacturing",
         "total_release": 100.0,
         "unit": "Pounds",
         "emission_rate": rate,

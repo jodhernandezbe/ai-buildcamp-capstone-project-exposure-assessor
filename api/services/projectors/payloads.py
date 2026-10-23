@@ -39,6 +39,8 @@ class EmissionPayload(Payload):
     doc_ctrl_num: str | None = None
     naics_code: str | None = None
     naics_title: str | None = None
+    naics_subsector: str | None = None
+    naics_subsector_title: str | None = None
     eis_ids: list[str] = []
     eis_note: str | None = None
     total_release: Num

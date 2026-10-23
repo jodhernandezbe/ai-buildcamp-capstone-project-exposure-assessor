@@ -16,6 +16,8 @@ def emission_record(
         "doc_ctrl_num": None,
         "naics_code": None,
         "naics_title": None,
+        "naics_subsector": None,
+        "naics_subsector_title": None,
         "eis_ids": [],
         "eis_note": None,
         "total_release": 1.0,

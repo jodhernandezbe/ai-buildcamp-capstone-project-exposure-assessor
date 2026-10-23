@@ -42,7 +42,7 @@ The state SHALL list one facility per FRS ID from the emissions inventory result
 result wins; the complete list the tool returns beside the text the model reads, falling back to the
 facilities in that text), with name, address fields, coordinates, TRI document control number, reported
 release and its unit, emission rate (g/s), assumed operating hours (h/yr), medium, reporting
-year, the TSCA conditions of use and life cycle stages the inventory reported for it (with the
+year, the NAICS subsector code and title the inventory reported for it, the TSCA conditions of use and life cycle stages the inventory reported for it (with the
 note when there are none), and the queried CAS number. It SHALL attach, by matching identifiers only:
 - industry (NAICS code, title, origin) from the industry tool, matched by document control number;
 - stack candidates and their source from the NEI stack tool, matched by FRS ID;
@@ -68,6 +68,10 @@ SHALL be reported as an unattributed result.
 #### Scenario: Older state without conditions
 - **WHEN** a record has no conditions fields
 - **THEN** the facility has empty lists and no note, and the state still builds
+
+#### Scenario: Subsector carried
+- **WHEN** the inventory record has subsector "325" with a title
+- **THEN** the facility shows both unchanged, and a record without them gives nulls
 
 ### Requirement: Stack provenance tier
 Each stack shown SHALL carry a provenance tier derived only from its reported source: Tier 1

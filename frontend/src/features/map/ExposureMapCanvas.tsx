@@ -7,7 +7,6 @@ import "./maplibreWorker";
 import { useEffect, useRef, useState } from "react";
 
 import { DARK_MODE, REDUCED_MOTION, matches, usePrefers } from "../../lib/usePrefers";
-import type { FacilityFocus } from "../../hooks/useWorkspaceStore";
 import type { ClientConfig, WorkspaceState } from "../../types/workspace";
 import { SOURCES, addOverlays, readPalette, setSourceData } from "./layers";
 import { FacilityInspector } from "./FacilityInspector";
@@ -18,7 +17,6 @@ const FIT_PADDING_PX = 64;
 const FIT_MAX_ZOOM = 14;
 const FIT_RESET_MAX_ZOOM = 6;
 // Framing one facility from the results table.
-const FOCUS_MAX_ZOOM = 12;
 const LEGEND_MAX_SHARE = 0.4;
 const FIT_DURATION_MS = 900;
 const BLANK_STYLE: StyleSpecification = { version: 8, sources: {}, layers: [] };
@@ -30,8 +28,6 @@ interface Props {
   digits: number;
   /** Rises when the workspace is replaced as a whole, so the camera reframes anyway. */
   viewEpoch?: number;
-  /** A facility to frame and open the card of (from the results table). */
-  focus?: FacilityFocus | null;
 }
 
 type Box = { west: number; south: number; east: number; north: number };
@@ -86,7 +82,7 @@ const hasSize = (element: HTMLElement | null): boolean =>
   element !== null && element.clientWidth > 0 && element.clientHeight > 0;
 
 /** The basemap with the facility markers, receptor circles and schematic downwind sectors. */
-export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0, focus = null }: Props) {
+export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const ready = useRef(false);
@@ -190,15 +186,6 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0, fo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, viewEpoch]);
 
-  useEffect(() => {
-    const target = focus && workspace.facilities.find((f) => f.frs_id === focus.frsId);
-    if (!target) return;
-    const { longitude: west, latitude: south } = target;
-    fit({ west, south, east: west, north: south }, FOCUS_MAX_ZOOM);
-    // A new focus (nonce) frames its facility; the workspace itself does not re-frame it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
-
   return (
     <div className="relative h-full w-full overflow-hidden rounded-2xl border border-hairline">
       {/* Inline, not a utility class: MapLibre's own stylesheet is unlayered, so its
@@ -215,7 +202,6 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0, fo
           facilities={workspace.facilities}
           scale={{ minPx: config.marker_min_px, maxPx: config.marker_max_px }}
           digits={digits}
-          focus={focus}
         />
       )}
       <button

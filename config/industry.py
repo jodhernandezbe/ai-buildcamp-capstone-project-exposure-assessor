@@ -30,6 +30,10 @@ class IndustrySettings:
             first source of a title; absolute or resolved against the project root.
         titles_code_column: Column of ``titles_path`` holding the code.
         titles_title_column: Column of ``titles_path`` holding the title.
+        subsectors_path: CSV of three-digit subsector codes and their titles; absolute or
+            resolved against the project root.
+        subsectors_code_column: Column of ``subsectors_path`` holding the subsector code.
+        subsectors_title_column: Column of ``subsectors_path`` holding the title.
     """
 
     submission_naics_path: str
@@ -46,6 +50,9 @@ class IndustrySettings:
     titles_path: Path
     titles_code_column: str
     titles_title_column: str
+    subsectors_path: Path
+    subsectors_code_column: str
+    subsectors_title_column: str
 
 
 def _template(table: dict[str, object], key: str, slot: str) -> str:
@@ -67,6 +74,17 @@ def _text(table: dict[str, object], key: str) -> str:
     return require_str(table, key, "industry").strip()
 
 
+def _response_fields(table: dict[str, object]) -> tuple[str, str, str, str, str, str, str, str]:
+    """code_field, primary_field, primary_value, sequence_field, origin_field, reported_value,
+    assigned_value, title_field (the order of ``IndustrySettings``)."""
+    keys = (
+        "code_field", "primary_field", "primary_value", "sequence_field",
+        "origin_field", "reported_value", "assigned_value", "title_field",
+    )  # fmt: skip
+    a, b, c, d, e, f, g, h = (_text(table, key) for key in keys)
+    return a, b, c, d, e, f, g, h
+
+
 def load_industry_settings(path: Path | None = None) -> IndustrySettings:
     """Load and validate the industry settings.
 
@@ -79,20 +97,16 @@ def load_industry_settings(path: Path | None = None) -> IndustrySettings:
     """
     table = section(read_toml(path), "industry")
     return IndustrySettings(
-        submission_naics_path=_template(table, "submission_naics_path", "{doc_ctrl_num}"),
-        title_path=_template(table, "title_path", "{naics_code}"),
-        code_field=_text(table, "code_field"),
-        primary_field=_text(table, "primary_field"),
-        primary_value=_text(table, "primary_value"),
-        sequence_field=_text(table, "sequence_field"),
-        origin_field=_text(table, "origin_field"),
-        reported_value=_text(table, "reported_value"),
-        assigned_value=_text(table, "assigned_value"),
-        title_field=_text(table, "title_field"),
+        _template(table, "submission_naics_path", "{doc_ctrl_num}"),
+        _template(table, "title_path", "{naics_code}"),
+        *_response_fields(table),
         placeholder_codes=_placeholders(table),
         titles_path=project_path(table, "titles_path", "industry"),
         titles_code_column=_text(table, "titles_code_column"),
         titles_title_column=_text(table, "titles_title_column"),
+        subsectors_path=project_path(table, "subsectors_path", "industry"),
+        subsectors_code_column=_text(table, "subsectors_code_column"),
+        subsectors_title_column=_text(table, "subsectors_title_column"),
     )
 
 

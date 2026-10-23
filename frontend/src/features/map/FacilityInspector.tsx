@@ -1,7 +1,6 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useId, useReducer, useRef, useState } from "react";
 
-import type { FacilityFocus } from "../../hooks/useWorkspaceStore";
 import type { Facility } from "../../types/workspace";
 import { FacilityHoverCard } from "./FacilityHoverCard";
 import { type MarkerScale, facilityCollection } from "./mapData";
@@ -44,14 +43,11 @@ export function FacilityInspector({
   facilities,
   scale,
   digits,
-  focus = null,
 }: {
   map: MapLibreMap;
   facilities: Facility[];
   scale: MarkerScale;
   digits: number;
-  /** A facility to pin (from the results table); a new nonce pins it again. */
-  focus?: FacilityFocus | null;
 }) {
   const overlay = useRef<HTMLDivElement>(null);
   const cardId = useId();
@@ -100,19 +96,6 @@ export function FacilityInspector({
     );
   const close = (frsId: string) =>
     setActive((now) => (now?.frsId === frsId && !now.pinned ? null : now));
-
-  useEffect(() => {
-    const target = focus && facilities.find((f) => f.frs_id === focus.frsId);
-    if (!target) return;
-    // On the next frame, after the camera has started moving toward the facility.
-    const frame = requestAnimationFrame(() => {
-      const { x, y } = map.project([target.longitude, target.latitude]);
-      setActive(placed(target, x, y, true));
-    });
-    return () => cancelAnimationFrame(frame);
-    // Only a new focus (nonce) pins; `placed` reads the overlay's box at that moment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
 
   return (
     <div ref={overlay} className="pointer-events-none absolute inset-0 z-10 overflow-hidden">

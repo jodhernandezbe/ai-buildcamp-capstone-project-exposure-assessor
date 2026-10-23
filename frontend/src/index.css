@@ -11,6 +11,7 @@
   --hairline: rgba(0, 0, 0, 0.08);
   --accent: #0066cc;
   --accent-fg: #ffffff;
+  --series-cancer: #8944ab;
   --ok: #1b7a34;
   --warn: #a35200;
   --bad: #c4001a;
@@ -30,6 +31,7 @@
     --hairline: rgba(255, 255, 255, 0.1);
     --accent: #2997ff;
     --accent-fg: #000000;
+    --series-cancer: #bf5af2;
     --ok: #32d74b;
     --warn: #ff9f0a;
     --bad: #ff6961;
@@ -46,6 +48,7 @@
   --color-hairline: var(--hairline);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
+  --color-series-cancer: var(--series-cancer);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-bad: var(--bad);

@@ -74,7 +74,7 @@ The system SHALL keep only rows whose environmental medium is in the configured 
 - **THEN** its records are returned with no code change
 
 ### Requirement: Returned facility record
-Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, the TRI submission control number (`doc_ctrl_num`, null if TRI gave none), the primary NAICS code of that submission (`naics_code`, 2 to 6 digits, null if TRI gave none or an implausible value), that code's title in words (`naics_title`, from the local Census code lists; null when the code is missing or not listed), `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, the source of those hours (`operating_hours_source`), the TSCA conditions of use of the facility's reported activities (`conditions_of_use`), their distinct life cycle stages (`lifecycle_stages`) and a note saying why they are empty when they are (`conditions_note`), latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
+Each returned record SHALL contain the facility FRS ID, facility name, environmental medium, reporting year, the TRI submission control number (`doc_ctrl_num`, null if TRI gave none), the primary NAICS code of that submission (`naics_code`, 2 to 6 digits, null if TRI gave none or an implausible value), that code's title in words (`naics_title`, from the local Census code lists; null when the code is missing or not listed), its 3-digit subsector and that subsector's title (`naics_subsector`, `naics_subsector_title`, per the naics-subsectors capability), `total_release` as a finite non-negative number, the unit exactly as reported by TRI, the emission rate in g/s, the operating hours per year used to compute it, the source of those hours (`operating_hours_source`), the TSCA conditions of use of the facility's reported activities (`conditions_of_use`), their distinct life cycle stages (`lifecycle_stages`) and a note saying why they are empty when they are (`conditions_note`), latitude and longitude in decimal degrees, and street address, city, county, state and ZIP code. `total_release` and its unit SHALL be the reported values, unconverted.
 
 #### Scenario: Complete record
 - **WHEN** a facility record is returned
@@ -99,6 +99,10 @@ Each returned record SHALL contain the facility FRS ID, facility name, environme
 #### Scenario: Conditions carried
 - **WHEN** the facility's latest submission reports Section 3.2a
 - **THEN** the record's `conditions_of_use` has the Processing, "Processing as a reactant" condition and `lifecycle_stages` is ["Processing"]
+
+#### Scenario: Subsector carried
+- **WHEN** the record's NAICS code is 325211
+- **THEN** `naics_subsector` is "325" and `naics_subsector_title` is its title from the local table
 
 ### Requirement: Emission rate from annual release
 The system SHALL convert each annual release to an emission rate in g/s by converting the quantity to grams with the shared unit conversion and dividing by the operating seconds per year. The operating hours per year SHALL be those of the facility's industry from the Census plant-hours baseline, matched on the facility's NAICS code (most specific prefix first), and otherwise the configured default (default 8,760, continuous operation); the choice SHALL be made through a single dedicated function, and the hours and their source SHALL be reported on each record. A row whose unit cannot be converted to grams SHALL be discarded with a counted warning, never passed through unconverted.

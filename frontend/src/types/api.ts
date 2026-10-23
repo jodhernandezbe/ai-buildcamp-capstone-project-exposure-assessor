@@ -332,6 +332,8 @@ export interface ReadAcross {
  *     emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
  *     operating_hours_source: Where those hours came from (industry survey or default); None
  *         when the record predates the field.
+ *     naics_subsector: First three digits of the inventory's NAICS code (e.g. "325").
+ *     naics_subsector_title: That subsector's title from the Census lists; None if unknown.
  *     conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
  *     lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.
  *     conditions_note: Why ``conditions_of_use`` is empty; None when it is not.
@@ -364,6 +366,8 @@ export interface Facility {
   longitude: number;
   medium: string;
   meteorology: Meteorology | null;
+  naics_subsector: string | null;
+  naics_subsector_title: string | null;
   name: string | null;
   operating_hours_per_year: number;
   operating_hours_source: string | null;
