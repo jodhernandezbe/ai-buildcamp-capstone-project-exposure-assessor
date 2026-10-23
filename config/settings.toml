@@ -673,6 +673,62 @@ inactive_field = "inactive_date"
 active_value = "9999"
 keep_delisted = false
 
+# PubChem (PUG REST and PUG View; no API key). It is the fallback for the result fields below
+# when CompTox left them empty, so a field is added here, not in code. PubChem asks for at most
+# 5 requests a second (https://pubchem.ncbi.nlm.nih.gov/docs/dynamic-request-throttling):
+# `delay_seconds` must be at least 0.2. Templates take `{smiles}`, `{name}` (a CAS number is
+# searched as a name) or `{cid}`; the values are URL-encoded.
+[pubchem]
+cid_by_smiles_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/cids/JSON"
+cid_by_name_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{name}/cids/JSON"
+pug_view_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON"
+user_agent = "exposure-assessor/0.1 (screening-level exposure assessment agent)"
+delay_seconds = 0.25
+timeout_seconds = 30.0
+max_retries = 2
+backoff_seconds = 2.0
+# Where a record lists its own CAS numbers; a name search is trusted only if the requested
+# CAS number is among them.
+cas_heading = ["Names and Identifiers", "Other Identifiers", "CAS"]
+# Several clear statements for one field are used (their median) only if the largest is at
+# most this many times the smallest; otherwise the field stays empty.
+agreement_ratio = 2.0
+
+# Answers are cached on disk (SQLite) so repeated runs do not ask PubChem again; a path under
+# .cache/ is git-ignored. Successful answers and "not found" are kept, failures never.
+[pubchem.cache]
+enabled = true
+path = ".cache/pubchem/responses.sqlite"
+ttl_days = 30
+
+# Result fields PubChem is asked for. `key` is the field of the tool result (it must be one
+# CompTox also fills, and `target_unit` must match CompTox's); `heading` is the path of PUG
+# View headings holding the statements; a statement that names a temperature is used only
+# inside [min_celsius, max_celsius]; one without a temperature only if
+# `allow_missing_temperature`. The toxicity values (rfd, rfc, sf, iur) are not listed: PubChem
+# has no structured value for them. Add a [[pubchem.fields]] table to ask for another field.
+[[pubchem.fields]]
+key = "molecular_weight"
+heading = ["Chemical and Physical Properties", "Computed Properties", "Molecular Weight"]
+target_unit = "g/mol"
+allow_missing_temperature = true
+
+[[pubchem.fields]]
+key = "vapor_pressure"
+heading = ["Chemical and Physical Properties", "Experimental Properties", "Vapor Pressure"]
+target_unit = "mmHg"
+min_celsius = 20.0
+max_celsius = 25.0
+allow_missing_temperature = false
+
+[[pubchem.fields]]
+key = "density"
+heading = ["Chemical and Physical Properties", "Experimental Properties", "Density"]
+target_unit = "g/cm^3"
+min_celsius = 15.0
+max_celsius = 25.0
+allow_missing_temperature = true
+
 # Source unit spellings that Pint cannot parse, mapped to ones it can. Applied to reported
 # units and to target units before conversion; add a line when a new spelling shows up.
 [units.aliases]
@@ -684,6 +740,10 @@ keep_delisted = false
 "(mg/m3)-1" = "1/(mg/m^3)"
 "(mg/L)-1" = "1/(mg/L)"
 "Pounds" = "pound"
+# PubChem spellings.
+"mm Hg" = "mmHg"
+"g/cu cm" = "g/cm^3"
+"kg/cu m" = "kg/m^3"
 
 # The chat model that drives the agent, used by the program (`uv run python -m app`) and by the
 # evaluations alike, so both always run the same model. `provider` selects the factory in

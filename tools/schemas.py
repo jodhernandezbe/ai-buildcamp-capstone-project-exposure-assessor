@@ -19,7 +19,8 @@ class ChemicalProperties(TypedDict):
     rfc: float | None  # inhalation reference concentration, mg/m^3
     sf: float | None  # oral cancer slope factor, (mg/(kg*day))^-1
     iur: float | None  # inhalation unit risk, (ug/m^3)^-1
-    sources: dict[str, str]  # field -> "CompTox", "experimental", "predicted" or ToxVal source
+    # field -> "CompTox", "experimental", "predicted", a ToxVal source, or "PubChem" (fallback)
+    sources: dict[str, str]
     toxicity_details: dict[str, ToxicityDetail]  # rfd/rfc/sf/iur found -> route and endpoint
     warnings: list[str]  # one entry per missing or unconvertible value
 

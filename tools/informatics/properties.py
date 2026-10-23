@@ -17,16 +17,22 @@ from config.loader import (
     get_comptox_settings,
     get_unit_settings,
 )
+from config.pubchem import get_pubchem_settings
 from tools.informatics.helpers.comptox import ComptoxLookup
+from tools.informatics.helpers.pubchem import PubchemFallback, PubchemLookup, build_client
+from tools.informatics.helpers.pubchem.extract import FieldValue
 from tools.schemas import ChemicalProperties, PropertyValue, ToxicityDetail, ToxicityValue
 
 # Output fields filled from CompTox; keys must match the configured result keys.
 _PROPERTY_FIELDS = ("vapor_pressure", "density")
 _TOXICITY_FIELDS = ("rfd", "rfc", "sf", "iur")
+# The only fields PubChem may fill: never the name or a toxicity benchmark, whatever it is asked.
+_PUBCHEM_FIELDS = ("molecular_weight", *_PROPERTY_FIELDS)
 _NO_COMPTOX_DATA = "no CompTox data retrieved (not found or service unavailable)"
 _UNRESOLVED = (
     "CAS number {cas!r} could not be resolved in CompTox (not found or service unavailable)"
 )
+_PUBCHEM = "PubChem"
 _NO_NAME = "preferred_name: CompTox gave no name; refer to the chemical by its CAS number"
 
 
@@ -172,44 +178,89 @@ def _add_comptox_values(
         _add_toxicity(out, field, toxicity.get(field), specs.get(field), aliases)
 
 
+def _collect_from_comptox(
+    out: _Collected,
+    cas: str,
+    comptox: ComptoxLookup,
+    settings: ComptoxSettings,
+    aliases: dict[str, str],
+) -> None:
+    """Fill ``out`` from CompTox (the primary source) for a valid CAS number."""
+    weight = comptox.get_molecular_weight(cas)
+    found = comptox.get_properties(cas)
+    toxicity = comptox.get_toxicity_values(cas)
+    if weight is None and not found and not toxicity:
+        out.warnings.append(_UNRESOLVED.format(cas=cas))
+        return
+    out.add_name(comptox.get_preferred_name(cas))
+    _add_molecular_weight(out, weight, settings.molecular_weight, aliases)
+    _add_comptox_values(out, found, toxicity, settings, aliases)
+
+
+def _fill_from_pubchem(
+    out: _Collected, key: str, candidate: FieldValue, aliases: dict[str, str]
+) -> None:
+    """Add one PubChem value through the same checks as a CompTox value."""
+    reported = (candidate.value, candidate.unit, _PUBCHEM)
+    if _add_one(out, key, reported, candidate.unit, aliases):
+        count = f"median of {candidate.count} statements" if candidate.count > 1 else "1 statement"
+        out.warnings.append(f"{key}: CompTox had no value; taken from PubChem ({count})")
+
+
+def _complete_from_pubchem(
+    out: _Collected, cas: str, pubchem: PubchemFallback, aliases: dict[str, str]
+) -> None:
+    """Ask PubChem for the configured fields still None; never replaces a value."""
+    wanted = [key for key in pubchem.fields if key in _PUBCHEM_FIELDS]
+    missing = [key for key in wanted if out.values.get(key) is None]
+    if not missing:
+        return
+    offered = pubchem.candidates(cas, missing)
+    if offered.problem:
+        out.warnings.append(f"PubChem could not help: {offered.problem}")
+    for key in missing:
+        if key in offered.values:
+            _fill_from_pubchem(out, key, offered.values[key], aliases)
+        elif key in offered.reasons:
+            out.warnings.append(f"{key}: PubChem could not help: {offered.reasons[key]}")
+
+
 def lookup_chemical_properties(
     cas_number: str,
     comptox: ComptoxLookup,
     settings: ComptoxSettings,
     aliases: dict[str, str],
+    pubchem: PubchemFallback | None = None,
 ) -> ChemicalProperties:
     """Collect a chemical's properties from CompTox in the configured target units.
 
     Every value is checked before it is returned: it must convert to the target unit and be
-    a finite number greater than zero; otherwise the field is None with a warning.
+    a finite number greater than zero; otherwise the field is None with a warning. Fields in
+    the PubChem configuration that CompTox left None are then asked of PubChem (when
+    ``pubchem`` is given) and pass the same checks; a CompTox value is never replaced.
 
     Args:
         cas_number: CAS registry number, e.g. "71-43-2".
         comptox: CompTox molecular weight, property and toxicity lookup.
         settings: CompTox settings; supplies each field's target unit.
         aliases: Unit-spelling aliases passed to the converter.
+        pubchem: Fallback for the fields CompTox left empty; None means no fallback.
 
     Returns:
         Every field of ``ChemicalProperties``; None where unavailable, with a warning.
 
     Raises:
         RuntimeError: If the CAS number is valid and the CompTox API key environment
-            variable is not set.
+            variable is not set (raised before any PubChem request).
     """
     out = _Collected.empty()
     cas = format_cas(cas_number)
     if cas is None:
         out.warnings.append(f"CAS number {cas_number!r} is not valid and could not be resolved")
         return out.to_properties()
-    weight = comptox.get_molecular_weight(cas)
-    found = comptox.get_properties(cas)
-    toxicity = comptox.get_toxicity_values(cas)
-    if weight is None and not found and not toxicity:
-        out.warnings.append(_UNRESOLVED.format(cas=cas))
-        return out.to_properties()
-    out.add_name(comptox.get_preferred_name(cas))
-    _add_molecular_weight(out, weight, settings.molecular_weight, aliases)
-    _add_comptox_values(out, found, toxicity, settings, aliases)
+    _collect_from_comptox(out, cas, comptox, settings, aliases)
+    if pubchem is not None:
+        _complete_from_pubchem(out, cas, pubchem, aliases)
     return out.to_properties()
 
 
@@ -218,15 +269,19 @@ class _Services:
     comptox: ComptoxLookup
     settings: ComptoxSettings
     aliases: dict[str, str]
+    pubchem: PubchemFallback | None = None
 
 
 @lru_cache(maxsize=1)
 def _services() -> _Services:
     """Build the default collaborators once so the HTTP client and caches are shared."""
+    aliases = get_unit_settings().aliases
+    pubchem_settings = get_pubchem_settings()
     return _Services(
         comptox=ComptoxLookup(),
         settings=get_comptox_settings(),
-        aliases=get_unit_settings().aliases,
+        aliases=aliases,
+        pubchem=PubchemLookup(build_client(pubchem_settings), pubchem_settings, aliases),
     )
 
 
@@ -288,4 +343,5 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
         services.comptox,
         services.settings,
         services.aliases,
+        services.pubchem,
     )

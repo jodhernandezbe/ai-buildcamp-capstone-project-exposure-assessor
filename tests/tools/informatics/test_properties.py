@@ -13,8 +13,10 @@ from config.loader import (
     get_comptox_settings,
     get_unit_settings,
 )
+from tests.tools.informatics.pubchem_fakes import FakePubchem
 from tools.informatics import properties
 from tools.informatics.helpers.comptox import ComptoxLookup
+from tools.informatics.helpers.pubchem import PubchemFallback
 from tools.informatics.properties import fetch_chemical_properties, lookup_chemical_properties
 from tools.schemas import ChemicalProperties
 
@@ -355,6 +357,7 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
         comptox=ComptoxLookup(),
         settings=get_comptox_settings(),
         aliases={},
+        pubchem=FakePubchem(),
     )
     expected: ChemicalProperties = {
         "preferred_name": None,
@@ -372,12 +375,17 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
     seen: list[str] = []
 
     def fake_lookup(
-        cas: str, comptox: ComptoxLookup, settings: ComptoxSettings, aliases: dict[str, str]
+        cas: str,
+        comptox: ComptoxLookup,
+        settings: ComptoxSettings,
+        aliases: dict[str, str],
+        pubchem: PubchemFallback | None,
     ) -> ChemicalProperties:
-        assert (comptox, settings, aliases) == (
+        assert (comptox, settings, aliases, pubchem) == (
             services.comptox,
             services.settings,
             services.aliases,
+            services.pubchem,
         )
         seen.append(cas)
         return expected
