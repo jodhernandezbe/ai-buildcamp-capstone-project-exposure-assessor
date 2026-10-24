@@ -16,6 +16,7 @@ export type StreamEventSchema =
   | AssistantMessage
   | Usage
   | ErrorEvent
+  | ConfirmationRequested
   | TurnFinished;
 
 export interface ApiContract {
@@ -30,14 +31,41 @@ export interface ApiContract {
   WorkspaceState: WorkspaceState;
 }
 /**
- * Body of ``POST /api/v1/chat/stream``.
+ * Body of ``POST /api/v1/chat/stream``: a message, or answers to an open request.
  *
  * This interface was referenced by `ApiContract`'s JSON-Schema
  * via the `definition` "ChatRequest".
  */
 export interface ChatRequest {
-  message: string;
+  answers?: ConfirmationAnswers | null;
+  message?: string;
   thread_id: string;
+}
+/**
+ * Answers to an open confirmation request: every entry, each answered once.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ConfirmationAnswers".
+ */
+export interface ConfirmationAnswers {
+  /**
+   * @minItems 1
+   * @maxItems 50
+   */
+  entries: [EntryAnswer, ...EntryAnswer[]];
+  request_id: string;
+}
+/**
+ * The user's answer to one missing value: a number in one of its units, or a decline.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "EntryAnswer".
+ */
+export interface EntryAnswer {
+  decision: "supply" | "decline";
+  entry_id: string;
+  number?: number | null;
+  unit?: string | null;
 }
 /**
  * Display settings the frontend needs (``GET /api/v1/settings/client``).
@@ -687,6 +715,36 @@ export interface ErrorEvent {
   type: "error";
 }
 /**
+ * The turn stopped to ask the user for missing values; the request stays open.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ConfirmationRequested".
+ */
+export interface ConfirmationRequested {
+  entries: MissingValue[];
+  request_id: string;
+  /**
+   * Position of the event in its stream, from 0.
+   */
+  seq: number;
+  type: "confirmation_request";
+}
+/**
+ * One value the assessment needs and could not find, as the user is asked for it.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "MissingValue".
+ */
+export interface MissingValue {
+  accepted_units: string[];
+  entry_id: string;
+  maximum: number;
+  minimum: number;
+  purpose: string;
+  quantity: string;
+  subject: string;
+}
+/**
  * This interface was referenced by `ApiContract`'s JSON-Schema
  * via the `definition` "TurnFinished".
  */
@@ -704,10 +762,21 @@ export interface TurnFinished {
  * via the `definition` "ThreadSnapshot".
  */
 export interface ThreadSnapshot {
+  confirmation: ConfirmationPrompt | null;
   messages: ThreadMessage[];
   thread_id: string;
   usage: UsageTotals;
   workspace: WorkspaceState;
+}
+/**
+ * An open request for missing values: what the user is asked, not yet answered.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ConfirmationPrompt".
+ */
+export interface ConfirmationPrompt {
+  entries: MissingValue[];
+  request_id: string;
 }
 /**
  * One user or assistant message of a thread (text only, no tool calls or results).

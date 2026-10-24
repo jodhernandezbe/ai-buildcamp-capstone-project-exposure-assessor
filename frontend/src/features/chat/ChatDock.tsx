@@ -1,6 +1,8 @@
 import { TopHeaderBar, type AssistantStatus } from "../../components/layout/TopHeaderBar";
 import type { ChatMessage, UsageView } from "../../hooks/chatState";
+import type { ConfirmationAnswers, ConfirmationPrompt } from "../../types/workspace";
 import { ChatComposer } from "./ChatComposer";
+import { ConfirmationCard } from "./ConfirmationCard";
 import { MessageStream } from "./MessageStream";
 import { UsageMeter } from "./UsageMeter";
 
@@ -13,7 +15,10 @@ interface ChatDockProps {
   usage: UsageView | null;
   /** A message about switching runs (for example, that one is no longer available). */
   notice?: string | null | undefined;
+  /** The open request for missing values, if the turn stopped for one. */
+  confirmation?: ConfirmationPrompt | null | undefined;
   onSend: (text: string) => void;
+  onAnswer?: ((answers: ConfirmationAnswers, summary: string) => void) | undefined;
   onOpenSettings: () => void;
   onCollapse: () => void;
 }
@@ -33,7 +38,9 @@ export function ChatDock({
   suggestions,
   usage,
   notice,
+  confirmation,
   onSend,
+  onAnswer,
   onOpenSettings,
   onCollapse,
 }: ChatDockProps) {
@@ -53,6 +60,9 @@ export function ChatDock({
         canSend={hasKey && !busy}
         onSend={onSend}
       />
+      {confirmation && onAnswer ? (
+        <ConfirmationCard prompt={confirmation} busy={busy} onConfirm={onAnswer} />
+      ) : null}
       {notice ? (
         <p role="status" className="px-5 pb-1 text-center text-xs text-fg2">
           {notice}

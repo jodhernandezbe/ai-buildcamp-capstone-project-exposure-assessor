@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import type { WorkspaceState } from "../types/workspace";
+import type {
+  ChatRequest,
+  ConfirmationAnswers,
+  ConfirmationPrompt,
+  WorkspaceState,
+} from "../types/workspace";
 
 import { ApiError, getThread, streamChat } from "../services/apiClient";
 import { chatReducer, initialChatState } from "./chatState";
 
 const newId = (): string => crypto.randomUUID();
 const NOT_FOUND = 404;
+const UNPROCESSABLE = 422;
 
 function describe(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -44,22 +50,44 @@ export function useAgentStream(listeners: StreamListeners = {}) {
     empty.current = state.messages.length === 0;
   });
 
-  const send = useCallback(async (text: string) => {
-    const abort = new AbortController();
-    const thread = current.current;
-    setNotice(null);
-    dispatch({ type: "user_sent", id: newId(), assistantId: newId(), text });
-    heard.current.onSent?.(thread, text);
-    try {
-      for await (const event of streamChat({ thread_id: thread, message: text }, abort.signal)) {
-        dispatch({ type: "event", event });
-        if (event.type === "workspace_update") heard.current.onWorkspace?.(event.state);
+  /** Stream one turn: a message, or the user's answers to the open request. */
+  const turn = useCallback(
+    async (body: ChatRequest, shown: string, reopen: ConfirmationPrompt | null) => {
+      const abort = new AbortController();
+      const thread = current.current;
+      setNotice(null);
+      dispatch({ type: "user_sent", id: newId(), assistantId: newId(), text: shown });
+      heard.current.onSent?.(thread, shown);
+      try {
+        for await (const event of streamChat(body, abort.signal)) {
+          dispatch({ type: "event", event });
+          if (event.type === "workspace_update") heard.current.onWorkspace?.(event.state);
+        }
+        dispatch({ type: "closed" });
+      } catch (error) {
+        // A value the server refuses leaves the request open: show it again to correct.
+        if (reopen && error instanceof ApiError && error.status === UNPROCESSABLE) {
+          dispatch({ type: "rejected", prompt: reopen });
+          setNotice(describe(error));
+          return;
+        }
+        dispatch({ type: "failed", message: describe(error) });
       }
-      dispatch({ type: "closed" });
-    } catch (error) {
-      dispatch({ type: "failed", message: describe(error) });
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const send = useCallback(
+    (text: string) => turn({ thread_id: current.current, message: text }, text, null),
+    [turn],
+  );
+
+  /** Send the user's answers to the open request; a rejected reply leaves the request open. */
+  const answer = useCallback(
+    (answers: ConfirmationAnswers, shown: string, prompt: ConfirmationPrompt) =>
+      turn({ thread_id: current.current, answers }, shown, prompt),
+    [turn],
+  );
 
   /**
    * Start an empty run; the previous run stays on the server for the rail to list. A run that
@@ -97,5 +125,5 @@ export function useAgentStream(listeners: StreamListeners = {}) {
     }
   }, []);
 
-  return { ...state, threadId, notice, send, newRun, selectRun };
+  return { ...state, threadId, notice, send, answer, newRun, selectRun };
 }

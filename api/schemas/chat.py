@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, RootModel
+from pydantic import Field, RootModel, StrictFloat, StrictInt, model_validator
 
 from api.schemas.base import ContractModel
 from api.schemas.workspace import WorkspaceState
@@ -12,11 +12,36 @@ from api.schemas.workspace import WorkspaceState
 ThreadId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
 
 
+class EntryAnswer(ContractModel):
+    """The user's answer to one missing value: a number in one of its units, or a decline."""
+
+    entry_id: str = Field(min_length=1, max_length=200)
+    decision: Literal["supply", "decline"]
+    number: StrictFloat | StrictInt | None = None
+    unit: str | None = Field(default=None, max_length=40)
+
+
+class ConfirmationAnswers(ContractModel):
+    """Answers to an open confirmation request: every entry, each answered once."""
+
+    request_id: str = Field(min_length=1, max_length=64)
+    entries: list[EntryAnswer] = Field(min_length=1, max_length=50)
+
+
 class ChatRequest(ContractModel):
-    """Body of ``POST /api/v1/chat/stream``."""
+    """Body of ``POST /api/v1/chat/stream``: a message, or answers to an open request."""
 
     thread_id: ThreadId
-    message: str = Field(min_length=1, max_length=8000)
+    message: str = Field(default="", max_length=8000)
+    answers: ConfirmationAnswers | None = None
+
+    @model_validator(mode="after")
+    def _message_or_answers(self) -> ChatRequest:
+        if self.answers is None and not self.message.strip():
+            raise ValueError("a message or answers to the open request are required")
+        if self.answers is not None and self.message.strip():
+            raise ValueError("a turn carries either a message or answers, not both")
+        return self
 
 
 class _Event(ContractModel):
@@ -98,6 +123,7 @@ class ThreadSnapshot(ContractModel):
     messages: list[ThreadMessage]
     workspace: WorkspaceState
     usage: UsageTotals
+    confirmation: ConfirmationPrompt | None = None  # the open request, if any
 
 
 class Usage(_Event):
@@ -118,6 +144,33 @@ class TurnFinished(_Event):
     type: Literal["turn_finished"] = "turn_finished"
 
 
+class MissingValue(ContractModel):
+    """One value the assessment needs and could not find, as the user is asked for it."""
+
+    entry_id: str
+    quantity: str
+    subject: str
+    accepted_units: list[str]  # the first is the target unit the analysis uses
+    minimum: float  # plausible range in the target unit, inclusive
+    maximum: float
+    purpose: str
+
+
+class ConfirmationPrompt(ContractModel):
+    """An open request for missing values: what the user is asked, not yet answered."""
+
+    request_id: str
+    entries: list[MissingValue]
+
+
+class ConfirmationRequested(_Event):
+    """The turn stopped to ask the user for missing values; the request stays open."""
+
+    type: Literal["confirmation_request"] = "confirmation_request"
+    request_id: str
+    entries: list[MissingValue]
+
+
 StreamEvent = Annotated[
     TurnStarted
     | ScopeDecision
@@ -128,6 +181,7 @@ StreamEvent = Annotated[
     | AssistantMessage
     | Usage
     | ErrorEvent
+    | ConfirmationRequested
     | TurnFinished,
     Field(discriminator="type"),
 ]

@@ -27,7 +27,7 @@ def test_build_agent_with_injected_model() -> None:
 def test_default_graph_has_no_checkpointer_and_the_same_nodes() -> None:
     agent = build_agent(FakeToolModel(messages=iter([])))
     assert agent.checkpointer is None
-    assert set(agent.get_graph().nodes) == {"__start__", "model", "tools", "__end__"}
+    assert set(agent.get_graph().nodes) == {"__start__", "model", "tools", "ask", "__end__"}
 
 
 def test_checkpointer_keeps_the_thread_history() -> None:

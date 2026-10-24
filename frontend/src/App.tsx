@@ -65,7 +65,11 @@ export function App() {
             suggestions={config?.suggestions}
             usage={chat.usage}
             notice={chat.notice}
+            confirmation={chat.confirmation}
             onSend={(text) => void chat.send(text)}
+            onAnswer={(answers, summary) => {
+              if (chat.confirmation) void chat.answer(answers, summary, chat.confirmation);
+            }}
             onOpenSettings={() => setSettingsOpen(true)}
             onCollapse={collapse}
           />

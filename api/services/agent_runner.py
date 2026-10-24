@@ -29,6 +29,7 @@ from pydantic import SecretStr
 from agent.completion import CompletionGuard
 from agent.graph import build_agent
 from agent.guardrails import REDIRECT_NAME, ScopeGuard
+from agent.missing import ask_text
 from agent.state import AgentState
 from api.core.exceptions import GENERIC_ERROR, new_correlation_id
 from api.core.logging_filter import protect_secrets
@@ -46,6 +47,7 @@ from api.schemas.chat import (
     Usage,
     WorkspaceUpdate,
 )
+from api.services.confirmation import TurnPlan, request_event
 from api.services.projectors.rules import WorkspaceRules
 from api.services.provider_errors import explain
 from api.services.state_serializer import build_workspace
@@ -54,6 +56,7 @@ from api.services.usage_meter import UsageRecorder, summarize
 from app.key_vault import KeychainUnavailableError, ServiceKeys, stored_key
 from config.ui import ModelPrice
 from tools.credentials import HOLDERS
+from tools.schemas import ConfirmationRequest
 
 logger = logging.getLogger("api.agent_runner")
 ModelFactory = Callable[[SecretStr], BaseChatModel]
@@ -251,6 +254,41 @@ def _build(model: BaseChatModel, threads: ThreadStore, runtime: AgentRuntime) ->
     )
 
 
+def _run_config(
+    request: ChatRequest, threads: ThreadStore, runtime: AgentRuntime, recorder: UsageRecorder
+) -> RunnableConfig:
+    """The run configuration: the thread, its answers for the tools, and the recorder."""
+    supplied, declined = threads.answers(request.thread_id)
+    return {
+        "recursion_limit": runtime.recursion_limit,
+        "configurable": {
+            "thread_id": request.thread_id,
+            "user_values": {"supplied": supplied, "declined": sorted(declined)},
+        },
+        "callbacks": [recorder],
+    }
+
+
+def _confirmation_events(
+    payload: object, request: ChatRequest, threads: ThreadStore, seq: EventSequence
+) -> list[StreamEvent]:
+    """The question and the open request when the turn stopped to ask for missing values."""
+    update = cast(Mapping[str, object], payload)
+    ask = update.get("ask")
+    if not isinstance(ask, dict):
+        return []
+    pending = cast(Mapping[str, object], ask).get("pending")
+    if not isinstance(pending, dict):
+        return []
+    request_data = cast(ConfirmationRequest, pending)
+    threads.set_pending(request.thread_id, request_data)
+    question = ask_text(request_data)
+    return [
+        AssistantMessage(seq=seq.next(), text=question),
+        request_event(seq.next(), request_data),
+    ]
+
+
 async def _agent_events(
     request: ChatRequest,
     model: BaseChatModel,
@@ -258,19 +296,21 @@ async def _agent_events(
     runtime: AgentRuntime,
     seq: EventSequence,
     recorder: UsageRecorder,
+    plan: TurnPlan,
 ) -> AsyncGenerator[StreamEvent]:
     agent = _build(model, threads, runtime)
-    config: RunnableConfig = {
-        "recursion_limit": runtime.recursion_limit,
-        "configurable": {"thread_id": request.thread_id},
-        "callbacks": [recorder],
+    config = _run_config(request, threads, runtime, recorder)
+    inputs: AgentState = {
+        "messages": [HumanMessage(content=plan.message)],
+        "answers_note": plan.note,
     }
-    inputs: AgentState = {"messages": [HumanMessage(content=request.message)]}
     async for mode, payload in agent.astream(inputs, config, stream_mode=["messages", "updates"]):
         for event in _translate(mode, payload, seq, runtime.step_labels):
             yield event
         if mode == "updates":
             for event in _workspace_events(payload, request, threads, runtime, seq):
+                yield event
+            for event in _confirmation_events(payload, request, threads, seq):
                 yield event
 
 
@@ -343,6 +383,7 @@ async def run_turn(
     keys: ServiceKeys,
     threads: ThreadStore,
     runtime: AgentRuntime,
+    plan: TurnPlan | None = None,
 ) -> AsyncGenerator[StreamEvent]:
     """Run one turn and yield its events; always ends with ``usage`` and ``turn_finished``.
 
@@ -362,7 +403,8 @@ async def run_turn(
         turn_keys = _load_keys(keys)
         model = runtime.build_model(turn_keys.openai)
         with _provided(turn_keys):  # the tools see this turn's keys, and the logs never do
-            async for event in _agent_events(request, model, threads, runtime, seq, recorder):
+            turn = plan or TurnPlan(message=request.message, note="")
+            async for event in _agent_events(request, model, threads, runtime, seq, recorder, turn):
                 yield event
     except UserFacingError as error:
         yield _error(seq, str(error))

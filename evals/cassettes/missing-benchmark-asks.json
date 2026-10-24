@@ -1,0 +1,61 @@
+{
+ "fetch_chemical_properties": [
+  {
+   "args": {
+    "cas_number": "107-02-8"
+   },
+   "output": {
+    "preferred_name": "Acrolein",
+    "molecular_weight": 56.064,
+    "vapor_pressure": 219.76787,
+    "density": 0.84,
+    "rfd": 0.0005,
+    "rfc": 2e-05,
+    "sf": null,
+    "iur": null,
+    "sources": {
+     "preferred_name": "CompTox",
+     "molecular_weight": "CompTox",
+     "vapor_pressure": "experimental",
+     "density": "experimental",
+     "rfd": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 2003-06-03)",
+     "rfc": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 2003-06-03)"
+    },
+    "toxicity_details": {
+     "rfd": {
+      "source": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 2003-06-03)",
+      "exposure_route": "oral",
+      "route_reported": "oral",
+      "endpoint": "Respiratory",
+      "assessment": "non-cancer"
+     },
+     "rfc": {
+      "source": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 2003-06-03)",
+      "exposure_route": "inhalation",
+      "route_reported": "inhalation",
+      "endpoint": "Respiratory",
+      "assessment": "non-cancer"
+     }
+    },
+    "warnings": [
+     "sf: not found in CompTox",
+     "iur: not found in CompTox"
+    ],
+    "missing": [
+     {
+      "entry_id": "iur:107-02-8",
+      "quantity": "iur",
+      "subject": "107-02-8",
+      "accepted_units": [
+       "1/(ug/m^3)",
+       "1/(mg/m^3)"
+      ],
+      "minimum": 1e-09,
+      "maximum": 1000.0,
+      "purpose": "the inhalation risk: the cancer risk for this chemical"
+     }
+    ]
+   }
+  }
+ ]
+}

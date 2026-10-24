@@ -1022,3 +1022,27 @@ processed_recycling = "3.2f"
 chem_processing_aid = "3.3a"
 manufacture_aid = "3.3b"
 ancillary = "3.3c"
+
+# Values the user may enter when a chemical benchmark is missing (missing-value confirmation).
+# Per quantity: the units accepted on the entry. The first one is the target unit the analysis
+# uses, and must equal the unit the matching setting above returns (tests/config checks this).
+# Stack parameters are not listed: a missing NEI row is covered by the PSTK and global fall-backs.
+[user_values.units]
+molecular_weight = ["g/mol"]
+vapor_pressure = ["mmHg", "torr", "Pa", "kPa", "hPa", "atm"]
+density = ["g/cm^3", "kg/m^3"]
+rfd = ["mg/(kg*day)"]
+rfc = ["mg/m^3", "ug/m^3"]
+sf = ["1/(mg/(kg*day))"]
+iur = ["1/(ug/m^3)", "1/(mg/m^3)"]
+
+# Plausible [minimum, maximum] per quantity, in its target unit. Outside it, a value is rejected
+# with the range, never clipped.
+[user_values.ranges]
+molecular_weight = [1.0, 2000.0]
+vapor_pressure = [1e-9, 10000.0]
+density = [0.1, 25.0]
+rfd = [1e-8, 10.0]
+rfc = [1e-8, 1000.0]
+sf = [1e-6, 1000.0]
+iur = [1e-9, 1000.0]

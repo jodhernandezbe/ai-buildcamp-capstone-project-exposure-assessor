@@ -66,8 +66,27 @@ FULL_ASSESSMENT = Scenario(
     extra_calls=(ExtraCall(c.ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS}),),
 )
 
+# Acrolein (107-02-8): CompTox has an RfC but no inhalation unit risk, so a cancer-risk result
+# cannot be concluded. The agent must stop and ask for the IUR, not compute a risk without it.
+ACROLEIN_CAS = "107-02-8"
+
+MISSING_BENCHMARK = Scenario(
+    id="missing-benchmark-asks",
+    query=(
+        f"Assess the inhalation exposure and cancer risk from air releases of CAS {ACROLEIN_CAS}."
+    ),
+    checks=(
+        c.completed(),
+        c.no_unrecorded(),
+        c.called_with(c.PROPERTIES, cas_number=ACROLEIN_CAS),
+        c.not_called(c.EXPOSURE),
+        c.asks_for_missing("iur"),
+    ),
+)
+
 CATALOGUE: tuple[Scenario, ...] = (
     CHEMICAL_NAME_ONLY,
+    MISSING_BENCHMARK,
     FULL_ASSESSMENT,
     Scenario("nei-empty-process-fallback", "", blocked=_NOT_WRITTEN),
     Scenario("unknown-industry-global-default", "", blocked=_NOT_WRITTEN),

@@ -168,6 +168,7 @@ describe("restore", () => {
     ],
     workspace: {} as never,
     usage: totals,
+    confirmation: null,
   };
 
   it("replaces the conversation with the held messages, idle, without tool steps", () => {
@@ -187,5 +188,65 @@ describe("restore", () => {
   it("shows no usage for a thread that made no model call", () => {
     const empty = { ...snapshot, usage: { ...totals, calls: 0 } };
     expect(chatReducer(sent, { type: "restore", snapshot: empty, ids: [] }).usage).toBeNull();
+  });
+});
+
+describe("confirmation requests", () => {
+  const entry = {
+    entry_id: "iur:A",
+    quantity: "iur",
+    subject: "A",
+    accepted_units: ["1/(ug/m^3)"],
+    minimum: 1e-9,
+    maximum: 1000,
+    purpose: "the cancer risk",
+  };
+  const asked = chatReducer(sent, {
+    type: "event",
+    event: { type: "confirmation_request", seq: 3, request_id: "req1", entries: [entry] },
+  });
+
+  it("opens the request in the thread when the turn stops to ask", () => {
+    expect(asked.confirmation).toEqual({ request_id: "req1", entries: [entry] });
+  });
+
+  it("closes the request when the user sends their answers or a message", () => {
+    const answered = chatReducer(asked, {
+      type: "user_sent",
+      id: "u2",
+      assistantId: "a2",
+      text: "Answers: ...",
+    });
+    expect(answered.confirmation).toBeNull();
+  });
+
+  it("shows the same request again when the server refuses the reply", () => {
+    const prompt = { request_id: "req1", entries: [entry] };
+    const sending = chatReducer(asked, {
+      type: "user_sent",
+      id: "u2",
+      assistantId: "a2",
+      text: "Answers: ...",
+    });
+    const refused = chatReducer(sending, { type: "rejected", prompt });
+    expect(refused.confirmation).toEqual(prompt);
+    expect(refused.busy).toBe(false);
+    expect(refused.messages.map((m) => [m.role, m.text])).toEqual(
+      sent.messages.map((m) => [m.role, m.text]),
+    );
+  });
+
+  it("restores an open request from a held thread", () => {
+    const prompt = { request_id: "req1", entries: [entry] };
+    const snapshot = {
+      thread_id: "t1",
+      messages: [],
+      workspace: {} as never,
+      usage: { calls: 0 } as never,
+      confirmation: prompt,
+    } as never;
+    expect(chatReducer(initialChatState, { type: "restore", snapshot, ids: [] }).confirmation).toEqual(
+      prompt,
+    );
   });
 });

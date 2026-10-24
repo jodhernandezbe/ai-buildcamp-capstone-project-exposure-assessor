@@ -2,6 +2,11 @@
 export type {
   AssistantMessage,
   ChatRequest,
+  ConfirmationAnswers,
+  ConfirmationPrompt,
+  ConfirmationRequested,
+  EntryAnswer,
+  MissingValue,
   ClientConfig,
   Chemical,
   ErrorEvent,

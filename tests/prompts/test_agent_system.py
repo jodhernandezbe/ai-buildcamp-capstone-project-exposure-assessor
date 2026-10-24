@@ -58,3 +58,10 @@ def test_requires_visible_quality_signals_and_limits() -> None:
         "never end a reply by announcing what you will do next",
     ):
         assert text.lower() in " ".join(PROMPT.split()).lower()  # line wrapping is irrelevant
+
+
+def test_asks_once_for_missing_values_and_labels_the_users_own() -> None:
+    """The missing-value rule: ask once, in one message, and report the user's values as theirs."""
+    assert "ask once, in one message" in PROMPT
+    assert "user-provided" in PROMPT
+    assert "never estimate it in its place" in PROMPT

@@ -7,11 +7,13 @@ from collections.abc import Mapping, Sequence
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from agent.completion import is_nudge
-from api.schemas.chat import ThreadMessage, ThreadSnapshot
+from api.schemas.chat import ConfirmationPrompt, ThreadMessage, ThreadSnapshot
 from api.schemas.workspace import WorkspaceState
+from api.services.confirmation import request_event
 from api.services.threads import ThreadStore
 from api.services.usage_meter import summarize
 from config.ui import ModelPrice
+from tools.schemas import ConfirmationRequest
 
 
 def _text(message: BaseMessage) -> str:
@@ -44,6 +46,14 @@ def thread_messages(messages: Sequence[BaseMessage]) -> list[ThreadMessage]:
     return shown
 
 
+def _prompt(pending: ConfirmationRequest | None) -> ConfirmationPrompt | None:
+    """The open request as the snapshot shows it, or None when nothing is open."""
+    if pending is None:
+        return None
+    event = request_event(0, pending)
+    return ConfirmationPrompt(request_id=event.request_id, entries=event.entries)
+
+
 def thread_snapshot(
     threads: ThreadStore, thread_id: str, pricing: Mapping[str, ModelPrice]
 ) -> ThreadSnapshot | None:
@@ -56,4 +66,5 @@ def thread_snapshot(
         messages=thread_messages(threads.messages(thread_id)),
         workspace=threads.workspace(thread_id) or WorkspaceState(),
         usage=summarize(threads.session_calls(thread_id), pricing),
+        confirmation=_prompt(threads.pending(thread_id)),
     )
