@@ -300,6 +300,10 @@ async def _agent_events(
 ) -> AsyncGenerator[StreamEvent]:
     agent = _build(model, threads, runtime)
     config = _run_config(request, threads, runtime, recorder)
+    supplied, _ = threads.answers(request.thread_id)
+    if supplied:  # the user's answers show on the card now, not only once a tool runs again
+        for event in _rebuild(request, threads, runtime, seq):
+            yield event
     inputs: AgentState = {
         "messages": [HumanMessage(content=plan.message)],
         "answers_note": plan.note,
@@ -337,9 +341,19 @@ def _workspace_events(
     threads.add_tool_messages(request.thread_id, messages)
     if not any(isinstance(m, ToolMessage) for m in messages):
         return []
+    return _rebuild(request, threads, runtime, seq)
+
+
+def _rebuild(
+    request: ChatRequest, threads: ThreadStore, runtime: AgentRuntime, seq: EventSequence
+) -> list[StreamEvent]:
+    """Rebuild the workspace from the tool messages and the user's answers, if it changed."""
+    if runtime.workspace_rules is None:
+        return []
     previous = threads.workspace(request.thread_id)
+    supplied, _ = threads.answers(request.thread_id)
     state = build_workspace(
-        threads.tool_messages(request.thread_id), runtime.workspace_rules, previous
+        threads.tool_messages(request.thread_id), runtime.workspace_rules, previous, supplied
     )
     if state == previous:
         return []

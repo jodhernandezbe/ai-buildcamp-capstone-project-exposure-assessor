@@ -682,3 +682,38 @@ def test_weather_for_another_point_says_it_is_no_facility() -> None:
     assert state.meteorology is not None
     assert state.meteorology.frs_id is None and state.meteorology.facility_name is None
     assert (state.meteorology.latitude, state.meteorology.longitude) == (50.0, 50.0)
+
+
+def _missing_rfc(cas: str = "1-1-1") -> list[BaseMessage]:
+    body: dict[str, object] = {
+        "preferred_name": "Testane",
+        "molecular_weight": 50.0,
+        "rfc": None,
+        "iur": 1e-6,
+        "sources": {"iur": "IRIS"},
+        "warnings": ["rfc: not found in CompTox"],
+    }
+    return exchange("fetch_chemical_properties", {"cas_number": cas}, body)
+
+
+def test_a_supplied_value_fills_the_empty_benchmark_as_the_users() -> None:
+    chemical = build_workspace(_missing_rfc(), RULES, supplied={"rfc:1-1-1": 0.5}).chemical
+    assert chemical.rfc_mg_m3 == 0.5
+    assert chemical.sources == {"iur": "IRIS", "rfc": "user-provided"}
+    assert chemical.warnings == []  # the tool's "rfc: not found" no longer holds
+
+
+def test_a_supplied_value_never_replaces_a_tool_value() -> None:
+    chemical = build_workspace(properties(), RULES, supplied={"rfc:1-1-1": 9.0}).chemical
+    assert chemical.rfc_mg_m3 == 0.5 and chemical.sources == {"rfc": "IRIS"}
+
+
+def test_a_supplied_value_for_another_cas_is_not_shown() -> None:
+    chemical = build_workspace(_missing_rfc("1-1-1"), RULES, supplied={"rfc:2-2-2": 0.5}).chemical
+    assert chemical.rfc_mg_m3 is None and chemical.cas_number == "1-1-1"
+
+
+def test_a_supplied_value_shows_even_before_any_tool_ran() -> None:
+    chemical = build_workspace([], RULES, supplied={"iur:3-3-3": 2e-6}).chemical
+    assert chemical.cas_number == "3-3-3" and chemical.iur_per_ug_m3 == 2e-6
+    assert chemical.sources == {"iur": "user-provided"}

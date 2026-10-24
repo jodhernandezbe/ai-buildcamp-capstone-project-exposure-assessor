@@ -6,7 +6,7 @@ or unattributable is left out with a warning and never raises.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
@@ -17,6 +17,7 @@ from api.services.projectors.framing import bounds, framing_key, next_version
 from api.services.projectors.ledger import Ledger, ToolExchange
 from api.services.projectors.rules import WorkspaceRules
 from api.services.projectors.summary import chemical, risk_summary, select
+from api.services.projectors.supplied import apply_supplied
 
 
 def pair_exchanges(messages: Sequence[BaseMessage]) -> list[ToolExchange]:
@@ -73,6 +74,7 @@ def build_workspace(
     messages: Sequence[BaseMessage],
     rules: WorkspaceRules,
     previous: WorkspaceState | None = None,
+    supplied: Mapping[str, float] | None = None,
 ) -> WorkspaceState:
     """The workspace shown for a thread's messages.
 
@@ -80,10 +82,12 @@ def build_workspace(
         messages: The thread's messages (only tool calls and their results are read).
         rules: Thresholds, attribution tolerance and default radius from configuration.
         previous: The workspace sent before, so the framing version moves only on real changes.
+        supplied: The benchmark values the user entered in this thread, by entry ID.
     """
     exchanges = pair_exchanges(messages)
     ledger = Ledger(default_radius_km=rules.default_radius_km)
     _fill(exchanges, ledger)
+    apply_supplied(ledger, supplied or {})
     facilities, lost = build_facilities(ledger, rules)
     exposed = any(e.name == "calculate_exposure_metrics" for e in exchanges)
     summary = risk_summary(facilities, rules, exposed)
