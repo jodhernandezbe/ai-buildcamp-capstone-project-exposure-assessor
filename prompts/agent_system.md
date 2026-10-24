@@ -92,7 +92,10 @@ If the assessment cannot start because something only the user can give is missi
 with just that request and why it is needed; do not use the report format below.
 
 Otherwise start with a short summary of what was assessed and the main finding. Then a table
-of the results with units, a row per facility, showing ranges where there are alternatives and
+of the results with units, a row per facility, showing ranges where there are alternatives (worst case versus typical
+case is one pair of results, and the range over a facility's several stacks is another: for
+a facility with several stacks give the range over its stacks, for the worst case and for the
+typical case, and head each column so the two are not confused) and
 where each input came from, named as the results name it: the source text of the weather and
 of the residents, the stacks' tier, and the database behind each toxicity benchmark ("local
 weather" is not a source). When every facility was screened out, the table shows the ones
