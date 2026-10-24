@@ -81,11 +81,10 @@ CATEGORY_MEMBER = Scenario(
     ),
     checks=(
         c.completed(),
-        c.called_with("find_tri_read_across_surrogate", cas_number=CATEGORY_MEMBER_CAS),
+        c.called_with("find_tri_category", cas_number=CATEGORY_MEMBER_CAS),
         c.called_with("query_emissions_inventory", cas_number="N084"),
     ),
     judges=(CATEGORY_MATCH_DISCLOSED,),
-    blocked="cassette not recorded yet",
 )
 
 CATALOGUE: tuple[Scenario, ...] = (

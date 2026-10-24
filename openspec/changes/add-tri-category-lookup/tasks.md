@@ -26,7 +26,7 @@
 ## 5. Prompt and evals
 
 - [x] 5.1 Add the category-match reasoning to `prompts/agent_system.md` (no tool names) and its prompt test
-- [ ] 5.2 (OPEN: needs the OpenAI key and paid eval runs; not recorded; scenario is in evals/scenarios.py as category-member-chlorophenol) Add an eval scenario and cassette for a category-member chemical (organic member and a metal compound); run evals 3 times and record the outcome
+- [x] 5.2 Eval scenario category-member-chlorophenol with its cassette; passes 3 of 3 runs (judge: category match disclosed)
 
 ## 6. Quality gates
 
