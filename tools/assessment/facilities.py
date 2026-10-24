@@ -18,6 +18,7 @@ from tools.assessment.helpers.screening import can_screen, unit_bound
 from tools.assessment.helpers.steps import Steps
 from tools.assessment.helpers.tiers import Screen, Split, screen, split
 from tools.assessment.helpers.view import Findings, assessment_view
+from tools.emissions.helpers.inventory.lookup import TriReadError
 from tools.emissions.industry import fetch_facility_industry
 from tools.emissions.inventory import inventory_listing, with_eis_ids
 from tools.emissions.process import lookup_scc_process_description
@@ -345,7 +346,38 @@ def run_assessment(
     toxicity: Toxicity | None,
     steps: Steps,
 ) -> Outcome:
-    """Screen (or select) the facilities, get the benchmarks, run the tiers, build both views."""
+    """Screen (or select) the facilities, get the benchmarks, run the tiers, build both views.
+
+    If TRI cannot be read, nothing is assessed and the result says the assessment was not
+    completed: a failed read is never taken for "no releases", so no category is substituted.
+    """
+    try:
+        return _assess(cas_number, frs_ids, place, radius_km, toxicity, steps)
+    except TriReadError as exc:
+        return _not_completed(cas_number, str(exc))
+
+
+def _not_completed(cas_number: str, reason: str) -> Outcome:
+    """The outcome of an assessment that could not read TRI: no facility assessed or ruled out."""
+    settings = get_assessment_settings()
+    warning = (
+        f"the assessment of {cas_number.strip()} was not completed because {reason}; no facility "
+        "was assessed or ruled out. Retry when TRI is available"
+    )
+    empty = (Toxicity(rfc=None, iur=None), "none")
+    f = Findings(format_cas(cas_number), empty, 0, [], [], [], None, True, [], [warning])
+    view = assessment_view(f, settings.max_worst_case_listed, settings.max_screened_out_listed)
+    return view, _artifact(f)
+
+
+def _assess(
+    cas_number: str,
+    frs_ids: list[str] | None,
+    place: tuple[str | None, str | None],
+    radius_km: float | None,
+    toxicity: Toxicity | None,
+    steps: Steps,
+) -> Outcome:
     settings = get_assessment_settings()
     cas = format_cas(cas_number)
     if cas is None:

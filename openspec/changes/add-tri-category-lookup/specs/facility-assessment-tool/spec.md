@@ -46,3 +46,22 @@ used; the warnings SHALL give its score and the threshold.
 #### Scenario: Own benchmark
 - **WHEN** CompTox gives the chemical's own benchmark
 - **THEN** no analogue is consulted
+
+### Requirement: A failed TRI read is never a fallback trigger or an absence
+When TRI cannot be read for the chemical or for a category, the batch assessment SHALL NOT use
+the category route and SHALL NOT report that the chemical has no releases. It SHALL assess no
+facility and report that the assessment was not completed because TRI could not be read, so the
+user can retry. The emissions inventory tool SHALL report the same failure in its note, not an
+empty list alone.
+
+#### Scenario: Own read fails
+- **WHEN** the TRI request for the chemical fails after its retries
+- **THEN** no category is queried, no facility is assessed, and the warnings say the assessment was not completed
+
+#### Scenario: Category read fails
+- **WHEN** the TRI request for a category fails
+- **THEN** the assessment is not completed and no partial set of facilities is assessed
+
+#### Scenario: Emissions tool
+- **WHEN** the emissions inventory tool cannot read TRI
+- **THEN** the note says TRI could not be read and that this is not evidence of no releases

@@ -16,6 +16,10 @@ from tools.schemas import EmissionRecord
 logger = logging.getLogger(__name__)
 
 
+class TriReadError(RuntimeError):
+    """TRI could not be read for a chemical (a failed request, not an absence of releases)."""
+
+
 def lookup_emissions(
     cas: str,
     tri: TriSettings,
@@ -46,9 +50,12 @@ def lookup_emissions(
             names the activity columns to read. Without it records carry no conditions.
 
     Returns:
-        One record per (medium, facility); empty if nothing was reported or if retrieval
-        failed (a partial result is never returned as if it were complete). Data problems
-        and a hit page cap are logged as warnings.
+        One record per (medium, facility); empty if nothing was reported. Data problems and a
+        hit page cap are logged as warnings.
+
+    Raises:
+        TriReadError: If retrieval failed. A partial result is never returned as if it were
+            complete, and a failure is never reported as "nothing reported".
     """
     flags = conditions.flags if conditions is not None else ()
     reducer = LatestReports(tri, tri.first_year(current_year), flags)
@@ -63,7 +70,7 @@ def lookup_emissions(
                 )
     except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
-        return []
+        raise TriReadError(f"TRI could not be read for {cas}: {exc}") from exc
     records = reducer.records(emissions, aliases, locate, hours_for, conditions)
     for message in reducer.stats.warnings():
         logger.warning("TRI %s: %s", cas, message)

@@ -333,3 +333,28 @@ def test_the_program_gets_each_facilitys_subsector(requests_seen: list[httpx.Req
         assert record["naics_subsector"] == (code[:3] if code else None)
         if code and len(code) >= 3:
             assert record["naics_subsector_title"]  # in the committed table
+
+
+def test_unreadable_tri_is_never_reported_as_no_releases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: a failed TRI request (HTTP 500) is a note that says so, not an empty list."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "mv_new_geo_best_picks" in str(request.url) or "frs_program_facility" in str(
+            request.url
+        ):
+            return httpx.Response(200, json=[])
+        return httpx.Response(500)
+
+    monkeypatch.setattr(
+        inventory, "_open_client", lambda: httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    settings = replace(get_efservice_settings(), delay_seconds=0.0, backoff_seconds=0.0)
+    monkeypatch.setattr(inventory, "get_efservice_settings", lambda: settings)
+    monkeypatch.setattr(inventory, "_current_year", lambda: CURRENT_YEAR)
+    monkeypatch.setattr(inventory, "_hours_for", lambda: _default_hours)
+    clear_inventory_cache()
+    view = _view({"cas_number": "50-00-0"})
+    assert view["facilities"] == [] and view["total_found"] == 0
+    note = view["note"] or ""
+    assert "TRI could not be read" in note
+    assert "not evidence that there are no releases" in note

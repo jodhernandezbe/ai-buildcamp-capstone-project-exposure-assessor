@@ -26,7 +26,7 @@ from tools.emissions.helpers.inventory.conditions import ConditionsMapper, get_c
 from tools.emissions.helpers.inventory.eis import UNREACHABLE_NOTE, EisResolver
 from tools.emissions.helpers.inventory.frs_point import FrsLocator
 from tools.emissions.helpers.inventory.listing import rank_and_cap
-from tools.emissions.helpers.inventory.lookup import lookup_emissions
+from tools.emissions.helpers.inventory.lookup import TriReadError, lookup_emissions
 from tools.emissions.helpers.inventory.plant_hours import PlantHours, get_baseline
 from tools.emissions.helpers.inventory.rate import HoursFor, operating_hours_per_year
 from tools.emissions.helpers.inventory.tri import TriFetcher
@@ -106,7 +106,8 @@ def query_emissions_inventory(
         the industry.
         Zero facilities means no stack air release was found for this CAS number (and place) in
         TRI, which is not evidence that nobody emits it: TRI covers only facilities above its
-        reporting thresholds.
+        reporting thresholds. If `note` says TRI could not be read, nothing is known: that is
+        not zero releases, so do not report it as one.
         A chemical TRI reports only as a member of a category (see `find_tri_read_across_surrogate`,
         `query_categories`) has its releases under the category code, e.g. "N420": pass that code
         as `cas_number`. Those releases are for the whole category, every member together, never
@@ -178,7 +179,17 @@ def query_emissions_inventory(
             from the facility's FRS record when TRI has none
           - address, city, county, state, zip_code: facility location (each may be null)
     """
-    return inventory_listing(cas_number, state, city)
+    try:
+        return inventory_listing(cas_number, state, city)
+    except TriReadError as exc:
+        return _unread(state, city, str(exc))
+
+
+def _unread(state: str | None, city: str | None, reason: str) -> Listing:
+    """An empty view whose note says TRI could not be read, so it is not read as no releases."""
+    result, _ = rank_and_cap([], get_tri_settings().max_listed, state, city)
+    note = f"{reason}. This is not evidence that there are no releases: retry the query"
+    return {**result, "note": note}, []
 
 
 Listing = tuple[InventoryResult, list[EmissionRecord]]

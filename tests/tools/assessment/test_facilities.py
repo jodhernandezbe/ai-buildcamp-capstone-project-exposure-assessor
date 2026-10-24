@@ -236,6 +236,12 @@ def test_schema() -> None:
 MEMBER = "95-57-8"  # 2-chlorophenol: not in TRI on its own, a member of category N084
 
 
+_ROWS = (
+    "95-57-8,N084,CHLOROPHENOLS,2-chlorophenol,Organic,x",
+    "95-57-8,N085,SECOND GROUP,2-chlorophenol,Organic,x",
+)
+
+
 def _member_setup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -379,3 +385,49 @@ def test_own_benchmark_is_never_replaced_by_an_analogue(
     view, _ = _run()
     assert read.calls == []
     assert view["toxicity_source"] == "CompTox"
+
+
+def test_a_failed_tri_read_is_not_taken_for_no_releases(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps, tmp_path: Path
+) -> None:
+    """Regression: a failed TRI read must not fall back to the category, nor claim no releases."""
+    from tools.emissions.helpers.inventory.lookup import TriReadError
+
+    asked: list[str] = []
+
+    def listing(cas: str, state: str | None = None, city: str | None = None):  # noqa: ANN202
+        asked.append(cas)
+        if cas == MEMBER:
+            raise TriReadError(f"TRI could not be read for {cas}: HTTP 500")
+        return rank_and_cap([record("CAT", emission_rate=9.0)], 25, state, city)
+
+    monkeypatch.setattr(facilities, "inventory_listing", listing)
+    monkeypatch.setattr(facilities, "get_category_index", lambda: category_index(tmp_path, *_ROWS))
+    view, artifact = run_assessment(
+        MEMBER, None, (None, None), None, None, facilities.default_steps()
+    )
+    assert asked == [MEMBER]  # (a) the category route was never queried
+    warnings = " ".join(view["warnings"])
+    assert "not completed" in warnings and "could not be read" in warnings  # (c) reported
+    assert "no TRI release of its own" not in warnings  # (b) no claim of absence
+    assert view["assessed"] == 0 and artifact["screened_out"] == []
+    assert PROPERTIES_CALLS == []  # nothing else was run on a failed read
+
+
+def test_a_failed_category_read_is_not_completed_either(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps, tmp_path: Path
+) -> None:
+    from tools.emissions.helpers.inventory.lookup import TriReadError
+
+    def listing(cas: str, state: str | None = None, city: str | None = None):  # noqa: ANN202
+        if cas == MEMBER:
+            return rank_and_cap([], 25, state, city)
+        raise TriReadError(f"TRI could not be read for {cas}: HTTP 500")
+
+    monkeypatch.setattr(facilities, "inventory_listing", listing)
+    monkeypatch.setattr(facilities, "get_category_index", lambda: category_index(tmp_path, *_ROWS))
+    view, artifact = run_assessment(
+        MEMBER, None, (None, None), None, None, facilities.default_steps()
+    )
+    assert "not completed" in " ".join(view["warnings"])
+    assert view["assessed"] == 0 and artifact["screened_out"] == []

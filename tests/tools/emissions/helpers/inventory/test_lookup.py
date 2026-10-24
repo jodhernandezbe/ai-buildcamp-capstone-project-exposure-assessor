@@ -17,7 +17,7 @@ from config.loader import EmissionsSettings, TriSettings, get_unit_settings, loa
 from tools.emissions.helpers.efservice import EfserviceClient
 from tools.emissions.helpers.inventory import conditions as module
 from tools.emissions.helpers.inventory.conditions import ConditionsMapper, load_crosswalk
-from tools.emissions.helpers.inventory.lookup import lookup_emissions
+from tools.emissions.helpers.inventory.lookup import TriReadError, lookup_emissions
 from tools.emissions.helpers.inventory.rate import OperatingHours
 from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.schemas import EmissionRecord
@@ -72,12 +72,12 @@ def test_each_configured_medium_is_queried() -> None:
     ]
 
 
-def test_failure_returns_empty_not_partial(caplog: pytest.LogCaptureFixture) -> None:
+def test_failure_raises_instead_of_returning_empty(caplog: pytest.LogCaptureFixture) -> None:
+    """A failed read is never an empty result: that would read as no releases."""
     answers = [httpx.Response(200, json=ROWS[:4])] + [httpx.Response(500)] * 3
     transport = httpx.MockTransport(lambda request: answers.pop(0))
-    with caplog.at_level(logging.WARNING):
-        records = _lookup(_fetcher(transport))
-    assert records == []
+    with caplog.at_level(logging.WARNING), pytest.raises(TriReadError, match="HTTP 500"):
+        _lookup(_fetcher(transport))
     assert "failed" in caplog.text
 
 
