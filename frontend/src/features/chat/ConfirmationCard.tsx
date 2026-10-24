@@ -52,7 +52,7 @@ function EntryRow({ entry, draft, onChange }: EntryRowProps) {
           step="any"
           aria-invalid={invalid}
           value={draft.number}
-          disabled={draft.decision !== "supply"}
+          disabled={draft.decision === "decline"}
           onChange={(event) =>
             onChange({ ...draft, decision: "supply", number: event.target.value })
           }
@@ -64,7 +64,7 @@ function EntryRow({ entry, draft, onChange }: EntryRowProps) {
         <select
           id={`${id}-unit`}
           value={draft.unit}
-          disabled={draft.decision !== "supply"}
+          disabled={draft.decision === "decline"}
           onChange={(event) => onChange({ ...draft, unit: event.target.value })}
           className="rounded-lg bg-white/5 px-2 py-1 text-sm outline-none disabled:opacity-40"
         >

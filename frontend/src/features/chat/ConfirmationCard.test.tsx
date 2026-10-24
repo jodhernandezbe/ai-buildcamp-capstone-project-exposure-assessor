@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -44,6 +45,14 @@ describe("ConfirmationCard", () => {
     expect(screen.getByText(/the cancer risk/)).toBeInTheDocument();
     expect(screen.getAllByRole("combobox")[0]).toHaveDisplayValue("1/(ug/m^3)");
     expect(screen.getAllByRole("option", { name: "1/(mg/m^3)" })).toHaveLength(1);
+  });
+
+  it("lets the user type a value straight into an unanswered field", async () => {
+    const user = userEvent.setup();
+    setup();
+    const field = screen.getByRole("spinbutton", { name: /Value for iur for 71-43-2/ });
+    await user.type(field, "0.5");
+    expect(field).toHaveValue(0.5);
   });
 
   it("keeps Confirm disabled until every value is answered", () => {
