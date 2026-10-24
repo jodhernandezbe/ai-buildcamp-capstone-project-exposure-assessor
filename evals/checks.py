@@ -96,6 +96,21 @@ def assessed_candidates(record: RunRecord) -> dict[str, list[Facility]]:
     return found
 
 
+def asks_for_missing(quantity: str) -> Check:
+    """The reply names the missing value and offers both answers: enter it, or proceed without."""
+
+    def evaluate(record: RunRecord) -> CheckResult:
+        text = record.report.lower()
+        problems: list[str] = []
+        if quantity not in text:
+            problems.append(f"the reply does not name {quantity}")
+        if "proceed without" not in text:
+            problems.append("the reply does not offer to proceed without it")
+        return _verdict(problems, f"the reply asks for {quantity} and offers both answers")
+
+    return Check(f"asks for {quantity}", evaluate)
+
+
 def completed() -> Check:
     """The run finished with a final report and no error."""
 

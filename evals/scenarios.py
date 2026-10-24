@@ -68,9 +68,8 @@ FULL_ASSESSMENT = Scenario(
 
 # 2-Chlorophenol is not a discrete TRI chemical; TRI reports it under the chlorophenols
 # category (N084). The agent must find that category before seeking an analogue, say so, and say
-# the releases cover the whole category. Blocked until its cassette is recorded (it costs tokens:
-# `uv run python -m evals record category-member-chlorophenol`) and the batch assessment can be
-# given a category code (see the change's open question).
+# the releases cover the whole category. Its cassette: `uv run python -m evals record
+# category-member-chlorophenol`.
 CATEGORY_MEMBER_CAS = "95-57-8"
 
 CATEGORY_MEMBER = Scenario(
@@ -87,8 +86,28 @@ CATEGORY_MEMBER = Scenario(
     judges=(CATEGORY_MATCH_DISCLOSED,),
 )
 
+
+# Acrolein (107-02-8): CompTox has an RfC but no inhalation unit risk, so a cancer-risk result
+# cannot be concluded. The agent must stop and ask for the IUR, not compute a risk without it.
+ACROLEIN_CAS = "107-02-8"
+
+MISSING_BENCHMARK = Scenario(
+    id="missing-benchmark-asks",
+    query=(
+        f"Assess the inhalation exposure and cancer risk from air releases of CAS {ACROLEIN_CAS}."
+    ),
+    checks=(
+        c.completed(),
+        c.no_unrecorded(),
+        c.called_with(c.PROPERTIES, cas_number=ACROLEIN_CAS),
+        c.not_called(c.EXPOSURE),
+        c.asks_for_missing("iur"),
+    ),
+)
+
 CATALOGUE: tuple[Scenario, ...] = (
     CHEMICAL_NAME_ONLY,
+    MISSING_BENCHMARK,
     FULL_ASSESSMENT,
     CATEGORY_MEMBER,
     Scenario("nei-empty-process-fallback", "", blocked=_NOT_WRITTEN),

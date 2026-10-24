@@ -70,3 +70,10 @@ def test_a_category_match_is_disclosed_and_tried_before_an_analogue() -> None:
         "never taken from the category",
     ):
         assert phrase in text
+
+
+def test_asks_once_for_missing_values_and_labels_the_users_own() -> None:
+    """The missing-value rule: ask once, in one message, and report the user's values as theirs."""
+    assert "ask once, in one message" in PROMPT
+    assert "user-provided" in PROMPT
+    assert "never estimate it in its place" in PROMPT

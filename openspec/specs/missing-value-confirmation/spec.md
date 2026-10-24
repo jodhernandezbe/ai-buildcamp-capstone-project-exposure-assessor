@@ -1,10 +1,10 @@
-## Purpose
+# missing-value-confirmation Specification
 
-Lets the user decide what happens when a chemical property or stack parameter the assessment
-needs cannot be found: proceed without it, or supply the value with its unit so the analysis
+## Purpose
+Lets the user decide what happens when a chemical benchmark the assessment needs cannot be found: proceed without it, or supply the value with its unit so the analysis
 uses it. Nothing missing is ever guessed, and every supplied value is labelled as user-provided.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Ask before concluding when a needed value is missing
 The system SHALL stop the turn and ask the user when a value the requested analysis needs is
@@ -38,7 +38,7 @@ physical quantity, and the field's documented target unit SHALL be visible on th
 - **THEN** the system converts it to the documented target unit, mmHg, before the analysis uses it
 
 #### Scenario: Entry in a unit of another quantity
-- **WHEN** a request for a stack height arrives with a unit of pressure
+- **WHEN** a request for an RfC arrives with a unit of pressure
 - **THEN** the request is rejected with a reason and the entry is asked again
 
 ### Requirement: Validate entered values and never coerce them
@@ -48,16 +48,12 @@ that fails any check SHALL be rejected with a reason and asked again. A value SH
 clipped to the range, rounded into it, or replaced with a default.
 
 #### Scenario: Value outside the plausible range
-- **WHEN** the user enters a stack height of 4500 m
+- **WHEN** the user enters a density of 4500 g/cm^3
 - **THEN** the entry is rejected with the accepted range and asked again
 
 #### Scenario: Value that is not a number
 - **WHEN** the entry is empty, text, infinite or a boolean
 - **THEN** the entry is rejected with a reason and asked again
-
-#### Scenario: Temperature entered in Celsius
-- **WHEN** the user enters an exit temperature of 25 degC for a stack
-- **THEN** the value is converted as a temperature (298.15 K), not as a difference, and checked against the plausible range for exit temperature
 
 #### Scenario: Reciprocal unit
 - **WHEN** an inhalation unit risk of 0.002 (mg/m3)^-1 is entered
@@ -71,10 +67,6 @@ value SHALL carry the unit it was converted to.
 #### Scenario: Supplied vapor pressure is used
 - **WHEN** the user supplies a vapor pressure for a chemical that had none
 - **THEN** the analysis uses it and the chemical's reported source for vapor pressure is user-provided
-
-#### Scenario: Supplied stack diameter is used
-- **WHEN** the user supplies a stack diameter for a facility whose stack has none
-- **THEN** the stack's reported source is user-provided and the stack is assessed with that diameter
 
 ### Requirement: The pending request belongs to its thread
 A confirmation request SHALL stay open in its chat thread until it is answered. Answers SHALL

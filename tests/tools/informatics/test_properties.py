@@ -13,12 +13,14 @@ from config.loader import (
     get_comptox_settings,
     get_unit_settings,
 )
+from config.user_values import get_user_value_settings
 from tests.tools.informatics.pubchem_fakes import FakePubchem
 from tools.informatics import properties
 from tools.informatics.helpers.comptox import ComptoxLookup
 from tools.informatics.helpers.pubchem import PubchemFallback
 from tools.informatics.properties import fetch_chemical_properties, lookup_chemical_properties
 from tools.schemas import ChemicalProperties
+from tools.user_values import UserValueInputs
 
 CAS = "71-43-2"
 DTX = "DTXSID0"
@@ -90,6 +92,7 @@ def _run(
     name: str | None = "Benzene",
     env: dict[str, str] | None = None,
     settings: ComptoxSettings | None = None,
+    inputs: UserValueInputs | None = None,
 ) -> tuple[ChemicalProperties, list[httpx.Request]]:
     requests: list[httpx.Request] = []
 
@@ -116,7 +119,9 @@ def _run(
     comptox = ComptoxLookup(
         settings, client, sleep=lambda _: None, environ=ENV if env is None else env
     )
-    return lookup_chemical_properties(cas, comptox, settings, get_unit_settings().aliases), requests
+    aliases = get_unit_settings().aliases
+    result = lookup_chemical_properties(cas, comptox, settings, aliases, inputs=inputs)
+    return result, requests
 
 
 def _field(result: ChemicalProperties, name: str) -> float | None:
@@ -127,13 +132,14 @@ def _field(result: ChemicalProperties, name: str) -> float | None:
 
 def test_schema() -> None:
     assert fetch_chemical_properties.name == "fetch_chemical_properties"
-    assert set(fetch_chemical_properties.args) == {"cas_number"}
+    assert set(fetch_chemical_properties.args) == {"cas_number"}  # config is injected, not asked
     description = fetch_chemical_properties.description
     for field in FIELDS:
         assert field in description
     for unit in ("g/mol", "mmHg", "g/cm^3", "mg/(kg*day)", "mg/m^3", "(ug/m^3)^-1"):
         assert unit in description
     assert "warnings" in description
+    assert "missing" not in description  # read by the confirmation node, not the model
     assert "conservative" in description
     assert "toxicity_details" in description
     assert "exposure_route" in description
@@ -371,6 +377,7 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
         "sources": {},
         "toxicity_details": {},
         "warnings": ["x"],
+        "missing": [],
     }
     seen: list[str] = []
 
@@ -380,7 +387,9 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
         settings: ComptoxSettings,
         aliases: dict[str, str],
         pubchem: PubchemFallback | None,
+        inputs: UserValueInputs | None = None,
     ) -> ChemicalProperties:
+        assert inputs is not None
         assert (comptox, settings, aliases, pubchem) == (
             services.comptox,
             services.settings,
@@ -462,3 +471,72 @@ def test_caller_cannot_alter_cached_details() -> None:
     second = lookup_chemical_properties(CAS, comptox, settings, aliases)
     assert second["toxicity_details"]["rfd"]["endpoint"] != "tampered"
     assert "rfd" in second["toxicity_details"]
+
+
+NO_IUR = [t for t in FULL_TOX if t["toxvalType"] != "cancer unit risk"]
+
+
+def _answers(
+    supplied: dict[str, float] | None = None, declined: frozenset[str] = frozenset()
+) -> UserValueInputs:
+    return UserValueInputs(
+        settings=get_user_value_settings(),
+        aliases=get_unit_settings().aliases,
+        supplied=supplied or {},
+        declined=declined,
+    )
+
+
+def test_missing_iur_is_listed_for_the_user_with_its_units_and_range() -> None:
+    result, _ = _run(tox=NO_IUR)
+    entries = {e["quantity"]: e for e in result["missing"]}
+    assert set(entries) == {"iur"}
+    entry = entries["iur"]
+    assert entry["entry_id"] == f"iur:{CAS}"
+    assert entry["accepted_units"][0] == "1/(ug/m^3)"
+    assert "1/(mg/m^3)" in entry["accepted_units"]
+    assert entry["minimum"] < entry["maximum"]
+    assert "cancer" in entry["purpose"]
+
+
+def test_vapor_pressure_and_density_are_not_asked_for() -> None:
+    result, _ = _run(props=[], tox=[])
+    assert {e["quantity"] for e in result["missing"]} == {"rfc", "iur"}
+
+
+def test_found_benchmark_is_never_listed_or_replaced() -> None:
+    answers = _answers(supplied={f"rfc:{CAS}": 9.0})
+    result, _ = _run(inputs=answers)
+    assert _field(result, "rfc") == pytest.approx(2.5)
+    assert result["sources"]["rfc"] != "user-provided"
+    assert all(e["quantity"] != "rfc" for e in result["missing"])
+
+
+def test_supplied_missing_benchmark_is_used_and_labelled() -> None:
+    answers = _answers(supplied={f"iur:{CAS}": 2e-6})
+    result, _ = _run(tox=NO_IUR, inputs=answers)
+    assert _field(result, "iur") == pytest.approx(2e-6)
+    assert result["sources"]["iur"] == "user-provided"
+    assert not any(w.startswith("iur:") for w in result["warnings"])
+    assert result["missing"] == []
+
+
+def test_declined_benchmark_stays_none_with_its_warning() -> None:
+    answers = _answers(declined=frozenset({f"iur:{CAS}"}))
+    result, _ = _run(tox=NO_IUR, inputs=answers)
+    assert _field(result, "iur") is None
+    assert "iur: not found in CompTox" in result["warnings"]
+    assert result["missing"] == []
+
+
+def test_supplied_value_is_rechecked_and_out_of_range_is_not_used() -> None:
+    answers = _answers(supplied={f"iur:{CAS}": -1.0})
+    result, _ = _run(tox=NO_IUR, inputs=answers)
+    assert _field(result, "iur") is None
+    assert [e["quantity"] for e in result["missing"]] == ["iur"]
+
+
+def test_a_value_for_another_chemical_is_not_used() -> None:
+    answers = _answers(supplied={"iur:50-00-0": 2e-6})
+    result, _ = _run(tox=NO_IUR, inputs=answers)
+    assert _field(result, "iur") is None

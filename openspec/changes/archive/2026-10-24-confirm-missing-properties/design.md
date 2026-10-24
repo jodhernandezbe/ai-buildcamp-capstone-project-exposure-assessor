@@ -1,7 +1,7 @@
 ## Context
 
 See proposal.md - Why. Today every data layer already fails closed: a missing value is None with a
-warning (chemical properties, stack parameters, RfC/IUR in `tools/exposure/metrics.py`), and
+warning (chemical properties, RfC/IUR in `tools/exposure/metrics.py`), and
 the agent is told never to fill a gap. Nothing asks the user. The chat is one HTTP turn per
 message (`api/routers/v1_chat.py`) streamed as typed events (`api/schemas/chat.py`), with a
 LangGraph checkpointer per thread (`agent/graph.py`, `threads.py`). There is no
@@ -59,16 +59,14 @@ generated from that state, and never has to copy a number into a tool call.
 ### D4. Units and validation
 - Each entry offers a short list of accepted units configured in `config/settings.toml`, one list
   per quantity; the first is the target unit. Examples: vapor pressure mmHg (also torr, Pa, kPa,
-  atm, hPa); molecular weight g/mol; density g/cm^3 (also kg/m^3); RfD and RfC in their configured
-  targets; stack height m (also ft); diameter m (also ft, in); exit velocity m/s (also ft/s); exit
-  temperature K (also degC, degF).
+  atm, hPa); molecular weight g/mol; density g/cm^3 (also kg/m^3); RfD, RfC, SF and IUR in their
+  configured targets (RfC also ug/m^3, IUR also (mg/m^3)^-1).
 - Conversion uses `commons/units.convert` (Pint). Temperatures must be converted as absolute
   temperatures; 25 degC becomes 298.15 K, never a difference.
 - Reciprocal units (SF, IUR) are converted through Pint like any other unit; the 1000-fold
   difference between (ug/m3)^-1 and (mg/m3)^-1 is covered by a negative test.
 - Validation order: finite number, not a boolean, converts exactly, inside the plausible range.
-  Plausible ranges already exist for stack quantities (`[stack.ranges]`); the same mechanism is
-  added for chemistry quantities. Failures return a reason and keep the entry open.
+  Chemistry quantities get their plausible ranges in `[user_values.ranges]`.
 
 ### D5. Open requests and new messages
 An open request is kept in the thread across reloads. If the user sends a new message instead
@@ -78,7 +76,7 @@ This means the agent never waits on an answer that is not coming.
 ### D6. Provenance
 A user-supplied value is labelled `user-provided` in every place that reports a source: the
 chemical properties `sources` map (new label, as a delta in the chemical-properties spec) and
-`stack_source` for stack parameters (new value next to "NEI", "PSTK" and the EPA global default).
+
 The final report says which values came from the user.
 
 ### D7. Where the missing check lives
@@ -115,6 +113,5 @@ their current arguments, so no stored data needs conversion.
 ## Open Questions
 
 - Which exact accepted-unit list per quantity the user wants (the list above is a starting point).
-- Whether the card should also appear for missing toxicity benchmarks, or only for chemistry and
-  stack inputs. The proposal assumes chemistry and stack inputs; RfC and IUR count as chemistry
-  here because the RfC/IUR chain already reports them as missing.
+- Decided: only the chemical benchmarks `rfc` and `iur` are asked for. Stack parameters are never
+  asked for, because the PSTK and EPA global-default fall-backs cover a missing NEI row.

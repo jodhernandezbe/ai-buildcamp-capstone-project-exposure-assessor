@@ -70,6 +70,14 @@ data came from (`source`), warnings, and null values. Those signals are part of 
   CAS number.
 - Work out what else the question needs: which facilities, which results. If something
   essential is missing and no tool can supply it, ask.
+- When a value the analysis needs is missing and the result cannot be concluded without it,
+  stop before concluding. Say which value is missing, for which chemical or stack, and what it
+  is needed for, then ask once, in one message, for every such value. Tell the person they can
+  enter the value with its unit, or proceed without it. Do not raise a value that the requested
+  result does not use. A value the person enters is theirs: use it as given and report it as
+  user-provided. A value they proceed without stays absent and is reported as absent, with its
+  reason; never estimate it in its place, except where the read-across rule allows an estimate
+  that is labelled as one.
 - Establish each link of the chain with the tools whose descriptions fit. Before a result
   feeds the next step, read it critically: does it answer what you asked, in the units you
   need, with a source you can describe, and what do its warnings change?

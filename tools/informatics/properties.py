@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from commons.cas import format_cas
@@ -18,10 +19,18 @@ from config.loader import (
     get_unit_settings,
 )
 from config.pubchem import get_pubchem_settings
+from config.user_values import get_user_value_settings
 from tools.informatics.helpers.comptox import ComptoxLookup
 from tools.informatics.helpers.pubchem import PubchemFallback, PubchemLookup, build_client
 from tools.informatics.helpers.pubchem.extract import FieldValue
 from tools.schemas import ChemicalProperties, PropertyValue, ToxicityDetail, ToxicityValue
+from tools.user_values import (
+    UserValueInputs,
+    entry_id,
+    missing_entry,
+    supplied_value,
+    user_value_inputs,
+)
 
 # Output fields filled from CompTox; keys must match the configured result keys.
 _PROPERTY_FIELDS = ("vapor_pressure", "density")
@@ -77,6 +86,7 @@ class _Collected:
             "sources": self.sources,
             "toxicity_details": self.details,
             "warnings": self.warnings,
+            "missing": [],
         }
 
 
@@ -232,6 +242,7 @@ def lookup_chemical_properties(
     settings: ComptoxSettings,
     aliases: dict[str, str],
     pubchem: PubchemFallback | None = None,
+    inputs: UserValueInputs | None = None,
 ) -> ChemicalProperties:
     """Collect a chemical's properties from CompTox in the configured target units.
 
@@ -246,6 +257,8 @@ def lookup_chemical_properties(
         settings: CompTox settings; supplies each field's target unit.
         aliases: Unit-spelling aliases passed to the converter.
         pubchem: Fallback for the fields CompTox left empty; None means no fallback.
+        inputs: The user's answers in this thread (values supplied for missing benchmarks and
+            entries declined); None means no answers, so every missing benchmark is listed.
 
     Returns:
         Every field of ``ChemicalProperties``; None where unavailable, with a warning.
@@ -262,7 +275,42 @@ def lookup_chemical_properties(
     _collect_from_comptox(out, cas, comptox, settings, aliases)
     if pubchem is not None:
         _complete_from_pubchem(out, cas, pubchem, aliases)
-    return out.to_properties()
+    answers = inputs or user_value_inputs(None, get_user_value_settings(), aliases)
+    return _with_user_values(out.to_properties(), cas, answers)
+
+
+# Benchmarks the risk results use, with what each one is needed for; only these are asked for.
+_ASKED_BENCHMARKS = {
+    "rfc": "the inhalation risk: the hazard quotient for this chemical",
+    "iur": "the inhalation risk: the cancer risk for this chemical",
+}
+
+
+# `missing` lists the benchmarks that are None and that a result needs, with the accepted units and
+# plausible range of each. It is read by the confirmation node, not by the model, so it is not in
+# the tool description.
+def _with_user_values(
+    props: ChemicalProperties, cas: str, answers: UserValueInputs
+) -> ChemicalProperties:
+    """Fill a missing benchmark from the user's answer, or list it as asked for."""
+    missing = []
+    for quantity, purpose in _ASKED_BENCHMARKS.items():
+        if props[quantity] is not None:
+            continue
+        value = supplied_value(quantity, cas, answers.supplied, answers.settings, answers.aliases)
+        if value is not None:
+            _use_supplied(props, quantity, value)
+        elif entry_id(quantity, cas) not in answers.declined:
+            missing.append(missing_entry(quantity, cas, purpose, answers.settings))
+    props["missing"] = missing
+    return props
+
+
+def _use_supplied(props: ChemicalProperties, quantity: str, value: float) -> None:
+    """Set a value the user supplied, labelled as such, and drop its now-false warning."""
+    props[quantity] = value  # type: ignore[literal-required]
+    props["sources"][quantity] = "user-provided"
+    props["warnings"] = [w for w in props["warnings"] if not w.startswith(f"{quantity}:")]
 
 
 @dataclass(frozen=True)
@@ -287,7 +335,7 @@ def _services() -> _Services:
 
 
 @tool
-def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
+def fetch_chemical_properties(cas_number: str, config: RunnableConfig) -> ChemicalProperties:
     """Fetch physical-chemical properties and toxicity values for a chemical.
 
     Purpose:
@@ -339,10 +387,12 @@ def fetch_chemical_properties(cas_number: str) -> ChemicalProperties:
         the user rather than guessing.
     """
     services = _services()
+    settings = get_user_value_settings()
     return lookup_chemical_properties(
         cas_number,
         services.comptox,
         services.settings,
         services.aliases,
         services.pubchem,
+        inputs=user_value_inputs(config, settings, services.aliases),
     )

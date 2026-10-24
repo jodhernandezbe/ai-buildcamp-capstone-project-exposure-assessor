@@ -18,6 +18,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.completion import CompletionGuard, build_completion_node, route_after_completion
 from agent.guardrails import ScopeGuard, build_scope_node, route_after_scope
+from agent.missing import ask_for_values, route_after_tools
 from agent.state import AgentState
 from prompts.registry import load_prompt
 from tools.registry import get_all_tools
@@ -93,7 +94,9 @@ def build_agent(
     runnable = model.bind_tools(bound_tools) if bound_tools else model
 
     def call_model(state: AgentState) -> AgentState:
-        messages = [SystemMessage(content=prompt_text), *state["messages"]]
+        note = state.get("answers_note", "")
+        instructions = f"{prompt_text}\n\n{note}" if note else prompt_text
+        messages = [SystemMessage(content=instructions), *state["messages"]]
         return {"messages": [runnable.invoke(messages)]}
 
     graph = StateGraph(AgentState)
@@ -101,6 +104,8 @@ def build_agent(
     _add_entry(graph, model, scope_guard)
     if bound_tools:
         graph.add_node("tools", ToolNode(bound_tools))
-        graph.add_edge("tools", "model")
+        graph.add_node("ask", ask_for_values)
+        graph.add_conditional_edges("tools", route_after_tools, {"ask": "ask", "model": "model"})
+        graph.add_edge("ask", END)
     _add_exit(graph, model, completion_guard, bool(bound_tools))
     return graph.compile(checkpointer=checkpointer)

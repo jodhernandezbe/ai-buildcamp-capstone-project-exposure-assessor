@@ -75,11 +75,22 @@
     },
     "ChatRequest": {
       "additionalProperties": false,
-      "description": "Body of ``POST /api/v1/chat/stream``.",
+      "description": "Body of ``POST /api/v1/chat/stream``: a message, or answers to an open request.",
       "properties": {
+        "answers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfirmationAnswers"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "message": {
+          "default": "",
           "maxLength": 8000,
-          "minLength": 1,
           "type": "string"
         },
         "thread_id": {
@@ -88,8 +99,7 @@
         }
       },
       "required": [
-        "thread_id",
-        "message"
+        "thread_id"
       ],
       "title": "ChatRequest",
       "type": "object"
@@ -252,6 +262,135 @@
         "mapping_strength"
       ],
       "title": "ConditionOfUse",
+      "type": "object"
+    },
+    "ConfirmationAnswers": {
+      "additionalProperties": false,
+      "description": "Answers to an open confirmation request: every entry, each answered once.",
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/EntryAnswer"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "type": "array"
+        },
+        "request_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "entries"
+      ],
+      "title": "ConfirmationAnswers",
+      "type": "object"
+    },
+    "ConfirmationPrompt": {
+      "additionalProperties": false,
+      "description": "An open request for missing values: what the user is asked, not yet answered.",
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/MissingValue"
+          },
+          "type": "array"
+        },
+        "request_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "entries"
+      ],
+      "title": "ConfirmationPrompt",
+      "type": "object"
+    },
+    "ConfirmationRequested": {
+      "additionalProperties": false,
+      "description": "The turn stopped to ask the user for missing values; the request stays open.",
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/MissingValue"
+          },
+          "type": "array"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "seq": {
+          "description": "Position of the event in its stream, from 0.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "confirmation_request",
+          "default": "confirmation_request",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "type",
+        "request_id",
+        "entries"
+      ],
+      "title": "ConfirmationRequested",
+      "type": "object"
+    },
+    "EntryAnswer": {
+      "additionalProperties": false,
+      "description": "The user's answer to one missing value: a number in one of its units, or a decline.",
+      "properties": {
+        "decision": {
+          "enum": [
+            "supply",
+            "decline"
+          ],
+          "type": "string"
+        },
+        "entry_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "entry_id",
+        "decision"
+      ],
+      "title": "EntryAnswer",
       "type": "object"
     },
     "ErrorEvent": {
@@ -1060,6 +1199,47 @@
       "title": "Meteorology",
       "type": "object"
     },
+    "MissingValue": {
+      "additionalProperties": false,
+      "description": "One value the assessment needs and could not find, as the user is asked for it.",
+      "properties": {
+        "accepted_units": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entry_id": {
+          "type": "string"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry_id",
+        "quantity",
+        "subject",
+        "accepted_units",
+        "minimum",
+        "maximum",
+        "purpose"
+      ],
+      "title": "MissingValue",
+      "type": "object"
+    },
     "OverviewLayout": {
       "additionalProperties": false,
       "description": "Overview panel height as shares (0-1) of the analysis area.",
@@ -1697,6 +1877,7 @@
       "discriminator": {
         "mapping": {
           "assistant_message": "#/$defs/AssistantMessage",
+          "confirmation_request": "#/$defs/ConfirmationRequested",
           "error": "#/$defs/ErrorEvent",
           "guardrail_pivot": "#/$defs/GuardrailPivotResponse",
           "scope": "#/$defs/ScopeDecision",
@@ -1738,6 +1919,9 @@
           "$ref": "#/$defs/ErrorEvent"
         },
         {
+          "$ref": "#/$defs/ConfirmationRequested"
+        },
+        {
           "$ref": "#/$defs/TurnFinished"
         }
       ],
@@ -1769,6 +1953,17 @@
       "additionalProperties": false,
       "description": "A held thread as of its last finished turn (``GET /api/v1/chat/threads/{id}``).",
       "properties": {
+        "confirmation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfirmationPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "messages": {
           "items": {
             "$ref": "#/$defs/ThreadMessage"
@@ -1789,7 +1984,8 @@
         "thread_id",
         "messages",
         "workspace",
-        "usage"
+        "usage",
+        "confirmation"
       ],
       "title": "ThreadSnapshot",
       "type": "object"

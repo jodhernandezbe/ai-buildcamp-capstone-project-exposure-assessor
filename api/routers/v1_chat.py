@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 from api.dependencies import get_runtime, get_service_keys, get_settings, get_threads
 from api.schemas.chat import ChatRequest, ThreadId, ThreadSnapshot
 from api.services.agent_runner import AgentRuntime, run_turn
+from api.services.confirmation import ConfirmationError, TurnPlan, plan_turn
 from api.services.snapshots import thread_snapshot
 from api.services.sse import encode_event
 from api.services.threads import ThreadStore
@@ -25,10 +26,14 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 async def _frames(
-    body: ChatRequest, keys: ServiceKeys, threads: ThreadStore, runtime: AgentRuntime
+    body: ChatRequest,
+    keys: ServiceKeys,
+    threads: ThreadStore,
+    runtime: AgentRuntime,
+    plan: TurnPlan,
 ) -> AsyncGenerator[str]:
     try:
-        async for event in run_turn(body, keys=keys, threads=threads, runtime=runtime):
+        async for event in run_turn(body, keys=keys, threads=threads, runtime=runtime, plan=plan):
             yield encode_event(event)
     finally:
         threads.release(body.thread_id)
@@ -44,8 +49,13 @@ async def chat_stream(
     """Run one turn of ``thread_id`` and stream its events."""
     if not threads.claim(body.thread_id):
         raise HTTPException(status_code=409, detail=BUSY)
+    try:
+        plan = plan_turn(body, threads)
+    except ConfirmationError as error:
+        threads.release(body.thread_id)
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
     return StreamingResponse(
-        _frames(body, keys, threads, runtime),
+        _frames(body, keys, threads, runtime, plan),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
         background=BackgroundTask(threads.release, body.thread_id),

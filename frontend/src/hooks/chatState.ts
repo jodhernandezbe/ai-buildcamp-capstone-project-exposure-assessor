@@ -1,4 +1,4 @@
-import type { StreamEvent, ThreadSnapshot, UsageTotals } from "../types/workspace";
+import type { ConfirmationPrompt, StreamEvent, ThreadSnapshot, UsageTotals } from "../types/workspace";
 
 export interface ToolStep {
   callId: string;
@@ -25,6 +25,8 @@ export interface ChatState {
   messages: ChatMessage[];
   busy: boolean;
   usage: UsageView | null;
+  /** The open request for missing values the user must answer, if the turn stopped for one. */
+  confirmation: ConfirmationPrompt | null;
 }
 
 export type ChatAction =
@@ -32,10 +34,16 @@ export type ChatAction =
   | { type: "event"; event: StreamEvent }
   | { type: "failed"; message: string }
   | { type: "closed" }
+  | { type: "rejected"; prompt: ConfirmationPrompt | null }
   | { type: "restore"; snapshot: ThreadSnapshot; ids: string[] }
   | { type: "reset" };
 
-export const initialChatState: ChatState = { messages: [], busy: false, usage: null };
+export const initialChatState: ChatState = {
+  messages: [],
+  busy: false,
+  usage: null,
+  confirmation: null,
+};
 
 function updateLastAssistant(
   state: ChatState,
@@ -78,6 +86,11 @@ function onEvent(state: ChatState, event: StreamEvent): ChatState {
       return updateLastAssistant(state, (m) => (m.text ? m : { ...m, text: event.text }));
     case "tool_status":
       return updateLastAssistant(state, (m) => withToolStatus(m, event));
+    case "confirmation_request":
+      return {
+        ...state,
+        confirmation: { request_id: event.request_id, entries: event.entries },
+      };
     case "usage":
       return { ...state, usage: { turn: event.turn, session: event.session } };
     case "error":
@@ -100,7 +113,7 @@ function restored(snapshot: ThreadSnapshot, ids: string[]): ChatState {
     tools: [],
   }));
   const usage = snapshot.usage.calls > 0 ? { turn: null, session: snapshot.usage } : null;
-  return { messages, busy: false, usage };
+  return { messages, busy: false, usage, confirmation: snapshot.confirmation ?? null };
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -109,6 +122,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         busy: true,
+        confirmation: null,
         messages: [
           ...state.messages,
           {
@@ -138,6 +152,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "closed":
       return { ...updateLastAssistant(state, (m) => ({ ...m, streaming: false })), busy: false };
+    case "rejected":
+      // The server refused the reply and recorded nothing: take back the optimistic turn and
+      // show the same request again so the user can correct the answer.
+      return {
+        ...state,
+        messages: state.messages.slice(0, -2),
+        busy: false,
+        confirmation: action.prompt,
+      };
     case "restore":
       return restored(action.snapshot, action.ids);
     case "reset":

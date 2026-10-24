@@ -1,11 +1,10 @@
 ## Why
 
-Today, when a chemical property or stack parameter cannot be found, the assessment silently
+Today, when a chemical benchmark cannot be found, the assessment silently
 carries a null with a warning and the user never learns that a value is missing or gets a
 chance to supply it. A facility or chemical with an incomplete record produces a result that is
 either weaker than it could be or quietly narrower, and the user has no way to fill the gap
-from what they know (for example, a vapor pressure from a safety data sheet, or a stack
-diameter from a permit). The agent should tell the user what is missing and ask: proceed
+from what they know (for example, an inhalation unit risk from a study that CompTox does not hold). The agent should tell the user what is missing and ask: proceed
 without the value, or enter it so it is used in the analysis.
 
 ## What Changes
@@ -45,12 +44,10 @@ without the value, or enter it so it is used in the analysis.
 
 - `agent/`: a stop-and-ask path in the graph that ends the turn with a pending request, and
   resumes from the user's answers on the next turn.
-- `tools/`: optional user-supplied values for chemical properties (`tools/informatics/properties.py`,
-  `tools/schemas.py`) and stack parameters (`tools/emissions/stack.py`, `tools/exposure/`),
-  plus provenance labels in `ChemicalProperties`/`StackParameters`.
+- `tools/`: optional user-supplied values for the chemical benchmarks `rfc` and `iur`
+  (`tools/informatics/properties.py`, `tools/schemas.py`), with the provenance label.
 - `commons/units.py`: reused for conversion; no change expected unless a unit alias is missing.
-- `config/settings.toml`: per-quantity list of accepted entry units; plausible ranges already exist
-  under `[stack.ranges]` and must be extended to the chemistry quantities.
+- `config/settings.toml`: accepted units and plausible ranges for the chemistry quantities.
 - `api/`: new SSE event schema, a reply form on the chat request, thread-scoped pending state.
 - `frontend/`: a confirmation card in `features/chat/` with numeric inputs, unit selectors and
   Confirm / proceed-without controls; generated types in `frontend/src/types/`.

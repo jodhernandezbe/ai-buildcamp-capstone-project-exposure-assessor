@@ -23,6 +23,7 @@ class ChemicalProperties(TypedDict):
     sources: dict[str, str]
     toxicity_details: dict[str, ToxicityDetail]  # rfd/rfc/sf/iur found -> route and endpoint
     warnings: list[str]  # one entry per missing or unconvertible value
+    missing: list[MissingEntry]  # missing values the result needs and the user may still enter
 
 
 class PropertyValue(TypedDict):
@@ -484,3 +485,22 @@ class TriCategoryResult(TypedDict):
     query_cas: str  # the CAS number as given, whitespace stripped
     categories: list[CategoryRef]  # every category that lists it; empty if none does
     warnings: list[str]  # e.g. the CAS number is not valid
+
+
+class MissingEntry(TypedDict):
+    """One value the assessment needs and could not find, to ask the user for."""
+
+    entry_id: str  # unique within the request, e.g. "rfc:1330-20-7" or "stack_height:FAC1-S1"
+    quantity: str  # a key of the user-value settings, e.g. "rfc" or "stack_height"
+    subject: str  # the chemical's CAS number or the facility's stack the value belongs to
+    accepted_units: list[str]  # units the entry takes; the first is the target unit
+    minimum: float  # plausible range in the target unit, inclusive
+    maximum: float
+    purpose: str  # what the requested result uses the value for, in words
+
+
+class ConfirmationRequest(TypedDict):
+    """The values the assessment is waiting on, shown to the user as one request."""
+
+    request_id: str
+    entries: list[MissingEntry]

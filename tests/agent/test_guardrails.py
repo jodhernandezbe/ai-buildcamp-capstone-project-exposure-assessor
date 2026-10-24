@@ -240,13 +240,19 @@ def test_routing_ends_after_a_redirect_and_continues_otherwise() -> None:
 
 def test_without_a_guard_the_graph_has_no_scope_node_and_no_classifier_call() -> None:
     model = ScriptedChatModel([AIMessage(content="agent answer")])  # no classifier scripted
-    assert set(build_agent(model).get_graph().nodes) == {"__start__", "model", "tools", "__end__"}
+    assert set(build_agent(model).get_graph().nodes) == {
+        "__start__",
+        "model",
+        "tools",
+        "ask",
+        "__end__",
+    }
     assert _ask(model, "hi", guard=None)["messages"][-1].content == "agent answer"
 
 
 def test_a_guard_adds_only_the_scope_node() -> None:
     nodes = set(build_agent(_model(), scope_guard=GUARD).get_graph().nodes)
-    assert nodes == {"__start__", "scope", "model", "tools", "__end__"}
+    assert nodes == {"__start__", "scope", "model", "tools", "ask", "__end__"}
 
 
 def test_the_agent_system_prompt_is_the_same_with_or_without_a_guard() -> None:

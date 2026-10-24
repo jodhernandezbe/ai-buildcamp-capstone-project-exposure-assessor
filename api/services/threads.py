@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from langchain_core.messages import BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from api.schemas.workspace import WorkspaceState
 from api.services.usage_meter import CallUsage
+from tools.schemas import ConfirmationRequest
 
 
 class ThreadStore:
@@ -30,6 +31,9 @@ class ThreadStore:
         self._usage: dict[str, list[CallUsage]] = {}
         self._tool_messages: dict[str, list[BaseMessage]] = {}
         self._workspaces: dict[str, WorkspaceState] = {}
+        self._pending: dict[str, ConfirmationRequest] = {}
+        self._supplied: dict[str, dict[str, float]] = {}
+        self._declined: dict[str, set[str]] = {}
 
     def claim(self, thread_id: str) -> bool:
         """Mark the thread as running a turn; False if a turn is already running."""
@@ -94,6 +98,34 @@ class ThreadStore:
         """Remember the workspace just sent for the thread."""
         self._workspaces[thread_id] = state
 
+    def pending(self, thread_id: str) -> ConfirmationRequest | None:
+        """The thread's open confirmation request, or None when nothing is open."""
+        return self._pending.get(thread_id)
+
+    def set_pending(self, thread_id: str, request: ConfirmationRequest | None) -> None:
+        """Open a confirmation request for the thread, or close it (None)."""
+        if request is None:
+            self._pending.pop(thread_id, None)
+        else:
+            self._pending[thread_id] = request
+
+    def answers(self, thread_id: str) -> tuple[dict[str, float], frozenset[str]]:
+        """The values the user supplied in this thread and the entries declined (copies)."""
+        return dict(self._supplied.get(thread_id, {})), frozenset(self._declined.get(thread_id, ()))
+
+    def record_answers(
+        self, thread_id: str, supplied: Mapping[str, float], declined: Iterable[str]
+    ) -> None:
+        """Keep the user's answers for the thread; a value already supplied is never replaced."""
+        self._supplied.setdefault(thread_id, {}).update(
+            {
+                key: value
+                for key, value in supplied.items()
+                if key not in self._supplied.get(thread_id, {})
+            }
+        )
+        self._declined.setdefault(thread_id, set()).update(declined)
+
     def reset(self, thread_id: str) -> bool:
         """Forget the thread's history and usage; False (nothing changed) while a turn runs."""
         if thread_id in self._busy:
@@ -107,3 +139,6 @@ class ThreadStore:
         self._usage.pop(thread_id, None)
         self._tool_messages.pop(thread_id, None)
         self._workspaces.pop(thread_id, None)
+        self._pending.pop(thread_id, None)
+        self._supplied.pop(thread_id, None)
+        self._declined.pop(thread_id, None)
