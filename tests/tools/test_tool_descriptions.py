@@ -32,8 +32,15 @@ REQUIRED = {
         "never supply a name for it",
         "Never a number recalled from a chemical's name",
     ),
+    "find_tri_category": (
+        "not listed in TRI on its own",
+        "its releases cover every member of the category together",
+        "no similarity is involved",
+        "An empty `categories` means",
+    ),
     "find_tri_read_across_surrogate": (
         "has no inhalation benchmark",
+        "member of a TRI category",
         "report `hybrid_read_across_score` and `within_applicability_domain`",
         "never identifies a chemical from its name",
         "a read-across estimate, not a measured value",

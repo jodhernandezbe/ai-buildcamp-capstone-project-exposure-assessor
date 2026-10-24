@@ -12,6 +12,7 @@ from langchain_core.tools import tool
 
 from commons.cas import format_cas
 from config.assessment import AssessmentSettings, get_assessment_settings
+from config.read_across import get_read_across_settings
 from tools.assessment.helpers.chain import assess_all, refine_all, worst_case_only
 from tools.assessment.helpers.screening import can_screen, unit_bound
 from tools.assessment.helpers.steps import Steps
@@ -25,6 +26,7 @@ from tools.exposure.meteorology import get_meteorological_boundary
 from tools.exposure.metrics import calculate_exposure_metrics
 from tools.exposure.population import get_population_receptors
 from tools.informatics.properties import fetch_chemical_properties
+from tools.informatics.read_across import find_tri_read_across_surrogate
 from tools.schemas import (
     AssessmentArtifact,
     AssessmentResult,
@@ -34,10 +36,12 @@ from tools.schemas import (
     NeiStackResult,
     NotAssessed,
     Population,
+    ReadAcrossMatch,
     SccLookupResult,
     StackParameters,
     Toxicity,
 )
+from tools.tri_categories import get_category_index
 
 logger = logging.getLogger(__name__)
 Outcome = tuple[AssessmentResult, AssessmentArtifact]
@@ -224,6 +228,115 @@ def _artifact(f: Findings) -> AssessmentArtifact:
     )
 
 
+def _has_benchmark(tox: Toxicity) -> bool:
+    return tox["rfc"] is not None or tox["iur"] is not None
+
+
+def _out_of_domain_note(cas: str, match: ReadAcrossMatch) -> str:
+    return (
+        f"{cas} has no benchmark of its own; the nearest TRI chemical "
+        f"{match['surrogate_tri_cas']} scores {match['hybrid_read_across_score']} against an "
+        f"applicability-domain threshold of {_threshold()}, so it was not used as a stand-in"
+    )
+
+
+def _estimate_note(cas: str, analogue: str, match: ReadAcrossMatch) -> str:
+    return (
+        f"the benchmarks are a read-across estimate from {analogue} ({match['surrogate_name']}), "
+        f"a structural analogue (hybrid score {match['hybrid_read_across_score']}, "
+        f"applicability-domain threshold {_threshold()}); they are not measured values for "
+        f"{cas}. The analogue's molecular-weight scaling factor ({match['mw_scaling_factor']}) "
+        "was not applied"
+    )
+
+
+def _stand_in(
+    cas: str, analogue: str, match: ReadAcrossMatch, warnings: list[str]
+) -> tuple[Toxicity, str, list[str]] | None:
+    """The analogue's benchmarks with their label and note, or None if it has none."""
+    found = fetch_chemical_properties.invoke({"cas_number": analogue})
+    values = Toxicity(rfc=found["rfc"], iur=found["iur"])
+    if not _has_benchmark(values):
+        return None
+    label = f"read-across from {analogue}, hybrid score {match['hybrid_read_across_score']}"
+    return values, label, [*warnings, _estimate_note(cas, analogue, match)]
+
+
+def _analogue_toxicity(
+    cas: str, tox: Toxicity, source: str, warnings: list[str]
+) -> tuple[Toxicity, str, list[str]]:
+    """When the chemical has no benchmark of its own, the nearest TRI analogue's, if in domain.
+
+    The analogue's values are used as they are (its molecular-weight scaling factor is only
+    reported, as the read-across tool does), are labelled with the analogue, its hybrid score
+    and the applicability-domain threshold, and the result says they are estimates.
+    """
+    if source != "CompTox" or _has_benchmark(tox):
+        return tox, source, warnings
+    match = find_tri_read_across_surrogate.invoke({"cas_number": cas})
+    analogue = match["surrogate_tri_cas"]
+    if analogue is None or match["resolution_method"] != "hybrid_read_across":
+        return tox, source, warnings
+    if not match["within_applicability_domain"]:
+        return tox, source, [*warnings, _out_of_domain_note(cas, match)]
+    return _stand_in(cas, analogue, match, warnings) or (tox, source, warnings)
+
+
+def _threshold() -> float:
+    return get_read_across_settings().min_hybrid_score
+
+
+def _keep_larger(
+    found: dict[tuple[str, str], EmissionRecord], records: list[EmissionRecord]
+) -> int:
+    """Add each record to ``found`` (one per facility and medium, the larger release kept).
+
+    Returns:
+        How many of ``records`` were already in ``found``, i.e. shared with another category.
+    """
+    shared = 0
+    for record in records:
+        key = (record["frs_id"], record["environmental_medium"])
+        held = found.get(key)
+        if held is None:
+            found[key] = record
+            continue
+        shared += 1
+        if record["emission_rate"] > held["emission_rate"]:
+            found[key] = record
+    return shared
+
+
+def category_records(
+    cas: str, place: tuple[str | None, str | None]
+) -> tuple[list[EmissionRecord], list[str]]:
+    """The facilities of the TRI categories listing ``cas``, with a note saying so (else none)."""
+    categories = get_category_index().lookup(cas).categories
+    if not categories:
+        return [], []
+    found: dict[tuple[str, str], EmissionRecord] = {}
+    shared = sum(_keep_larger(found, inventory_listing(c.code, *place)[1]) for c in categories)
+    named = "; ".join(f"{c.code} ({c.name})" for c in categories)
+    notes = [
+        f"{cas} has no TRI release of its own: its facilities are those of TRI category {named}, "
+        "whose releases cover every member of the category together, not this chemical alone"
+    ]
+    if shared:
+        notes.append(
+            f"{shared} facility record(s) report under more than one of these categories; the "
+            "larger release of each is kept"
+        )
+    return list(found.values()), notes
+
+
+def _inventory(
+    cas: str, place: tuple[str | None, str | None]
+) -> tuple[list[EmissionRecord], list[str]]:
+    """The chemical's own TRI facilities; if TRI has none, those of its categories."""
+    _, own = inventory_listing(cas, *place)
+    return (own, []) if own else category_records(cas, place)
+
+
 def run_assessment(
     cas_number: str,
     frs_ids: list[str] | None,
@@ -241,10 +354,11 @@ def run_assessment(
         f = Findings(None, empty, 0, [], [], [], None, True, [], [warning])
         view = assessment_view(f, settings.max_worst_case_listed, settings.max_screened_out_listed)
         return view, _artifact(f)
-    _, records = inventory_listing(cas, *place)
+    records, notes = _inventory(cas, place)
     tox, source, warnings = _toxicity(cas, toxicity)
+    tox, source, warnings = _analogue_toxicity(cas, tox, source, warnings)
     steps = replace(steps, scc=_once_per_title(steps.scc))
-    call = _Call(cas, records, tox, source, warnings, radius_km, steps, settings)
+    call = _Call(cas, records, tox, source, [*warnings, *notes], radius_km, steps, settings)
     findings = _by_id(call, frs_ids) if frs_ids else _screened(call)
     listed = (settings.max_worst_case_listed, settings.max_screened_out_listed)
     return assessment_view(findings, *listed), _artifact(findings)
@@ -272,7 +386,14 @@ def assess_facilities(
         (3) the highest worst-case risks get the weather at the site, the residents and the
         representative case (`facilities`); the rest keep their own-stack worst case
         (`worst_case_only`). Call it once the chemical's CAS number is known (the inventory
-        need not be listed first). Give `frs_ids` only when the user asks about particular
+        need not be listed first). A chemical TRI does not list on its own but reports under a
+        category (`query_categories` of the read-across result) is assessed on its category's
+        facilities: the result's warnings say so, and that its releases cover every member of
+        the category together, not this chemical alone. When the chemical has no benchmark of
+        its own, the nearest TRI analogue's are used only if it is inside the applicability
+        domain; `toxicity_source` then names the analogue and its score, and the warnings say the
+        values are estimates. Report both in the answer, as the result states them.
+        Give `frs_ids` only when the user asks about particular
         facilities: they are then fully assessed without screening. Each facility's result
         already includes its stacks, the weather at its site and the residents around it.
         Report every facility in `facilities` in the results table and every one in

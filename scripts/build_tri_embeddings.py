@@ -12,6 +12,11 @@ The catalog is written as one shard per leading CAS digit, so each committed fil
 Shards are staged beside their targets and renamed together, so a failed build leaves the
 committed catalog as it was.
 
+The organic members of the TRI categories (``[tri_categories]``) are added as further
+candidates, marked as coming from a category and carrying their category codes; inorganic
+members are left out because the structure encoder is not meaningful for metals and salts, and
+a member that is a discrete TRI chemical stays a TRI-list row.
+
 Usage: ``uv run python -m scripts.build_tri_embeddings [--directory PATH]``
 Default output: ``[read_across].directory``.
 """
@@ -31,7 +36,13 @@ import httpx
 from config.efservice import EfserviceSettings, get_efservice_settings
 from config.read_across import CatalogColumns, ReadAcrossSettings, get_read_across_settings
 from tools.http import RetryingClient
-from tools.informatics.helpers.read_across.catalog import Columns, read_shards, write_columns
+from tools.informatics.helpers.read_across.catalog import (
+    SOURCE_TRI_CATEGORY,
+    SOURCE_TRI_LIST,
+    Columns,
+    read_shards,
+    write_columns,
+)
 from tools.informatics.helpers.read_across.moldeberta import SmilesEmbedder, default_embedder
 from tools.informatics.helpers.read_across.pubchem import PubchemCompound, fetch_compound
 from tools.informatics.helpers.read_across.structure import Structure, describe
@@ -41,6 +52,7 @@ from tools.informatics.helpers.read_across.tri_list import (
     discrete_chemicals,
     fetch_rows,
 )
+from tools.tri_categories import Category, CategoryIndex, get_category_index
 
 _FILE_MODE = 0o644  # a data file committed to the repository
 
@@ -54,6 +66,16 @@ class Services:
     pubchem_client: RetryingClient
     embedder: SmilesEmbedder
     settings: ReadAcrossSettings
+    categories: CategoryIndex
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One chemical to write: where it came from and the categories (if any) that list it."""
+
+    chemical: TriChemical
+    source: str
+    categories: tuple[Category, ...]
 
 
 @dataclass(frozen=True)
@@ -66,6 +88,9 @@ class BuildReport:
         dropped: Rows of the TRI list left out, per reason.
         unresolved: (CAS number, reason) of listed chemicals with no usable structure.
         shards: The shard files written.
+        categories: Category members, by outcome: "added" (written), "skipped_inorganic",
+            "already_listed" (a discrete TRI chemical, written once as such) and
+            "unresolved" (no usable structure; also in ``unresolved``).
     """
 
     kept: int
@@ -73,6 +98,7 @@ class BuildReport:
     dropped: Mapping[str, int]
     unresolved: tuple[tuple[str, str], ...]
     shards: tuple[Path, ...]
+    categories: Mapping[str, int]
 
 
 def known_smiles(settings: ReadAcrossSettings) -> dict[str, str]:
@@ -104,21 +130,25 @@ def _structure(
     return structure if structure is not None else f"SMILES {smiles!r} cannot be parsed"
 
 
-def _row(chemical: TriChemical, structure: Structure, services: Services) -> dict[str, object]:
+def _row(candidate: Candidate, structure: Structure, services: Services) -> dict[str, object]:
     c = services.settings.columns
     return {
-        c.cas: chemical.cas,
-        c.name: chemical.name,
+        c.cas: candidate.chemical.cas,
+        c.name: candidate.chemical.name,
         c.smiles: structure.smiles,
         c.molecular_weight: structure.molecular_weight,
         c.embedding: services.embedder(structure.smiles).astype(float).tolist(),
         c.bits: structure.bits.astype(int).tolist(),
+        c.source: candidate.source,
+        c.category_codes: [category.code for category in candidate.categories],
+        c.category_names: [category.name for category in candidate.categories],
     }
 
 
 def _as_columns(rows: Sequence[dict[str, object]], columns: CatalogColumns) -> Columns:
     names = (columns.cas, columns.name, columns.smiles, columns.molecular_weight)
     names += (columns.embedding, columns.bits)
+    names += (columns.source, columns.category_codes, columns.category_names)
     return {name: [row[name] for row in rows] for name in names}
 
 
@@ -164,8 +194,43 @@ def write_shards(rows: Sequence[dict[str, object]], settings: ReadAcrossSettings
     return targets
 
 
+def category_candidates(
+    index: CategoryIndex, listed: set[str]
+) -> tuple[list[Candidate], dict[str, int]]:
+    """The organic category members that are not discrete TRI chemicals, and how the rest fell."""
+    counts = {"skipped_inorganic": 0, "already_listed": 0}
+    found: list[Candidate] = []
+    for member in index.members.values():
+        if member.cas in listed:
+            counts["already_listed"] += 1
+        elif not member.organic:
+            counts["skipped_inorganic"] += 1
+        else:
+            found.append(
+                Candidate(
+                    TriChemical(member.cas, member.name), SOURCE_TRI_CATEGORY, member.categories
+                )
+            )
+    return found, counts
+
+
+def _resolve_all(
+    candidates: Sequence[Candidate], known: Mapping[str, str], services: Services
+) -> tuple[list[dict[str, object]], list[tuple[str, str]]]:
+    """A catalog row for each candidate with a usable structure, and the ones without."""
+    built: list[dict[str, object]] = []
+    unresolved: list[tuple[str, str]] = []
+    for candidate in candidates:
+        structure = _structure(candidate.chemical, known, services)
+        if isinstance(structure, str):
+            unresolved.append((candidate.chemical.cas, structure))
+        else:
+            built.append(_row(candidate, structure, services))
+    return built, unresolved
+
+
 def build_catalog(services: Services) -> BuildReport:
-    """Rebuild the catalog from the current TRI list.
+    """Rebuild the catalog from the current TRI list and the TRI category members.
 
     Raises:
         TriListError: If the TRI list cannot be read; the catalog is then left unchanged.
@@ -174,20 +239,31 @@ def build_catalog(services: Services) -> BuildReport:
     settings = services.settings
     rows = fetch_rows(services.efservice_client, services.efservice, settings.tri_list)
     listed = discrete_chemicals(rows, settings.tri_list)
+    members, counts = category_candidates(services.categories, {c.cas for c in listed.chemicals})
+    candidates = [Candidate(c, SOURCE_TRI_LIST, ()) for c in listed.chemicals] + members
     known = known_smiles(settings)
-    built: list[dict[str, object]] = []
-    unresolved: list[tuple[str, str]] = []
-    for chemical in listed.chemicals:
-        structure = _structure(chemical, known, services)
-        if isinstance(structure, str):
-            unresolved.append((chemical.cas, structure))
-        else:
-            built.append(_row(chemical, structure, services))
+    built, unresolved = _resolve_all(candidates, known, services)
     if not built:
         raise ValueError("no TRI chemical could be resolved to a structure")
     shards = write_shards(built, settings)
     reused = sum(1 for row in built if row[settings.columns.cas] in known)
-    return BuildReport(len(built), reused, listed.dropped, tuple(unresolved), tuple(shards))
+    outcome = _category_outcome(counts, members, built, settings, unresolved)
+    return BuildReport(
+        len(built), reused, listed.dropped, tuple(unresolved), tuple(shards), outcome
+    )
+
+
+def _category_outcome(
+    counts: dict[str, int],
+    members: Sequence[Candidate],
+    built: Sequence[dict[str, object]],
+    settings: ReadAcrossSettings,
+    unresolved: Sequence[tuple[str, str]],
+) -> dict[str, int]:
+    from_category = {m.chemical.cas for m in members}
+    failed = {cas for cas, _ in unresolved} & from_category
+    written = {str(row[settings.columns.cas]) for row in built} & from_category
+    return {**counts, "added": len(written), "unresolved": len(failed)}
 
 
 def report_lines(report: BuildReport, target: Path) -> list[str]:
@@ -197,6 +273,7 @@ def report_lines(report: BuildReport, target: Path) -> list[str]:
         f"({report.reused} SMILES reused)"
     ]
     lines += [f"dropped {count}: {reason}" for reason, count in sorted(report.dropped.items())]
+    lines += [f"category members {reason}: {n}" for reason, n in sorted(report.categories.items())]
     lines += [f"unresolved {cas}: {reason}" for cas, reason in report.unresolved]
     return lines
 
@@ -218,6 +295,7 @@ def main(argv: Sequence[str]) -> int:
             pubchem_client=RetryingClient(settings.pubchem, http),
             embedder=default_embedder(settings.model),
             settings=settings,
+            categories=get_category_index(),
         )
         try:
             report = build_catalog(services)

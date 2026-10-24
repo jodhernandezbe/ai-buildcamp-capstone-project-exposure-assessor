@@ -58,3 +58,15 @@ def test_requires_visible_quality_signals_and_limits() -> None:
         "never end a reply by announcing what you will do next",
     ):
         assert text.lower() in " ".join(PROMPT.split()).lower()  # line wrapping is irrelevant
+
+
+def test_a_category_match_is_disclosed_and_tried_before_an_analogue() -> None:
+    text = " ".join(PROMPT.split()).lower()
+    for phrase in (
+        "matched through that category",
+        "reported releases cover every member together",
+        "before looking for an analogue",
+        "an analogue is sought only when the chemical is in no category",
+        "never taken from the category",
+    ):
+        assert phrase in text

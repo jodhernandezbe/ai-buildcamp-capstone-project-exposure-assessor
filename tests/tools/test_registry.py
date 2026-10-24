@@ -11,6 +11,7 @@ def test_all_tools_registered_with_docstrings() -> None:
     tools = get_all_tools()
     assert {t.name for t in tools} == {
         "fetch_chemical_properties",
+        "find_tri_category",
         "find_tri_read_across_surrogate",
         "query_emissions_inventory",
         "fetch_facility_industry",

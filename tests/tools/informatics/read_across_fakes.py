@@ -15,9 +15,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from config.read_across import ReadAcrossSettings, load_read_across_settings
+from config.tri_categories import load_tri_categories_settings
 from tools.http import RetryingClient
 from tools.informatics.helpers.read_across.catalog import write_columns
 from tools.informatics.helpers.read_across.structure import describe
+from tools.tri_categories import CategoryIndex, load_index
 
 WIDTH = 768
 
@@ -124,3 +126,13 @@ def answer(body: object, status: int = 200) -> Handler:
 
 def no_network(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected request to {request.url}")
+
+
+CATEGORY_HEADER = "CAS NUMBER,CATEGORY CODE,CATEGORY NAME,CHEMICAL NAME,CHEMICAL TYPE,SOURCE"
+
+
+def category_index(tmp_path: Path, *rows: str) -> CategoryIndex:
+    """A category index read from ``rows`` (CSV lines, the shipped column order)."""
+    path = tmp_path / "categories.csv"
+    path.write_text("\n".join([CATEGORY_HEADER, *rows]) + "\n", encoding="utf-8")
+    return load_index(replace(load_tri_categories_settings(), path=path))

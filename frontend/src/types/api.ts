@@ -316,7 +316,7 @@ export interface Chemical {
 export interface ReadAcross {
   cosine_similarity: number | null;
   hybrid_score: number | null;
-  kind: "not_evaluated" | "direct_tri_match" | "read_across" | "unresolved";
+  kind: "not_evaluated" | "direct_tri_match" | "tri_category_member" | "read_across" | "unresolved";
   surrogate_cas: string | null;
   surrogate_name: string | null;
   tanimoto_similarity: number | null;

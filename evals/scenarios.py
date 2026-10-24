@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from evals import checks as c
-from evals.judges import ASKS_FOR_CAS, COMPLETE_ASSESSMENT_REPORT, Judge
+from evals.judges import ASKS_FOR_CAS, CATEGORY_MATCH_DISCLOSED, COMPLETE_ASSESSMENT_REPORT, Judge
 
 
 @dataclass(frozen=True)
@@ -66,9 +66,32 @@ FULL_ASSESSMENT = Scenario(
     extra_calls=(ExtraCall(c.ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS}),),
 )
 
+# 2-Chlorophenol is not a discrete TRI chemical; TRI reports it under the chlorophenols
+# category (N084). The agent must find that category before seeking an analogue, say so, and say
+# the releases cover the whole category. Blocked until its cassette is recorded (it costs tokens:
+# `uv run python -m evals record category-member-chlorophenol`) and the batch assessment can be
+# given a category code (see the change's open question).
+CATEGORY_MEMBER_CAS = "95-57-8"
+
+CATEGORY_MEMBER = Scenario(
+    id="category-member-chlorophenol",
+    query=(
+        "Assess the inhalation exposure and health risk from air releases of "
+        f"CAS {CATEGORY_MEMBER_CAS}."
+    ),
+    checks=(
+        c.completed(),
+        c.called_with("find_tri_read_across_surrogate", cas_number=CATEGORY_MEMBER_CAS),
+        c.called_with("query_emissions_inventory", cas_number="N084"),
+    ),
+    judges=(CATEGORY_MATCH_DISCLOSED,),
+    blocked="cassette not recorded yet",
+)
+
 CATALOGUE: tuple[Scenario, ...] = (
     CHEMICAL_NAME_ONLY,
     FULL_ASSESSMENT,
+    CATEGORY_MEMBER,
     Scenario("nei-empty-process-fallback", "", blocked=_NOT_WRITTEN),
     Scenario("unknown-industry-global-default", "", blocked=_NOT_WRITTEN),
     Scenario("scc-search-empty", "", blocked=_NOT_WRITTEN),

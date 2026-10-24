@@ -24,6 +24,19 @@ ASKS_FOR_CAS = Judge(
     ),
 )
 
+CATEGORY_MATCH_DISCLOSED = Judge(
+    name="category match disclosed",
+    criteria=(
+        "The text is a screening-level assessment report for a chemical that TRI does not list "
+        "on its own but reports as a member of a TRI category. PASS only if ALL of these hold: "
+        "(1) it says the chemical was matched through a TRI category and names that category; "
+        "(2) it says the reported releases cover every member of the category together, so they "
+        "are not a measured release of this one chemical; (3) it does not present a "
+        "structurally similar chemical's value as this chemical's own measured value. "
+        "Otherwise FAIL."
+    ),
+)
+
 COMPLETE_ASSESSMENT_REPORT = Judge(
     name="complete assessment report",
     criteria=(

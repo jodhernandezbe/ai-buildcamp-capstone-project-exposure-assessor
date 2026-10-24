@@ -5,6 +5,7 @@ import { CardFrame, Metric } from "./Metric";
 // "not_evaluated" has no badge: nothing was looked up yet, which the empty card already says.
 const BADGES: Partial<Record<ReadAcross["kind"], { label: string; tone: string }>> = {
   direct_tri_match: { label: "Direct TRI match", tone: "bg-ok/15 text-ok" },
+  tri_category_member: { label: "TRI category member", tone: "bg-ok/15 text-ok" },
   read_across: { label: "Read-across surrogate", tone: "bg-accent/15 text-accent" },
   unresolved: { label: "Unresolved", tone: "bg-bad/15 text-bad" },
 };

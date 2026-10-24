@@ -77,7 +77,7 @@ class FingerprintSettings:
 
 @dataclass(frozen=True)
 class CatalogColumns:
-    """Column names of the read-across catalog (the last two are optional columns)."""
+    """Column names of the read-across catalog (the last five are optional columns)."""
 
     cas: str
     name: str
@@ -87,6 +87,9 @@ class CatalogColumns:
     bits: str
     benchmark_flag: str
     naics_prefixes: str
+    source: str
+    category_codes: str
+    category_names: str
 
 
 @dataclass(frozen=True)

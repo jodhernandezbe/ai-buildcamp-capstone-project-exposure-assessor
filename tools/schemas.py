@@ -296,6 +296,13 @@ class FacilityIndustry(TypedDict):
     warnings: list[str]  # why a value is missing, or that EPA assigned the code
 
 
+class CategoryRef(TypedDict):
+    """A TRI category a chemical is reported under."""
+
+    code: str  # group code (N420) or, for a single-substance entry, its hyphenated CAS number
+    name: str  # category name as TRI gives it
+
+
 class ReadAcrossMatch(TypedDict):
     """The TRI chemical closest to a query chemical (itself, or a read-across surrogate).
 
@@ -316,7 +323,11 @@ class ReadAcrossMatch(TypedDict):
     hybrid_read_across_score: float | None  # alpha * cosine + (1 - alpha) * Tanimoto
     mw_scaling_factor: float | None  # query_mw / surrogate_mw; reported, never applied
     within_applicability_domain: bool  # hybrid score >= the configured threshold
-    resolution_method: Literal["direct_tri_catalog_match", "hybrid_read_across", "unresolved"]
+    resolution_method: Literal[
+        "direct_tri_catalog_match", "tri_category_member", "hybrid_read_across", "unresolved"
+    ]
+    query_categories: list[CategoryRef]  # TRI categories that list the query chemical (often none)
+    surrogate_category: CategoryRef | None  # category TRI reports the surrogate under, if any
     warnings: list[str]  # why a value is None, filters not applied, or out of domain
 
 
@@ -465,3 +476,11 @@ class AssessmentResult(TypedDict):
     not_assessed: list[NotAssessed]
     note: str | None  # what was left out of the listing
     warnings: list[str]
+
+
+class TriCategoryResult(TypedDict):
+    """Which TRI categories list a CAS number (membership only; nothing is estimated)."""
+
+    query_cas: str  # the CAS number as given, whitespace stripped
+    categories: list[CategoryRef]  # every category that lists it; empty if none does
+    warnings: list[str]  # e.g. the CAS number is not valid

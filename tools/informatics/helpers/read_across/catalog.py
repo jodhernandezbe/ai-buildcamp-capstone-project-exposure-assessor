@@ -31,6 +31,8 @@ _MIN_CHEMICALS = 2  # a one-chemical catalog is its own mean, so it cannot be ce
 _VECTOR_TYPE = "float32"  # the stored embedding element type
 _BIT_TYPE = "int8"  # the stored fingerprint element type (values 0 and 1)
 _COMPRESSION = "zstd"
+SOURCE_TRI_LIST = "tri_list"  # a chemical TRI lists on its own
+SOURCE_TRI_CATEGORY = "tri_category"  # an organic member of a TRI category
 
 type Columns = dict[str, list[object]]
 
@@ -55,6 +57,11 @@ class Catalog:
             has no such column.
         naics_prefixes: NAICS prefixes each chemical is reported under, or None if the
             catalog has no such column.
+        sources: Where each row came from ("tri_list" or "tri_category"), or None if the
+            catalog has no such column.
+        category_codes: TRI category codes each chemical is reported under (empty for a
+            chemical of the TRI list), or None if the catalog has no such column.
+        category_names: Names of those categories, in the same order, or None likewise.
     """
 
     cas: tuple[str, ...]
@@ -67,6 +74,9 @@ class Catalog:
     bits: NDArray[np.uint8]
     benchmark_flags: NDArray[np.bool_] | None
     naics_prefixes: tuple[tuple[str, ...], ...] | None
+    sources: tuple[str, ...] | None
+    category_codes: tuple[tuple[str, ...], ...] | None
+    category_names: tuple[tuple[str, ...], ...] | None
 
     def __len__(self) -> int:
         """Number of chemicals."""
@@ -80,7 +90,6 @@ class Catalog:
         """Return the rows where ``keep`` is True (new read-only arrays)."""
         rows = [i for i, kept in enumerate(keep.tolist()) if kept]
         flags = self.benchmark_flags
-        naics = self.naics_prefixes
         return Catalog(
             cas=tuple(self.cas[i] for i in rows),
             names=tuple(self.names[i] for i in rows),
@@ -91,8 +100,22 @@ class Catalog:
             centered_embeddings=_frozen(self.centered_embeddings[keep]),
             bits=_frozen(self.bits[keep]),
             benchmark_flags=None if flags is None else _frozen(flags[keep]),
-            naics_prefixes=None if naics is None else tuple(naics[i] for i in rows),
+            naics_prefixes=_pick(self.naics_prefixes, rows),
+            sources=_pick(self.sources, rows),
+            category_codes=_pick(self.category_codes, rows),
+            category_names=_pick(self.category_names, rows),
         )
+
+    def category_of(self, row: int) -> tuple[str, str] | None:
+        """The first TRI category (code, name) row ``row`` is reported under, if any."""
+        if self.category_codes is None or self.category_names is None:
+            return None
+        codes, names = self.category_codes[row], self.category_names[row]
+        return (codes[0], names[0]) if codes and names else None
+
+
+def _pick[T](values: tuple[T, ...] | None, rows: list[int]) -> tuple[T, ...] | None:
+    return None if values is None else tuple(values[i] for i in rows)
 
 
 def _frozen[T: np.generic](array: NDArray[T]) -> NDArray[T]:
@@ -122,6 +145,9 @@ def write_columns(columns: Columns, path: Path, catalog: CatalogColumns) -> None
     for name, element in ((catalog.embedding, _VECTOR_TYPE), (catalog.bits, _BIT_TYPE)):
         if name in typed:
             typed[name] = _list_array(columns[name], element)
+    for name in (catalog.category_codes, catalog.category_names):
+        if name in typed:
+            typed[name] = _list_array(columns[name], "string")  # empty lists stay list<string>
     table = pa.table(typed)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     pq.write_table(  # pyright: ignore[reportUnknownMemberType]
         table,  # pyright: ignore[reportUnknownArgumentType]
@@ -208,6 +234,9 @@ class _Reader:
             raise self.fail(name, "must hold true or false")
         return _frozen(np.asarray(values, dtype=np.bool_))
 
+    def optional_strings(self, name: str) -> tuple[str, ...] | None:
+        return self.strings(name) if name in self._columns else None
+
     def prefixes(self, name: str) -> tuple[tuple[str, ...], ...] | None:
         if name not in self._columns:
             return None
@@ -274,6 +303,9 @@ def _build(reader: _Reader, columns: CatalogColumns, settings: ReadAcrossSetting
         bits=reader.bits(columns.bits, settings.fingerprint.n_bits),
         benchmark_flags=reader.flags(columns.benchmark_flag),
         naics_prefixes=reader.prefixes(columns.naics_prefixes),
+        sources=reader.optional_strings(columns.source),
+        category_codes=reader.prefixes(columns.category_codes),
+        category_names=reader.prefixes(columns.category_names),
     )
 
 

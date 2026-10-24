@@ -15,6 +15,11 @@ def project_properties(exchange: ToolExchange, ledger: Ledger) -> None:
         ledger.properties = (cas, result)
 
 
+def project_category(exchange: ToolExchange, ledger: Ledger) -> None:
+    """Category membership is shown through the read-across card; this only records the CAS."""
+    ledger.note_cas(exchange)
+
+
 def project_read_across(exchange: ToolExchange, ledger: Ledger) -> None:
     """The read-across outcome of the CAS number the model asked about."""
     result = ledger.read(exchange, ReadAcrossPayload)

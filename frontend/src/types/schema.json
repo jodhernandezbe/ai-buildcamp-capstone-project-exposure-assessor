@@ -1168,6 +1168,7 @@
           "enum": [
             "not_evaluated",
             "direct_tri_match",
+            "tri_category_member",
             "read_across",
             "unresolved"
           ],

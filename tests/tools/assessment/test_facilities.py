@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import ToolMessage
 
 from tests.tools.assessment.factories import SETTINGS, FakeSteps, match, record, stack
+from tests.tools.informatics.read_across_fakes import category_index
 from tools.assessment import facilities
 from tools.assessment.facilities import assess_facilities, run_assessment
 from tools.emissions.helpers.inventory.listing import rank_and_cap
@@ -229,3 +231,151 @@ def test_schema() -> None:
         "radius_km",
         "toxicity",
     }
+
+
+MEMBER = "95-57-8"  # 2-chlorophenol: not in TRI on its own, a member of category N084
+
+
+def _member_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    own: list[EmissionRecord],
+    by_code: Mapping[str, list[EmissionRecord]],
+    rows: tuple[str, ...] = (
+        "95-57-8,N084,CHLOROPHENOLS,2-chlorophenol,Organic,x",
+        "95-57-8,N085,SECOND GROUP,2-chlorophenol,Organic,x",
+    ),
+) -> list[str]:
+    asked: list[str] = []
+
+    def listing(cas: str, state: str | None = None, city: str | None = None):  # noqa: ANN202
+        asked.append(cas)
+        return rank_and_cap(own if cas == MEMBER else by_code.get(cas, []), 25, state, city)
+
+    monkeypatch.setattr(facilities, "inventory_listing", listing)
+    monkeypatch.setattr(facilities, "get_category_index", lambda: category_index(tmp_path, *rows))
+    return asked
+
+
+def test_member_without_own_releases_is_assessed_on_its_category(
+    monkeypatch: pytest.MonkeyPatch,
+    _offline: FakeSteps,
+    tmp_path: Path,
+) -> None:
+    asked = _member_setup(
+        monkeypatch,
+        tmp_path,
+        own=[],
+        by_code={"N084": [record("PLANT_A", emission_rate=5.0)]},
+    )
+    view, artifact = run_assessment(
+        MEMBER, None, (None, None), None, None, facilities.default_steps()
+    )
+    assert asked == [MEMBER, "N084", "N085"]
+    assert _ids(view["facilities"]) == ["PLANT_A"]
+    assert artifact["assessed"] or artifact["screened_out"]
+    assert any("TRI category N084" in w and "every member" in w for w in view["warnings"])
+    assert PROPERTIES_CALLS == [MEMBER]  # the benchmark is still the chemical's own
+
+
+def test_shared_facility_across_categories_keeps_the_larger_release(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _member_setup(
+        monkeypatch,
+        tmp_path,
+        own=[],
+        by_code={
+            "N084": [record("SHARED", emission_rate=2.0)],
+            "N085": [record("SHARED", emission_rate=7.0)],
+        },
+    )
+    records, notes = facilities.category_records(MEMBER, (None, None))
+    assert [(r["frs_id"], r["emission_rate"]) for r in records] == [("SHARED", 7.0)]
+    assert any("more than one" in n for n in notes)
+
+
+def test_own_releases_win_over_the_categories(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps, tmp_path: Path
+) -> None:
+    asked = _member_setup(
+        monkeypatch,
+        tmp_path,
+        own=[record("OWN", emission_rate=3.0)],
+        by_code={"N084": [record("CAT", emission_rate=9.0)]},
+    )
+    view, _ = run_assessment(MEMBER, None, (None, None), None, None, facilities.default_steps())
+    assert asked == [MEMBER]
+    assert "CAT" not in _ids(view["facilities"])
+    assert not any("has no TRI release of its own" in w for w in view["warnings"])
+
+
+ANALOGUE = "110-54-3"
+
+
+class _Read:
+    """A read-across answer; ``invoke`` mirrors the tool's call signature."""
+
+    def __init__(self, match: dict[str, object]) -> None:
+        self.match = match
+        self.calls: list[str] = []
+
+    def invoke(self, args: dict[str, str]) -> dict[str, object]:
+        self.calls.append(args["cas_number"])
+        return self.match
+
+
+def _hybrid(in_domain: bool) -> dict[str, object]:
+    return {
+        "surrogate_tri_cas": ANALOGUE,
+        "surrogate_name": "n-Hexane",
+        "resolution_method": "hybrid_read_across",
+        "hybrid_read_across_score": 0.66 if in_domain else 0.41,
+        "within_applicability_domain": in_domain,
+        "mw_scaling_factor": 1.5,
+    }
+
+
+def _no_own_benchmark(monkeypatch: pytest.MonkeyPatch, read: _Read) -> None:
+    class Properties:
+        @staticmethod
+        def invoke(args: dict[str, str]) -> dict[str, object]:
+            if args["cas_number"] == ANALOGUE:
+                return {"rfc": 0.2, "iur": None, "warnings": []}
+            return {"rfc": None, "iur": None, "warnings": ["rfc: not found"]}
+
+    monkeypatch.setattr(facilities, "fetch_chemical_properties", Properties)
+    monkeypatch.setattr(facilities, "find_tri_read_across_surrogate", read)
+
+
+def test_in_domain_analogue_supplies_the_benchmarks_and_says_so(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps
+) -> None:
+    read = _Read(_hybrid(in_domain=True))
+    _no_own_benchmark(monkeypatch, read)
+    view, _ = _run()
+    assert read.calls == ["50-00-0"]
+    assert view["toxicity"]["rfc"] == 0.2
+    assert view["toxicity_source"].startswith("read-across from 110-54-3")
+    note = " ".join(view["warnings"])
+    assert "not measured values for 50-00-0" in note and "scaling factor (1.5)" in note
+
+
+def test_out_of_domain_analogue_is_not_used_and_the_threshold_is_named(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps
+) -> None:
+    _no_own_benchmark(monkeypatch, _Read(_hybrid(in_domain=False)))
+    view, _ = _run()
+    assert view["toxicity"]["rfc"] is None
+    assert view["toxicity_source"] == "CompTox"
+    assert any("not used as a stand-in" in w and "0.41" in w for w in view["warnings"])
+
+
+def test_own_benchmark_is_never_replaced_by_an_analogue(
+    monkeypatch: pytest.MonkeyPatch, _offline: FakeSteps
+) -> None:
+    read = _Read(_hybrid(in_domain=True))
+    monkeypatch.setattr(facilities, "find_tri_read_across_surrogate", read)
+    view, _ = _run()
+    assert read.calls == []
+    assert view["toxicity_source"] == "CompTox"

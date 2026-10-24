@@ -38,18 +38,26 @@ class Fakes:
         tri_rows: list[dict[str, str]] | None = None,
         pubchem: dict[str, str] | None = None,
         tri_status: int = 200,
+        categories: tuple[str, ...] = (),
     ) -> None:
+        self.categories = fakes.category_index(tmp_path, *categories)
         self.settings: ReadAcrossSettings = fakes.settings(tmp_path)
         rows = TRI_ROWS if tri_rows is None else tri_rows
         smiles = PUBCHEM if pubchem is None else pubchem
         self.envirofacts = Server(lambda request: httpx.Response(tri_status, json=rows))
         self.pubchem = Server(lambda request: _pubchem_answer(request, smiles))
         vectors = {"CCCCCC": unit(0), "c1ccccc1": unit(1), "ClC=C(Cl)Cl": unit(2)}
+        vectors["Oc1ccccc1"] = unit(5)
         self.embedder = fakes.embedder(self.settings, vectors)
 
     def services(self) -> Services:
         return Services(
-            self.envirofacts.client, EFSERVICE, self.pubchem.client, self.embedder, self.settings
+            self.envirofacts.client,
+            EFSERVICE,
+            self.pubchem.client,
+            self.embedder,
+            self.settings,
+            self.categories,
         )
 
     def build(self) -> BuildReport:
@@ -143,7 +151,12 @@ def test_written_columns(tmp_path: Path) -> None:
     run.build()
     table = read_shards(run.settings)
     c = run.settings.columns
-    assert set(table) == {c.cas, c.name, c.smiles, c.molecular_weight, c.embedding, c.bits}
+    assert set(table) == {
+        c.cas, c.name, c.smiles, c.molecular_weight, c.embedding, c.bits,
+        c.source, c.category_codes, c.category_names,
+    }  # fmt: skip
+    assert table[c.source] == ["tri_list", "tri_list"]
+    assert table[c.category_codes] == [[], []]
     assert all(len(v) == 768 for v in table[c.embedding])  # type: ignore[arg-type]
     assert all(len(v) == 1024 for v in table[c.bits])  # type: ignore[arg-type]
 
@@ -212,3 +225,69 @@ def test_adding_a_chemical_leaves_other_shards_byte_identical(tmp_path: Path) ->
     assert report.kept == 3
     assert hexane_shard.read_bytes() == before  # 110-54-3 is untouched
     assert len(report.shards) == 2  # 71-43-2 and 79-01-6 share the "7" shard
+
+
+PHENOL = "108-95-2"
+TOLUENE = "108-88-3"
+CATEGORY_PUBCHEM = {**PUBCHEM, PHENOL: "Oc1ccccc1", TOLUENE: "Cc1ccccc1"}
+CATEGORY_ROWS = (
+    f"{PHENOL},N084,CHLOROPHENOLS,phenol,Organic,x",
+    f"{PHENOL},N085,SECOND GROUP,phenol,Organic,x",
+    "7439-92-1,N420,LEAD COMPOUNDS,lead,Inorganic,x",
+    "110-54-3,N999,A GROUP,n-hexane,Organic,x",
+)
+
+
+def _category_run(tmp_path: Path) -> Fakes:
+    return Fakes(tmp_path, pubchem=CATEGORY_PUBCHEM, categories=CATEGORY_ROWS)
+
+
+def test_organic_category_member_is_added_with_its_categories(tmp_path: Path) -> None:
+    run = _category_run(tmp_path)
+    report = run.build()
+    assert report.categories == {
+        "skipped_inorganic": 1,
+        "already_listed": 1,
+        "added": 1,
+        "unresolved": 0,
+    }
+    table = read_shards(run.settings)
+    c = run.settings.columns
+    row = table[c.cas].index(PHENOL)
+    assert table[c.source][row] == "tri_category"
+    assert table[c.category_codes][row] == ["N084", "N085"]
+    assert table[c.category_names][row] == ["CHLOROPHENOLS", "SECOND GROUP"]
+
+
+def test_inorganic_member_and_listed_chemical_are_not_duplicated(tmp_path: Path) -> None:
+    run = _category_run(tmp_path)
+    run.build()
+    table = read_shards(run.settings)
+    c = run.settings.columns
+    assert "7439-92-1" not in table[c.cas]
+    assert table[c.cas].count("110-54-3") == 1
+    assert table[c.source][table[c.cas].index("110-54-3")] == "tri_list"
+
+
+def test_member_without_a_structure_is_reported_and_left_out(tmp_path: Path) -> None:
+    run = Fakes(tmp_path, categories=CATEGORY_ROWS)  # PubChem knows no phenol
+    report = run.build()
+    assert report.categories["unresolved"] == 1 and report.categories["added"] == 0
+    assert PHENOL in [cas for cas, _ in report.unresolved]
+    assert PHENOL not in read_shards(run.settings)[run.settings.columns.cas]
+
+
+def test_category_build_is_byte_identical_when_repeated(tmp_path: Path) -> None:
+    first = _category_run(tmp_path)
+    report = first.build()
+    before = {p.name: p.read_bytes() for p in report.shards}
+    again = _category_run(tmp_path)
+    again.pubchem = Server(lambda request: httpx.Response(404, json={}))  # structures reused
+    after = {p.name: p.read_bytes() for p in again.build().shards}
+    assert before == after
+
+
+def test_report_lines_mention_category_outcomes(tmp_path: Path) -> None:
+    run = _category_run(tmp_path)
+    text = "\n".join(report_lines(run.build(), tmp_path))
+    assert "category members added: 1" in text and "skipped_inorganic: 1" in text

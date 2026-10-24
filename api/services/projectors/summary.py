@@ -30,6 +30,8 @@ def _digits(cas: str | None) -> str:
 def _read_across(payload: ReadAcrossPayload) -> ReadAcross:
     if payload.is_direct_tri_match:
         kind = "direct_tri_match"
+    elif payload.resolution_method == "tri_category_member":
+        kind = "tri_category_member"
     elif payload.resolution_method == "hybrid_read_across":
         kind = "read_across"
     else:

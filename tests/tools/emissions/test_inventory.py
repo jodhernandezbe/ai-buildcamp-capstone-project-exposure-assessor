@@ -115,7 +115,7 @@ def test_bare_cas_is_accepted(requests_seen: list[httpx.Request]) -> None:
     assert "/cas_registry_number/50-00-0/" in str(requests_seen[0].url)
 
 
-@pytest.mark.parametrize("bad", ["", "abc", "50-00-1", "1-2-3", "50-00-0; DROP"])
+@pytest.mark.parametrize("bad", ["", "abc", "50-00-1", "1-2-3", "50-00-0; DROP", "N999", "N4200"])
 def test_invalid_cas_makes_no_request(
     requests_seen: list[httpx.Request], caplog: pytest.LogCaptureFixture, bad: str
 ) -> None:
@@ -123,6 +123,21 @@ def test_invalid_cas_makes_no_request(
         assert _view({"cas_number": bad})["facilities"] == []
     assert requests_seen == []
     assert "not a valid CAS" in caplog.text
+
+
+def test_category_code_is_queried_as_given_and_the_note_says_whole_category(
+    requests_seen: list[httpx.Request],
+) -> None:
+    view = _view({"cas_number": " n420 "})
+    assert "/cas_registry_number/N420/environmental_medium/" in str(requests_seen[0].url)
+    assert view["total_found"] > 0
+    assert view["note"] is not None
+    assert "whole TRI category N420 (LEAD COMPOUNDS)" in view["note"]
+
+
+def test_a_cas_number_has_no_category_note(requests_seen: list[httpx.Request]) -> None:
+    assert _view({"cas_number": "1336-36-3"})["note"] is None
+    assert "/cas_registry_number/1336-36-3/" in str(requests_seen[0].url)
 
 
 def test_a_facility_that_stopped_reporting_long_ago_is_not_returned(

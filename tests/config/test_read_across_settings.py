@@ -45,6 +45,9 @@ embedding = "e"
 bits = "b"
 benchmark_flag = "flag"
 naics_prefixes = "naics"
+source = "src"
+category_codes = "ccodes"
+category_names = "cnames"
 
 [read_across.tri_list]
 path = "/list/rows/{start}:{end}/JSON"

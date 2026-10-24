@@ -39,7 +39,9 @@ class Setup:
         handler: fakes.Handler = no_network,
         extra: Mapping[str, list[object]] | None = None,
         min_hybrid_score: float = 0.60,
+        categories: tuple[str, ...] = (),
     ) -> None:
+        self.categories = fakes.category_index(tmp_path, *categories)
         self.settings: ReadAcrossSettings = fakes.settings(
             tmp_path, min_hybrid_score=min_hybrid_score
         )
@@ -51,7 +53,9 @@ class Setup:
         self.embedder: FakeEmbedder = fakes.embedder(self.settings, vectors)
 
     def services(self) -> ReadAcrossServices:
-        return ReadAcrossServices(self.catalog, self.embedder, self.server.client, self.settings)
+        return ReadAcrossServices(
+            self.catalog, self.embedder, self.server.client, self.settings, self.categories
+        )
 
     def find(self, cas: str, **options: object) -> ReadAcrossMatch:
         return find_surrogate(cas, self.services(), **options)  # type: ignore[arg-type]
@@ -230,8 +234,72 @@ def test_query_at_the_catalog_centre_has_no_surrogate(tmp_path: Path) -> None:
     assert mean.astype(np.float64).tolist() == catalog.mean_embedding.tolist()
     embedder = FakeEmbedder({fakes.canonical(CO2, s): mean}, [])
     server = Server(_pubchem(CO2, "44.009"))
-    match = find_surrogate("124-38-9", ReadAcrossServices(catalog, embedder, server.client, s))
+    match = find_surrogate(
+        "124-38-9",
+        ReadAcrossServices(catalog, embedder, server.client, s, fakes.category_index(tmp_path)),
+    )
     _assert_unresolved(match)
     assert match["query_smiles"] == CO2  # the chemical itself was resolved
     assert match["query_mw"] == 44.009
     assert "carries no direction" in match["warnings"][0]
+
+
+CHLOROPHENOL = "95-57-8"
+CHLOROPHENOL_ROW = f"{CHLOROPHENOL},N084,CHLOROPHENOLS,2-chlorophenol,Organic,x"
+LEAD_ROW = "7439-92-1,N420,LEAD COMPOUNDS,lead,Inorganic,x"
+
+
+def test_category_member_is_reported_without_similarity(tmp_path: Path) -> None:
+    setup = Setup(tmp_path, _pubchem("Oc1ccccc1Cl", "128.56"), categories=(CHLOROPHENOL_ROW,))
+    match = setup.find(CHLOROPHENOL)
+    assert match["resolution_method"] == "tri_category_member"
+    assert match["is_direct_tri_match"] is False
+    assert match["query_categories"] == [{"code": "N084", "name": "CHLOROPHENOLS"}]
+    assert match["surrogate_tri_cas"] is None and match["hybrid_read_across_score"] is None
+    assert match["mw_scaling_factor"] is None and match["within_applicability_domain"] is True
+    assert "member of the TRI category N084 (CHLOROPHENOLS)" in match["warnings"][0]
+    assert setup.embedder.calls == []
+
+
+def test_category_member_survives_an_unresolvable_structure(tmp_path: Path) -> None:
+    setup = Setup(tmp_path, answer({}, 404), categories=(LEAD_ROW,))
+    match = setup.find("7439-92-1")
+    assert match["resolution_method"] == "tri_category_member"
+    assert match["query_smiles"] is None and match["query_mw"] is None
+    assert any("could not be resolved" in w for w in match["warnings"])
+
+
+def test_catalog_chemical_wins_over_its_category(tmp_path: Path) -> None:
+    row = "110-54-3,N999,SOME GROUP,hexane,Organic,x"
+    match = Setup(tmp_path, categories=(row,)).find("110-54-3")
+    assert match["resolution_method"] == "direct_tri_catalog_match"
+    assert match["query_categories"] == []
+
+
+def test_a_non_member_still_reads_across(tmp_path: Path) -> None:
+    setup = Setup(tmp_path, _pubchem(ISOHEXANE), categories=(CHLOROPHENOL_ROW,))
+    match = setup.find("107-83-5")
+    assert match["resolution_method"] == "hybrid_read_across"
+    assert match["query_categories"] == [] and match["surrogate_category"] is None
+
+
+def test_surrogate_that_is_a_category_member_names_its_category(tmp_path: Path) -> None:
+    extra: dict[str, list[object]] = {
+        "category_codes": [["N100"], [], []],
+        "category_names": [["COPPER COMPOUNDS"], [], []],
+    }
+    setup = Setup(tmp_path, _pubchem(ISOHEXANE), extra=extra)
+    match = setup.find("107-83-5")
+    assert match["surrogate_category"] == {"code": "N100", "name": "COPPER COMPOUNDS"}
+    assert "category N100" in match["warnings"][-1]
+
+
+def test_category_row_in_the_catalog_is_not_a_direct_match(tmp_path: Path) -> None:
+    extra: dict[str, list[object]] = {
+        "category_codes": [["N084"], [], []],
+        "category_names": [["CHLOROPHENOLS"], [], []],
+    }
+    row = "110-54-3,N084,CHLOROPHENOLS,hexane,Organic,x"
+    match = Setup(tmp_path, extra=extra, categories=(row,)).find("110-54-3")
+    assert match["resolution_method"] == "tri_category_member"
+    assert match["query_smiles"] == "CCCCCC"

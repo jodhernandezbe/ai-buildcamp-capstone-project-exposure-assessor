@@ -24,9 +24,23 @@ from tools.informatics.helpers.read_across.catalog import Catalog, filter_candid
 from tools.informatics.helpers.read_across.moldeberta import SmilesEmbedder, lazy_default_embedder
 from tools.informatics.helpers.read_across.pubchem import PubchemCompound, fetch_compound
 from tools.informatics.helpers.read_across.structure import Structure, describe
-from tools.schemas import ReadAcrossMatch
+from tools.schemas import CategoryRef, ReadAcrossMatch
+from tools.tri_categories import Category, CategoryIndex, category_refs, get_category_index
 
 _DECIMALS = 4  # reported scores; the domain check uses the unrounded score
+_ABSENT = (  # result fields that are None until something fills them
+    "query_smiles",
+    "query_mw",
+    "surrogate_tri_cas",
+    "surrogate_name",
+    "surrogate_smiles",
+    "surrogate_mw",
+    "moldeberta_cosine_sim",
+    "morgan_tanimoto_sim",
+    "hybrid_read_across_score",
+    "mw_scaling_factor",
+    "surrogate_category",
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +51,7 @@ class ReadAcrossServices:
     embedder: SmilesEmbedder
     pubchem: RetryingClient
     settings: ReadAcrossSettings
+    categories: CategoryIndex
 
 
 @dataclass(frozen=True)
@@ -49,21 +64,14 @@ class _Query:
 
 
 def _unresolved(query_cas: str, warnings: list[str]) -> ReadAcrossMatch:
+    none: dict[str, None] = dict.fromkeys(_ABSENT)
     return {
+        **none,  # type: ignore[typeddict-item]
         "query_cas": query_cas,
-        "query_smiles": None,
-        "query_mw": None,
         "is_direct_tri_match": False,
-        "surrogate_tri_cas": None,
-        "surrogate_name": None,
-        "surrogate_smiles": None,
-        "surrogate_mw": None,
-        "moldeberta_cosine_sim": None,
-        "morgan_tanimoto_sim": None,
-        "hybrid_read_across_score": None,
-        "mw_scaling_factor": None,
         "within_applicability_domain": False,
         "resolution_method": "unresolved",
+        "query_categories": [],
         "warnings": warnings,
     }
 
@@ -71,7 +79,7 @@ def _unresolved(query_cas: str, warnings: list[str]) -> ReadAcrossMatch:
 def _direct(cas: str, catalog: Catalog, row: int, warnings: list[str]) -> ReadAcrossMatch:
     weight = float(catalog.molecular_weights[row])
     return {
-        "query_cas": cas,
+        **_unresolved(cas, warnings),
         "query_smiles": catalog.smiles[row],
         "query_mw": weight,
         "is_direct_tri_match": True,
@@ -85,8 +93,11 @@ def _direct(cas: str, catalog: Catalog, row: int, warnings: list[str]) -> ReadAc
         "mw_scaling_factor": 1.0,
         "within_applicability_domain": True,
         "resolution_method": "direct_tri_catalog_match",
-        "warnings": warnings,
     }
+
+
+def _category_ref(category: tuple[str, str] | None) -> CategoryRef | None:
+    return None if category is None else {"code": category[0], "name": category[1]}
 
 
 def _positive(value: float) -> bool:
@@ -168,6 +179,7 @@ def _best_match(
         "mw_scaling_factor": _scaling_factor(query.molecular_weight, surrogate_mw),
         "within_applicability_domain": bool(hybrid[row] >= services.settings.min_hybrid_score),
         "resolution_method": "hybrid_read_across",
+        "surrogate_category": _category_ref(candidates.category_of(row)),
     }
 
 
@@ -202,6 +214,72 @@ def _domain_warning(match: ReadAcrossMatch, threshold: float) -> str | None:
     )
 
 
+def _by_similarity(
+    cas: str, candidates: Catalog, services: ReadAcrossServices, warnings: list[str]
+) -> ReadAcrossMatch:
+    """Resolve the chemical on PubChem and pick the most similar candidate."""
+    query = _resolve(cas, services, warnings)
+    if query is None:
+        return _unresolved(cas, warnings)
+    match = _score(query, candidates, services)
+    if isinstance(match, str):
+        return _no_surrogate(query, [*warnings, match])
+    domain = _domain_warning(match, services.settings.min_hybrid_score)
+    surrogate = match["surrogate_category"]
+    notes = [_surrogate_category_warning(match)] if surrogate else []
+    match["warnings"] = warnings + ([domain] if domain else []) + notes
+    return match
+
+
+def _surrogate_category_warning(match: ReadAcrossMatch) -> str:
+    category = match["surrogate_category"]
+    code, name = (category["code"], category["name"]) if category else ("", "")
+    return (
+        f"the surrogate {match['surrogate_tri_cas']} is not listed in TRI on its own: TRI "
+        f"reports it as a member of the category {code} ({name})"
+    )
+
+
+def _category_warning(cas: str, categories: tuple[Category, ...]) -> str:
+    named = "; ".join(f"{c.code} ({c.name})" for c in categories)
+    return (
+        f"{cas} is not listed in TRI on its own; it is a member of the TRI category {named}. "
+        "TRI reports releases under the category code for all its members together, so they "
+        f"are not releases of {cas} alone. No structural similarity was used, and the "
+        "chemical's own toxicity benchmark is still needed"
+    )
+
+
+def _own_structure(
+    cas: str, candidates: Catalog, services: ReadAcrossServices, warnings: list[str]
+) -> tuple[str | None, float | None]:
+    """The member's SMILES and molecular weight (g/mol): from the catalog, else PubChem."""
+    row = candidates.index_of(cas)
+    if row is not None:
+        return candidates.smiles[row], float(candidates.molecular_weights[row])
+    query = _resolve(cas, services, warnings)
+    return (None, None) if query is None else (query.structure.smiles, query.molecular_weight)
+
+
+def _category_member(
+    cas: str,
+    categories: tuple[Category, ...],
+    candidates: Catalog,
+    services: ReadAcrossServices,
+    warnings: list[str],
+) -> ReadAcrossMatch:
+    """A chemical TRI reports only through a category: no surrogate, no similarity."""
+    smiles, weight = _own_structure(cas, candidates, services, warnings)
+    return {
+        **_unresolved(cas, [*warnings, _category_warning(cas, categories)]),
+        "query_smiles": smiles,
+        "query_mw": weight,
+        "within_applicability_domain": True,
+        "resolution_method": "tri_category_member",
+        "query_categories": category_refs(categories),
+    }
+
+
 def find_surrogate(
     cas_number: str,
     services: ReadAcrossServices,
@@ -220,17 +298,12 @@ def find_surrogate(
         return _unresolved(cas_number.strip(), [f"CAS number {cas_number!r} is not valid"])
     candidates, warnings = _candidates(services, require_toxicity_benchmarks, sector_naics_prefix)
     row = candidates.index_of(cas)
-    if row is not None:
+    if row is not None and candidates.category_of(row) is None:
         return _direct(cas, candidates, row, warnings)
-    query = _resolve(cas, services, warnings)
-    if query is None:
-        return _unresolved(cas, warnings)
-    match = _score(query, candidates, services)
-    if isinstance(match, str):
-        return _no_surrogate(query, [*warnings, match])
-    domain = _domain_warning(match, services.settings.min_hybrid_score)
-    match["warnings"] = warnings + ([domain] if domain else [])
-    return match
+    categories = services.categories.lookup(cas).categories
+    if categories:
+        return _category_member(cas, categories, candidates, services, warnings)
+    return _by_similarity(cas, candidates, services, warnings)
 
 
 @lru_cache(maxsize=1)
@@ -242,6 +315,7 @@ def _services() -> ReadAcrossServices:
         embedder=lazy_default_embedder(settings.model),
         pubchem=RetryingClient(settings.pubchem, httpx.Client()),
         settings=settings,
+        categories=get_category_index(),
     )
 
 
@@ -262,6 +336,13 @@ def find_tri_read_across_surrogate(
         How to read the result:
         - `is_direct_tri_match` true: the chemical is itself on the TRI list; no surrogate is
           needed.
+        - `resolution_method` "tri_category_member": the chemical is not listed in TRI on its
+          own but is a member of a TRI category (`query_categories`: code and name). Tell the
+          user it was matched through that category, never as itself a listed chemical. TRI
+          reports category releases under the category code for all members together, so look
+          up releases with that code and say they are not releases of this chemical alone. No
+          similarity is involved and no surrogate is returned; the chemical's own toxicity
+          benchmark is still needed.
         - Otherwise, report `hybrid_read_across_score` and `within_applicability_domain` with
           anything you take from the surrogate. A surrogate's benchmark is a read-across
           estimate, not a measured value for the query chemical; say so.
@@ -293,7 +374,12 @@ def find_tri_read_across_surrogate(
           surrogate benchmark in mg/m^3 can be put on a molar basis by multiplying it by
           this factor; say so if you do. Null if a molecular weight is missing
         - within_applicability_domain: whether the score reaches the configured threshold
-        - resolution_method: "direct_tri_catalog_match", "hybrid_read_across" or "unresolved"
+        - query_categories: TRI categories (code, name) that list the query chemical; empty
+          unless it is a category member
+        - surrogate_category: the category (code, name) TRI reports the surrogate under, or
+          null if TRI lists the surrogate on its own
+        - resolution_method: "direct_tri_catalog_match", "tri_category_member",
+          "hybrid_read_across" or "unresolved"
         - warnings: why a value is null, filters not applied, or that the surrogate is
           outside the applicability domain
     """

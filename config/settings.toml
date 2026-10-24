@@ -644,6 +644,10 @@ ambient_temperatures_k = [253.15, 273.15, 293.15, 313.15]
 # p34 = 0.601, median 0.687, so 0.60 rejects the weakest third (in-domain share 66%); caffeine,
 # which has no TRI analogue, scores 0.379. Recalibrate with
 # `models.chemistry.similarity.leave_one_out_scores` when the catalog or the model changes.
+# Catalog of 1,594 chemicals (712 TRI-list + 882 organic TRI category members, October 2026):
+# p33 over all rows = 0.693; p33 over the 712 TRI-list rows alone = 0.602, the basis of the
+# 0.60 value kept here. The threshold is not moved to the all-rows percentile without a
+# deliberate decision: that would demote TRI-list matches in the 0.60-0.69 band.
 [read_across]
 # The catalog is sharded by the leading digit(s) of the CAS number, like data/nei_stacks, so
 # every committed file stays small and a rebuild rewrites only the shards that changed (the
@@ -680,8 +684,10 @@ embedding_width = 768
 radius = 2
 n_bits = 1024
 
-# Field -> column of the catalog. `benchmark_flag` and `naics_prefixes` are optional columns
-# (the read-across filters use them only when the catalog has them).
+# Field -> column of the catalog. `benchmark_flag`, `naics_prefixes`, `source`, `category_codes`
+# and `category_names` are optional columns (the read-across filters use the first two only when
+# the catalog has them; the last three say whether a row came from the TRI list or from a TRI
+# category and which category, and are absent from catalogs built before categories).
 [read_across.columns]
 cas = "tri_cas"
 name = "chemical_name"
@@ -691,6 +697,9 @@ embedding = "moldeberta_vec"
 bits = "morgan_bits"
 benchmark_flag = "has_iris_benchmark"
 naics_prefixes = "naics_prefixes"
+source = "catalog_source"
+category_codes = "category_codes"
+category_names = "category_names"
 
 # The current TRI chemical list (Envirofacts `tri_chem_info`; base URL and request policy from
 # [efservice]), read by the catalog builder. Rows whose CAS field is not a CAS number are TRI
@@ -704,6 +713,19 @@ name_field = "chem_name"
 inactive_field = "inactive_date"
 active_value = "9999"
 keep_delisted = false
+
+# TRI category members (tools/informatics/helpers/category/): the chemicals TRI reports under a
+# category code (N420 lead compounds, ...) instead of their own CAS number, from EPA's TRI
+# category documentation (the SOURCE column of each row). A category code of only digits is a
+# CAS number without hyphens. Names in the file contain typos, so only the CAS number is a key.
+[tri_categories]
+path = "data/chemicals_in_tri_categories.csv"
+cas_column = "CAS NUMBER"
+code_column = "CATEGORY CODE"
+category_name_column = "CATEGORY NAME"
+member_name_column = "CHEMICAL NAME"
+type_column = "CHEMICAL TYPE"
+organic_value = "Organic"
 
 # PubChem (PUG REST and PUG View; no API key). It is the fallback for the result fields below
 # when CompTox left them empty, so a field is added here, not in code. PubChem asks for at most
@@ -840,6 +862,7 @@ max_nudges = 2
 # Human-readable step label shown for each tool call, keyed by tool name.
 [ui.step_labels]
 fetch_chemical_properties = "Looked up chemical properties (CompTox)"
+find_tri_category = "Checked TRI category membership"
 find_tri_read_across_surrogate = "Resolved read-across surrogate (MolDeBERTa + ECFP4)"
 query_emissions_inventory = "Queried EPA TRI releases"
 fetch_facility_industry = "Identified facility industry (NAICS)"

@@ -14,7 +14,9 @@ from api.schemas.base import ContractModel
 
 Status = Literal["below", "near", "above"]
 Tier = Literal[1, 2, 3]
-ProvenanceKind = Literal["not_evaluated", "direct_tri_match", "read_across", "unresolved"]
+ProvenanceKind = Literal[
+    "not_evaluated", "direct_tri_match", "tri_category_member", "read_across", "unresolved"
+]
 NOT_COMPUTED = "not yet computed"
 
 

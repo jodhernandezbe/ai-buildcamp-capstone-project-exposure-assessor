@@ -33,6 +33,7 @@ from tools.emissions.helpers.inventory.tri import TriFetcher
 from tools.emissions.helpers.naics_subsectors import subsector_titles, with_subsectors
 from tools.emissions.helpers.naics_titles import naics_titles, with_titles
 from tools.schemas import EmissionRecord, InventoryResult
+from tools.tri_categories import get_category_index
 
 logger = logging.getLogger(__name__)
 Resolve = Callable[[list[EmissionRecord]], list[EmissionRecord]]
@@ -106,11 +107,16 @@ def query_emissions_inventory(
         Zero facilities means no stack air release was found for this CAS number (and place) in
         TRI, which is not evidence that nobody emits it: TRI covers only facilities above its
         reporting thresholds.
+        A chemical TRI reports only as a member of a category (see `find_tri_read_across_surrogate`,
+        `query_categories`) has its releases under the category code, e.g. "N420": pass that code
+        as `cas_number`. Those releases are for the whole category, every member together, never
+        for one chemical; the `note` says so, and you must say so too.
 
     Args:
         cas_number: CAS registry number as the user gave it, e.g. "50-00-0" (hyphens
-            optional). Never a number recalled from a chemical's name: if the user gave only a
-            name, ask for the CAS number instead of calling this tool.
+            optional), or a TRI category code such as "N420" (only one reported by the
+            read-across result). Never a number recalled from a chemical's name: if the user
+            gave only a name, ask for the CAS number instead of calling this tool.
         state: Optional. Keep only facilities in this state, as its two-letter postal
             abbreviation, e.g. "TX".
         city: Optional. Keep only facilities in this city, by its exact name, e.g. "Houston"
@@ -201,17 +207,42 @@ def inventory_listing(
     The same inventory is reused for ``[assessment].inventory_cache_seconds``, so listing the
     facilities and then assessing them reads TRI once. Copies are returned.
     """
-    cas = format_cas(cas_number)
-    if cas is None:
-        logger.warning("query_emissions_inventory: %r is not a valid CAS number", cas_number)
+    identifier = _identifier(cas_number)
+    if identifier is None:
+        logger.warning(
+            "query_emissions_inventory: %r is not a valid CAS number or TRI category code",
+            cas_number,
+        )
         return rank_and_cap([], get_tri_settings().max_listed, state, city)
-    key = (cas, state, city, _current_year())
+    key = (identifier, state, city, _current_year())
     cached = _LISTINGS.get(key)
-    if cached is not None:
-        return cached
-    listing = _read_listing(cas, state, city, key[3])
-    _LISTINGS.put(key, listing)
-    return listing
+    if cached is None:
+        cached = _read_listing(identifier, state, city, key[3])
+        _LISTINGS.put(key, cached)
+    return _with_category_note(identifier, cached)
+
+
+def _identifier(raw: str) -> str | None:
+    """The hyphenated CAS number, or the TRI category code, ``raw`` stands for; else None."""
+    cas = format_cas(raw)
+    if cas is not None:
+        return cas
+    code = raw.strip().upper()
+    return code if get_category_index().has_code(code) else None
+
+
+def _with_category_note(identifier: str, listing: Listing) -> Listing:
+    """For a category code, say in the note that the releases cover the whole category."""
+    name = get_category_index().name_of(identifier)
+    if format_cas(identifier) is not None or name is None:
+        return listing
+    result, records = listing
+    note = (
+        f"releases are reported for the whole TRI category {identifier} ({name}), "
+        "not for one member chemical"
+    )
+    both = note if result["note"] is None else f"{note}. {result['note']}"
+    return {**result, "note": both}, records
 
 
 def _read_listing(cas: str, state: str | None, city: str | None, year: int) -> Listing:

@@ -30,17 +30,29 @@ aim is to learn whether a problem might exist, so the worst plausible case matte
 as the typical one. Where a link has several credible values, an assessor evaluates each and
 reports the range instead of picking one.
 
-A chemical can be missing from the evidence in three different ways, and an assessor treats
+A chemical can be missing from the evidence in different ways, and an assessor treats
 each differently:
 - Not identified: the user named it but gave no CAS registry number. Its identity is not
   established, so nothing about it can be looked up yet; the assessor asks the user for the
   number rather than supplying one.
+- Identified but not listed in TRI on its own: TRI reports some chemicals only as members of a
+  category (lead compounds, chlorophenols, ...). An assessor checks for that before looking for
+  an analogue, and an analogue is sought only when the chemical is in no category. When a
+  category stands in, the user is told plainly that the chemical was matched through that
+  category, which one, and that the reported releases cover every member together: they bound
+  what this one chemical contributes, they are not a measured release of it. The chemical's
+  own toxicity benchmark is still needed and is never taken from the category.
 - Identified but without the data the assessment needs: it is not on the TRI list, or it has
   no toxicity benchmark for breathing it. The assessor may look for a well-characterized
   chemical of similar structure (read-across) and use that chemical's data as an estimate for
   this one, stating how similar the two are and whether the match is close enough to be
   defensible. A borrowed value is never presented as a measured value for the chemical. If no
   defensible analogue exists, the gap is reported, not filled.
+- Every reply states how the chemical was matched, so the user can follow it: listed in TRI on
+  its own, found through a TRI category (named, with what that means for the releases), or
+  estimated from an analogue (named, with its similarity score and the applicability-domain
+  threshold it was held to). An analogue that falls short of the threshold is not used, and the
+  reply says so.
 - Identified but not found in the release inventory: that shows no reported releases, not that
   nobody emits it, and it is reported as such.
 

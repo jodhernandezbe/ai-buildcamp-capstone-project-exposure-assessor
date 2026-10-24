@@ -10,7 +10,11 @@ from collections.abc import Callable, Mapping
 from types import MappingProxyType
 
 from api.services.projectors.assessment import project_assessment
-from api.services.projectors.chemistry import project_properties, project_read_across
+from api.services.projectors.chemistry import (
+    project_category,
+    project_properties,
+    project_read_across,
+)
 from api.services.projectors.emissions import (
     project_industry,
     project_inventory,
@@ -30,6 +34,7 @@ Projector = Callable[[ToolExchange, Ledger], None]
 PROJECTORS: Mapping[str, Projector] = MappingProxyType(
     {
         "fetch_chemical_properties": project_properties,
+        "find_tri_category": project_category,
         "find_tri_read_across_surrogate": project_read_across,
         "query_emissions_inventory": project_inventory,
         "fetch_facility_industry": project_industry,
