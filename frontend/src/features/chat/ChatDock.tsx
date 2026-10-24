@@ -1,6 +1,7 @@
 import { TopHeaderBar, type AssistantStatus } from "../../components/layout/TopHeaderBar";
 import type { ChatMessage, UsageView } from "../../hooks/chatState";
 import { ChatComposer } from "./ChatComposer";
+import { ClearChatButton } from "./ClearChatButton";
 import { MessageStream } from "./MessageStream";
 import { UsageMeter } from "./UsageMeter";
 
@@ -14,6 +15,7 @@ interface ChatDockProps {
   /** A message about switching runs (for example, that one is no longer available). */
   notice?: string | null | undefined;
   onSend: (text: string) => void;
+  onClear: () => void;
   onOpenSettings: () => void;
   onCollapse: () => void;
 }
@@ -34,6 +36,7 @@ export function ChatDock({
   usage,
   notice,
   onSend,
+  onClear,
   onOpenSettings,
   onCollapse,
 }: ChatDockProps) {
@@ -46,6 +49,7 @@ export function ChatDock({
         onCollapse={onCollapse}
       >
         <UsageMeter usage={usage} />
+        <ClearChatButton disabled={busy || messages.length === 0} onClear={onClear} />
       </TopHeaderBar>
       <MessageStream
         messages={messages}

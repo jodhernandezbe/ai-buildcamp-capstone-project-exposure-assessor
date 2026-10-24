@@ -3,7 +3,8 @@
 Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `frontend/`.
 
 - React + TypeScript (strict) + Vite + Tailwind; MapLibre GL for the map, Recharts for the
-  age-band bar, Lucide for icons (react-icons only for the `TbMessageChatbot` copilot toggle).
+  age-band bar, Lucide for icons (react-icons only for the `TbMessageChatbot` copilot toggle and the
+  `AiOutlineClear` chat clear button).
   Commands: `npm --prefix frontend ci`, `run build`, `run check` (contract diff, tsc, eslint,
   vitest). `check` must pass before work is done.
 - Feature-driven layout with one-way imports: `components/` (`layout/`, `ui/`: domain-agnostic

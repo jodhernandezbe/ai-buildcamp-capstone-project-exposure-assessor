@@ -66,6 +66,7 @@ export function App() {
             usage={chat.usage}
             notice={chat.notice}
             onSend={(text) => void chat.send(text)}
+            onClear={chat.newRun}
             onOpenSettings={() => setSettingsOpen(true)}
             onCollapse={collapse}
           />
