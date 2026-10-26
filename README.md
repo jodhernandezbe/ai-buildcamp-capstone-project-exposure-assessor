@@ -91,6 +91,13 @@ npm --prefix frontend ci && npm --prefix frontend run build   # once, and after 
 uv run python -m api                                           # http://127.0.0.1:8000
 ```
 
+The left rail has four entries. **Workspace** is the analysis view. **Clear workspace** asks
+first, then discards the conversation, overview, charts and map (on the server too).
+**Generate report** downloads a Word document of the findings, laid out like an EPA
+screening-level assessment: summary, chemical properties, data sources, releases, exposure,
+risk, uncertainties, and the assistant's last answer labelled as model-generated. Every value
+in it comes from the dashboard. **Monitoring** is not available yet.
+
 Open the page, click the gear (top right) and save your keys: the OpenAI key (required, it runs
 the assistant), and the Census and CompTox keys (the tools need them to count the people around
 a facility and to look up chemical properties). Each goes to the OS keychain (macOS Keychain,

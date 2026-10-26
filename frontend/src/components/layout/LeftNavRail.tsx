@@ -1,81 +1,111 @@
 import {
+  Activity,
+  CircleAlert,
+  FileDown,
   LayoutDashboard,
-  MessageSquare,
+  LoaderCircle,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  SquarePen,
+  Trash2,
 } from "lucide-react";
 import type { ElementType } from "react";
 
 import { BrandLogo, BrandMark } from "../ui/BrandLogo";
 
-export interface RailRun {
-  id: string;
-  /** The run's first message; null while it has none. */
-  title: string | null;
-}
-
 interface LeftNavRailProps {
   collapsed: boolean;
   /** Absent where the rail cannot expand (a narrow window): the toggle is then not shown. */
   onToggle?: (() => void) | undefined;
-  runs: RailRun[];
-  currentId: string;
-  /** False while a turn streams: the conversation cannot be left until it ends. */
-  canSwitch: boolean;
-  onNewAnalysis: () => void;
-  onSelectRun: (id: string) => void;
   /** Return to the workspace: leave fullscreen and close whatever is open over it. */
   onWorkspace: () => void;
+  /** Ask to clear the workspace (the caller confirms first). */
+  onClear: () => void;
+  /** Why "Clear workspace" is unavailable now; null when it can be used. */
+  clearBlocked: string | null;
+  onReport: () => void;
+  /** Why "Generate report" is unavailable now; null when it can be used. */
+  reportBlocked: string | null;
+  /** A report is being generated. */
+  reporting: boolean;
+  /** Why the last report failed; null when it did not. */
+  reportError?: string | null | undefined;
   onOpenSettings: () => void;
 }
 
-const UNTITLED = "Untitled analysis";
+const MONITORING_SOON = "Coming soon";
 
 interface ItemProps {
   icon: ElementType;
   label: string;
   collapsed: boolean;
   onClick?: (() => void) | undefined;
-  current?: boolean | undefined;
-  disabled?: boolean | undefined;
   page?: boolean | undefined;
+  /** Why the entry is disabled; the entry is enabled when absent. */
+  blocked?: string | null | undefined;
+  busy?: boolean | undefined;
+  badge?: string | undefined;
+  tone?: "danger" | undefined;
 }
 
 /** One rail entry: icon and label when expanded, the icon alone (named and titled) when collapsed. */
-function Item({ icon: Icon, label, collapsed, onClick, current, disabled, page }: ItemProps) {
+function Item({ icon: Icon, label, collapsed, onClick, page, blocked, busy, badge, tone }: ItemProps) {
+  const disabled = Boolean(blocked) || busy;
+  const title = blocked ? `${label}: ${blocked}` : collapsed ? label : undefined;
+  const Shown = busy ? LoaderCircle : Icon;
   return (
     <button
       type="button"
       aria-label={collapsed ? label : undefined}
-      title={collapsed ? label : undefined}
-      aria-current={page ? "page" : current ? "true" : undefined}
+      title={title}
+      aria-current={page ? "page" : undefined}
+      aria-busy={busy || undefined}
       disabled={disabled}
       onClick={onClick}
       className={`spring relative flex h-9 w-full items-center gap-3 rounded-xl px-[11px] text-left text-sm transition hover:bg-hairline disabled:opacity-40 disabled:hover:bg-transparent ${
-        current || page ? "bg-hairline font-semibold" : "text-fg2 hover:text-fg"
+        page ? "bg-hairline font-semibold" : `text-fg2 ${tone === "danger" ? "hover:text-bad" : "hover:text-fg"}`
       }`}
     >
-      {current || page ? (
-        <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent" />
-      ) : null}
-      <Icon size={18} aria-hidden="true" className="shrink-0" />
+      {page ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-accent" /> : null}
+      <Shown size={18} aria-hidden="true" className={`shrink-0 ${busy ? "motion-safe:animate-spin" : ""}`} />
       {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
+      {collapsed || !badge ? null : (
+        <span className="shrink-0 rounded-md bg-hairline px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-fg2">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
 
-/** The left rail: brand and toggle, new analysis, the workspace and this session's runs, Settings. */
+/** Why the last report failed: a line of text, or a titled icon on the collapsed rail. */
+function ReportError({ text, collapsed }: { text: string; collapsed: boolean }) {
+  if (!collapsed) {
+    return (
+      <p role="alert" className="px-3 text-xs text-bad">
+        {text}
+      </p>
+    );
+  }
+  return (
+    <p role="alert" title={text} className="grid h-6 place-items-center text-bad">
+      <CircleAlert size={14} aria-hidden="true" />
+      <span className="sr-only">{text}</span>
+    </p>
+  );
+}
+
+/** The left rail: brand and toggle; Workspace, Clear workspace, Generate report, Monitoring; Settings. */
 export function LeftNavRail({
   collapsed,
   onToggle,
-  runs,
-  currentId,
-  canSwitch,
-  onNewAnalysis,
-  onSelectRun,
   onWorkspace,
+  onClear,
+  clearBlocked,
+  onReport,
+  reportBlocked,
+  reporting,
+  reportError,
   onOpenSettings,
 }: LeftNavRailProps) {
   const Toggle = collapsed ? PanelLeftOpen : PanelLeftClose;
@@ -103,32 +133,31 @@ export function LeftNavRail({
           </button>
         ) : null}
       </div>
-      <Item
-        icon={SquarePen}
-        label="New analysis"
-        collapsed={collapsed}
-        disabled={!canSwitch}
-        onClick={onNewAnalysis}
-      />
       <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1">
-        {collapsed ? null : (
+        {collapsed ? (
+          <h2 className="sr-only">Analysis area</h2>
+        ) : (
           <h2 className="px-3 text-xs font-semibold uppercase tracking-wider text-fg2">Analysis area</h2>
         )}
         <Item icon={LayoutDashboard} label="Workspace" collapsed={collapsed} onClick={onWorkspace} page />
-        <ul aria-label="Runs" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-          {runs.map((run) => (
-            <li key={run.id}>
-              <Item
-                icon={MessageSquare}
-                label={run.title ?? UNTITLED}
-                collapsed={collapsed}
-                current={run.id === currentId}
-                disabled={!canSwitch && run.id !== currentId}
-                onClick={() => onSelectRun(run.id)}
-              />
-            </li>
-          ))}
-        </ul>
+        <Item
+          icon={Trash2}
+          label="Clear workspace"
+          collapsed={collapsed}
+          onClick={onClear}
+          blocked={clearBlocked}
+          tone="danger"
+        />
+        <Item
+          icon={FileDown}
+          label={reporting ? "Generating report…" : "Generate report"}
+          collapsed={collapsed}
+          onClick={onReport}
+          blocked={reportBlocked}
+          busy={reporting}
+        />
+        {reportError ? <ReportError text={reportError} collapsed={collapsed} /> : null}
+        <Item icon={Activity} label="Monitoring" collapsed={collapsed} blocked={MONITORING_SOON} badge={MONITORING_SOON} />
       </div>
       <Item icon={Settings} label="Settings" collapsed={collapsed} onClick={onOpenSettings} />
     </div>

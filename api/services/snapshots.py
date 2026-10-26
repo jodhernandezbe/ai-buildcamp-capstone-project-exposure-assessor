@@ -46,6 +46,12 @@ def thread_messages(messages: Sequence[BaseMessage]) -> list[ThreadMessage]:
     return shown
 
 
+def last_answer(messages: Sequence[BaseMessage]) -> str | None:
+    """The text of the last assistant message as the chat shows it; None when there is none."""
+    shown = thread_messages(messages)
+    return next((m.text for m in reversed(shown) if m.role == "assistant"), None)
+
+
 def _prompt(pending: ConfirmationRequest | None) -> ConfirmationPrompt | None:
     """The open request as the snapshot shows it, or None when nothing is open."""
     if pending is None:

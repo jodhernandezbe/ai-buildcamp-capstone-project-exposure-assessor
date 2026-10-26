@@ -77,7 +77,7 @@ const ANSWER_WITH_A_TOOL = [
   { type: "turn_finished", seq: 5 },
 ];
 
-describe("onboarding and new analysis", () => {
+describe("onboarding and clearing the workspace", () => {
   function stubWithChips(events: object[] = ANSWER_WITH_A_TOOL) {
     const calls: { url: string; method: string }[] = [];
     vi.stubGlobal(
@@ -117,7 +117,12 @@ describe("onboarding and new analysis", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("runs a chip, shows its tool pill and answer, then starts a new analysis", async () => {
+  async function clearWorkspace(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Clear workspace" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear" }));
+  }
+
+  it("runs a chip, shows its tool pill and answer, then clears the workspace", async () => {
     const calls = stubWithChips();
     const user = userEvent.setup();
     render(<App />);
@@ -125,16 +130,16 @@ describe("onboarding and new analysis", () => {
     expect(await screen.findByText("All done.")).toBeInTheDocument();
     expect(screen.getByLabelText("Queried EPA TRI releases, done")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Usage: 1.8K tokens, ~$0.0050" })).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: /New analysis/ })[0] as HTMLElement);
-    expect(screen.queryByRole("button", { name: /Usage:/ })).toBeNull();
+    await clearWorkspace(user);
     const chat = within(screen.getByRole("region", { name: "Copilot" }));
     expect(await chat.findByRole("button", { name: "Assess benzene" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Usage:/ })).toBeNull();
     expect(screen.queryByText("All done.")).toBeNull();
-    // The earlier run is kept on the server, not deleted.
-    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    // The cleared thread is discarded on the server too.
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
 
-  it("fills the summary from a workspace update and clears it on a new analysis", async () => {
+  it("fills the summary from a workspace update and empties it when the workspace is cleared", async () => {
     const state = workspace({
       risk: { ...EMPTY_WORKSPACE.risk, hq_worst: extremum(2.5, "above"), reason: null },
     });
@@ -147,7 +152,7 @@ describe("onboarding and new analysis", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Assess benzene" }));
     expect(await screen.findByText("Above concern")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: /New analysis/ })[0] as HTMLElement);
+    await clearWorkspace(user);
     await waitFor(() => expect(screen.queryByText("Above concern")).toBeNull());
   });
 });

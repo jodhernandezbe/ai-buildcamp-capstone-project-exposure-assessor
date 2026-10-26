@@ -55,6 +55,10 @@ class ThreadStore:
         """Whether the thread is held (it has been claimed and not forgotten)."""
         return thread_id in self._used
 
+    def running(self, thread_id: str) -> bool:
+        """Whether the thread is running a turn now."""
+        return thread_id in self._busy
+
     def _evict(self) -> None:
         if self._max_threads is None:
             return

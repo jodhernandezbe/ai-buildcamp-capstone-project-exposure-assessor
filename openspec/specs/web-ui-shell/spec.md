@@ -159,16 +159,17 @@ reach. Markers SHALL be reachable by keyboard and announce the facility name to 
 
 ### Requirement: Copilot chat
 The chat dock SHALL show a header with the title, a live status indicator (idle, thinking,
-running a tool, error), the usage meter and a collapse control. An empty thread SHALL show an
-onboarding state with three to four suggestion chips (text from configuration) that submit their
-text when clicked. Assistant messages SHALL render Markdown safely (no raw HTML), including
-GitHub Flavored Markdown tables, and stream as `token` events arrive. A table SHALL render as a
-real table with a header row. It SHALL sit in its own horizontal scroll area, so a table wider
-than the message scrolls sideways without widening the message, the chat or the page. The header
-SHALL be shaded, all columns SHALL use tabular numerals, and cell text SHALL NOT wrap. Tool steps
-SHALL appear as compact pills, grouped per turn in a collapsible row, each showing its label and
-a running / done / error state. Off-topic redirects SHALL render as normal assistant messages.
-Starting a new analysis is done from the navigation rail.
+running a tool, error), the usage meter, a clear control and a collapse control. An empty thread
+SHALL show an onboarding state with three to four suggestion chips (text from configuration)
+that submit their text when clicked. Assistant messages SHALL render Markdown safely (no raw
+HTML), including GitHub Flavored Markdown tables, and stream as `token` events arrive. A table
+SHALL render as a real table with a header row. It SHALL sit in its own horizontal scroll area,
+so a table wider than the message scrolls sideways without widening the message, the chat or
+the page. The header SHALL be shaded, all columns SHALL use tabular numerals, and cell text
+SHALL NOT wrap. Tool steps SHALL appear as compact pills, grouped per turn in a collapsible row,
+each showing its label and a running / done / error state. Off-topic redirects SHALL render as
+normal assistant messages. The chat header's clear control SHALL perform the same "Clear
+workspace" action as the navigation rail, including its confirmation.
 
 #### Scenario: Suggestion chip
 - **WHEN** the user clicks a suggestion chip
@@ -189,6 +190,10 @@ Starting a new analysis is done from the navigation rail.
 #### Scenario: Wide table
 - **WHEN** a rendered table is wider than the chat dock
 - **THEN** only that table scrolls horizontally and the chat dock width is unchanged
+
+#### Scenario: Chat clear asks first
+- **WHEN** the user activates the chat header's clear control on a workspace with results
+- **THEN** the same confirmation dialog as "Clear workspace" opens
 
 ### Requirement: Usage meter
 The chat header SHALL show the session's total tokens and estimated cost, and a popover SHALL
@@ -287,12 +292,15 @@ SHALL say which lookups will be unavailable.
 ### Requirement: Navigation rail
 The leftmost region SHALL be a navigation rail with two states: collapsed (an icon rail of about
 60 px) and expanded (resizable within its configured limits, 200–320 px by default). A toggle
-next to the brand mark at the top SHALL switch between them. In order, the rail SHALL show:
-at the top, the brand mark, the toggle and a "New analysis" action. In the middle, a
-"Workspace" entry and the list of this session's runs. At the bottom, a Settings entry. In the
-collapsed state every entry SHALL show only its icon with an accessible name and a tooltip. The
-current run SHALL be marked as current, in words for assistive technology and not by colour
-alone.
+next to the brand mark at the top SHALL switch between them. In order, the rail SHALL show: at
+the top, the brand mark and the toggle. Below them, the entries "Workspace", "Clear workspace",
+"Generate report" and "Monitoring". At the bottom, a Settings entry. The rail SHALL NOT list
+runs and SHALL NOT offer a "New analysis" action. "Workspace" SHALL be marked as the current
+page, in words for assistive technology and not by colour alone; activating it SHALL leave
+fullscreen and close the Settings drawer and any open dialog. "Monitoring" SHALL be shown
+disabled with the note "Coming soon" and SHALL do nothing when activated. In the collapsed
+state every entry SHALL show only its icon with an accessible name and a tooltip; a disabled
+entry's tooltip SHALL say why it is disabled.
 
 #### Scenario: Collapse and expand
 - **WHEN** the user activates the toggle on an expanded rail
@@ -302,29 +310,17 @@ alone.
 - **WHEN** the rail is collapsed and the user focuses the Settings icon
 - **THEN** it announces "Settings" and opens the settings drawer when activated
 
-### Requirement: Session run history
-"New analysis" SHALL start a new, empty conversation and workspace without discarding the
-previous run. The rail SHALL list the runs of the current page session, newest first. Each run
-is titled by its first user message, shortened, or "New analysis" while it has none. Selecting a
-run SHALL restore its messages, workspace (overview and map) and session usage from the server
-and make it the conversation that new messages continue. A run whose turn is still streaming
-SHALL NOT be switched away from until the turn ends or is stopped. If the server no longer holds
-a run (restarted or evicted), selecting it SHALL show that the run is no longer available and
-remove it from the list, leaving the current conversation unchanged. Restored assistant messages
-show their text; tool-step pills are shown only for turns streamed in this page session. The
-list SHALL NOT be written to browser storage.
+#### Scenario: Entries in order
+- **WHEN** the rail is expanded
+- **THEN** it shows Workspace, Clear workspace, Generate report and Monitoring in that order, then Settings at the bottom, and no run list
 
-#### Scenario: Start a second run
-- **WHEN** a run has messages and the user activates "New analysis"
-- **THEN** an empty conversation and an empty map framed on the United States appear, and the earlier run is listed in the rail
+#### Scenario: Return to the workspace
+- **WHEN** the map is fullscreen and the Settings drawer is open, and the user activates "Workspace"
+- **THEN** the drawer closes and the overview, map and chat are all visible again
 
-#### Scenario: Return to an earlier run
-- **WHEN** the user selects an earlier run in the rail
-- **THEN** its messages, overview and map are restored and the next message continues that run
-
-#### Scenario: Run no longer available
-- **WHEN** the user selects a run the server has evicted
-- **THEN** a message says the run is no longer available, the run leaves the list, and the current conversation is unchanged
+#### Scenario: Monitoring not yet available
+- **WHEN** the user activates "Monitoring"
+- **THEN** nothing changes and the entry is announced as unavailable with "Coming soon"
 
 ### Requirement: Analysis panels with fullscreen
 The analysis area SHALL hold an Overview panel (the executive summary) and a Map panel, each
@@ -422,3 +418,51 @@ Each of the three chart sections SHALL have a control with an accessible name ("
 #### Scenario: Panel width
 - **WHEN** the panel is narrow
 - **THEN** the sections stack vertically and each chart fits the width
+
+### Requirement: Clear workspace
+"Clear workspace" SHALL open an in-app confirmation dialog (not a browser dialog) that says the
+conversation, overview, charts and map will be discarded and cannot be recovered, with "Clear"
+and "Cancel" actions; Cancel and Escape SHALL close it without changes, and focus SHALL return
+to the control that opened it. On "Clear" the interface SHALL ask the server to discard the
+current thread and then show an empty chat (onboarding state), an empty overview, no charts,
+and an empty map framed on the United States, with the usage meter reset and any pending
+confirmation card removed; the next message SHALL start a new thread. If the server cannot
+discard the thread, the interface SHALL say so and keep the current workspace unchanged. The
+entry SHALL be disabled while a turn streams and when the workspace is already empty (no
+messages and no results).
+
+#### Scenario: Clear after an assessment
+- **WHEN** the workspace shows messages, facilities and charts and the user confirms "Clear"
+- **THEN** the chat shows the onboarding state, the overview and charts are empty, the map shows the United States with no facilities, and the usage meter reads zero
+
+#### Scenario: Cancel
+- **WHEN** the confirmation dialog is open and the user presses Escape
+- **THEN** the dialog closes, the workspace is unchanged and focus returns to "Clear workspace"
+
+#### Scenario: Disabled while streaming
+- **WHEN** a turn is streaming
+- **THEN** "Clear workspace" is disabled and its tooltip says a reply is in progress
+
+#### Scenario: Server refuses
+- **WHEN** the user confirms "Clear" and the server answers with an error
+- **THEN** a message says the workspace could not be cleared and every message, result and map layer is still shown
+
+### Requirement: Generate report
+"Generate report" SHALL request the current thread's Word report from the server and save it
+through the browser as a `.docx` file named by the server. While the request runs the entry
+SHALL show a busy state and SHALL NOT start a second request. The entry SHALL be disabled while
+a turn streams and while the workspace holds neither a chemical result nor a facility, with a
+tooltip saying why. If the request fails, the interface SHALL show the server's generic message
+and leave the workspace unchanged. The interface SHALL NOT build or alter the report's content.
+
+#### Scenario: Download a report
+- **WHEN** the workspace holds an assessed facility and the user activates "Generate report"
+- **THEN** a `.docx` file is downloaded and the workspace is unchanged
+
+#### Scenario: Nothing to report
+- **WHEN** the workspace is empty
+- **THEN** "Generate report" is disabled and its tooltip says there are no findings yet
+
+#### Scenario: Report fails
+- **WHEN** the server answers the report request with an error
+- **THEN** a message with the generic error text is shown and no file is saved

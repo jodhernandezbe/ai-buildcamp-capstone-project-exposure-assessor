@@ -1,8 +1,12 @@
-"""Chat routes: stream one turn as server-sent events, and reset a thread. Thin handlers only."""
+"""Chat routes: stream a turn as server-sent events, snapshot, report and reset a thread.
+
+Thin handlers only.
+"""
 
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -13,6 +17,8 @@ from api.dependencies import get_runtime, get_service_keys, get_settings, get_th
 from api.schemas.chat import ChatRequest, ThreadId, ThreadSnapshot
 from api.services.agent_runner import AgentRuntime, run_turn
 from api.services.confirmation import ConfirmationError, TurnPlan, plan_turn
+from api.services.report.builder import MEDIA_TYPE
+from api.services.report.service import ReportUnavailable, thread_report
 from api.services.snapshots import thread_snapshot
 from api.services.sse import encode_event
 from api.services.threads import ThreadStore
@@ -23,6 +29,12 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 UNKNOWN = "That run is no longer available."
 BUSY = "A turn is already running for this thread."
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+REPORT_RESPONSES: dict[int | str, dict[str, object]] = {
+    200: {
+        "description": "The thread's assessment as a Word document (attachment).",
+        "content": {MEDIA_TYPE: {"schema": {"type": "string", "format": "binary"}}},
+    }
+}
 
 
 async def _frames(
@@ -73,6 +85,23 @@ def get_thread(
     if snapshot is None:
         raise HTTPException(status_code=404, detail=UNKNOWN)
     return snapshot
+
+
+@router.get("/threads/{thread_id}/report", response_class=Response, responses=REPORT_RESPONSES)
+def get_report(
+    thread_id: ThreadId,
+    threads: Annotated[ThreadStore, Depends(get_threads)],
+    settings: Annotated[UiSettings, Depends(get_settings)],
+) -> Response:
+    """A held thread's findings as a Word report; never runs the agent or a tool."""
+    try:
+        report = thread_report(threads, thread_id, settings, datetime.now().astimezone())
+    except ReportUnavailable as error:
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
+    disposition = f'attachment; filename="{report.name}"'
+    return Response(
+        report.content, media_type=MEDIA_TYPE, headers={"Content-Disposition": disposition}
+    )
 
 
 @router.delete("/threads/{thread_id}", status_code=204)

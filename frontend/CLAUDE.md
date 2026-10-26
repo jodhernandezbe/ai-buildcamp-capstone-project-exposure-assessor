@@ -18,7 +18,10 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
   container with a `ResizeObserver`; nothing else calls `map.resize()`. Escape belongs to the
   topmost layer: a layer that handles it calls `preventDefault()` and `stopPropagation()`.
 - Browser storage holds panel sizes only (through `lib/safeStorage`, which never throws); never
-  keys, runs or messages. The run list is React state; the conversations live on the server.
+  keys, runs or messages. The page holds one workspace (one thread) at a time; the conversation
+  lives on the server, and "Clear workspace" (always behind `components/ui/ConfirmDialog`)
+  discards it there. The Word report is built by the server; the browser only saves the file
+  (`lib/saveFile`).
 - Talk to the system only through `/api/v1/*` via `services/apiClient.ts`; never call tools,
   the agent or assessment services directly. Only basemap tiles are fetched by the browser.
 - `src/types/api.ts` is generated from `src/types/schema.json` (exported from `api/schemas/`);

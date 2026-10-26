@@ -112,10 +112,10 @@ back to the tool name when no label is configured.
 ### Requirement: Conversation threads
 The program SHALL keep each thread's message history, dashboard state and session usage in
 process memory, so follow-up turns see earlier turns, and SHALL NOT persist threads to disk.
-Starting a new analysis in the UI SHALL leave earlier threads in place. The program SHALL keep at
+Clearing the workspace in the UI SHALL reset the thread it shows. The program SHALL keep at
 most a configured number of threads: when a new thread would exceed it, the thread used least
 recently that is not running a turn SHALL be forgotten first. A running thread SHALL NOT be
-evicted. A thread SHALL still be resettable, and only one turn per thread SHALL run at a time.
+evicted. A thread SHALL be resettable, and only one turn per thread SHALL run at a time.
 
 #### Scenario: Follow-up turn
 - **WHEN** a second turn is sent on the same thread
@@ -124,6 +124,10 @@ evicted. A thread SHALL still be resettable, and only one turn per thread SHALL 
 #### Scenario: Reset
 - **WHEN** the thread is reset
 - **THEN** its history, dashboard and session usage are cleared
+
+#### Scenario: Reset during a turn
+- **WHEN** a reset is requested while the thread is running a turn
+- **THEN** the request is answered 409 and the running turn is unaffected
 
 #### Scenario: Concurrent turn on one thread
 - **WHEN** a turn is submitted while another turn of the same thread is still running

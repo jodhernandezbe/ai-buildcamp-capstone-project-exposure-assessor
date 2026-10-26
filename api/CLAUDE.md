@@ -23,5 +23,8 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - The workspace shows only what tools returned: never compute, estimate or convert values
   (geometry for drawing the buffer and schematic sector is the one exception); anything
   unverified or unattributable becomes absent with a reason.
+- `services/report/` writes a thread's Word report (one module per section) from its
+  `WorkspaceState` and last assistant message only: it formats values (`values.py`, the same text
+  as the dashboard) and never computes one; its fixed text is `[ui.report]`.
 - Tests mirror the layout under `tests/api/`; they inject a fake vault, a fake chat model and
   an in-memory keyring backend and never touch the real keychain or a real provider.

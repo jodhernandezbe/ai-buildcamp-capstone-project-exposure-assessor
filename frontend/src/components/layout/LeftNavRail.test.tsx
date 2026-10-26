@@ -1,23 +1,22 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { LeftNavRail, type RailRun } from "./LeftNavRail";
+import { LeftNavRail } from "./LeftNavRail";
 
-const RUNS: RailRun[] = [
-  { id: "b", title: "Assess benzene" },
-  { id: "a", title: null },
-];
+const ENTRIES = ["Workspace", "Clear workspace", "Generate report", "Monitoring", "Settings"];
+const MONITORING_BADGE = "Coming soon";
 
 function setup(over: Partial<Parameters<typeof LeftNavRail>[0]> = {}) {
   const props = {
     collapsed: false,
     onToggle: vi.fn(),
-    runs: RUNS,
-    currentId: "b",
-    canSwitch: true,
-    onNewAnalysis: vi.fn(),
-    onSelectRun: vi.fn(),
     onWorkspace: vi.fn(),
+    onClear: vi.fn(),
+    clearBlocked: null,
+    onReport: vi.fn(),
+    reportBlocked: null,
+    reporting: false,
+    reportError: null,
     onOpenSettings: vi.fn(),
     ...over,
   };
@@ -25,55 +24,73 @@ function setup(over: Partial<Parameters<typeof LeftNavRail>[0]> = {}) {
   return props;
 }
 
+const names = () =>
+  screen
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.replace(MONITORING_BADGE, "") ?? "")
+    .filter((name) => !name.includes("navigation"));
+
 describe("LeftNavRail expanded", () => {
   it("shows no toggle where the rail cannot expand", () => {
     setup({ onToggle: undefined });
     expect(screen.queryByRole("button", { name: /navigation/ })).toBeNull();
   });
 
-  it("shows the brand, new analysis, workspace, runs and settings with labels", () => {
+  it("shows the brand and the entries in order, with no run list or New analysis", () => {
     setup();
     expect(screen.getByText("EcoFate")).toBeInTheDocument();
-    expect(screen.getByText("Exposure & Risk Studio")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New analysis" })).toBeInTheDocument();
+    expect(names()).toEqual(ENTRIES);
     expect(screen.getByRole("button", { name: "Workspace" })).toHaveAttribute("aria-current", "page");
-    const runs = within(screen.getByRole("list", { name: "Runs" }));
-    expect(runs.getByRole("button", { name: "Assess benzene" })).toHaveAttribute("aria-current", "true");
-    expect(runs.getByRole("button", { name: "Untitled analysis" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-  });
-
-  it("anchors Settings below the runs", () => {
-    setup();
-    const settings = screen.getByRole("button", { name: "Settings" });
-    const list = screen.getByRole("list", { name: "Runs" });
-    expect(list.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Runs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /New analysis/ })).toBeNull();
   });
 
   it("reports each action", async () => {
     const user = userEvent.setup();
     const props = setup();
     await user.click(screen.getByRole("button", { name: "Collapse navigation" }));
-    await user.click(screen.getAllByRole("button", { name: /New analysis/ })[0] as HTMLElement);
-    await user.click(within(screen.getByRole("list", { name: "Runs" })).getByRole("button", { name: "Untitled analysis" }));
     await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("button", { name: "Clear workspace" }));
+    await user.click(screen.getByRole("button", { name: "Generate report" }));
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(props.onToggle).toHaveBeenCalledTimes(1);
     expect(props.onWorkspace).toHaveBeenCalledTimes(1);
-    expect(props.onNewAnalysis).toHaveBeenCalledTimes(1);
-    expect(props.onSelectRun).toHaveBeenCalledWith("a");
+    expect(props.onClear).toHaveBeenCalledTimes(1);
+    expect(props.onReport).toHaveBeenCalledTimes(1);
     expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks starting or switching runs while a turn streams, but not the current run or Settings", async () => {
+  it("disables blocked entries and says why in their tooltip", async () => {
     const user = userEvent.setup();
-    const props = setup({ canSwitch: false });
-    expect(screen.getAllByRole("button", { name: /New analysis/ })[0]).toBeDisabled();
-    const runs = within(screen.getByRole("list", { name: "Runs" }));
-    expect(runs.getByRole("button", { name: "Untitled analysis" })).toBeDisabled();
-    expect(runs.getByRole("button", { name: "Assess benzene" })).toBeEnabled();
+    const props = setup({ clearBlocked: "a reply is in progress", reportBlocked: "there are no findings yet" });
+    const clear = screen.getByRole("button", { name: "Clear workspace" });
+    const report = screen.getByRole("button", { name: "Generate report" });
+    expect(clear).toBeDisabled();
+    expect(clear).toHaveAttribute("title", "Clear workspace: a reply is in progress");
+    expect(report).toBeDisabled();
+    expect(report).toHaveAttribute("title", "Generate report: there are no findings yet");
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(props.onOpenSettings).toHaveBeenCalled();
+  });
+
+  it("shows Monitoring as unavailable and does nothing", () => {
+    setup();
+    const monitoring = screen.getByRole("button", { name: /Monitoring/ });
+    expect(monitoring).toBeDisabled();
+    expect(monitoring).toHaveAttribute("title", "Monitoring: Coming soon");
+    expect(monitoring).toHaveTextContent("Coming soon");
+  });
+
+  it("shows a busy report entry that cannot start a second request", () => {
+    setup({ reporting: true });
+    const report = screen.getByRole("button", { name: "Generating report…" });
+    expect(report).toBeDisabled();
+    expect(report).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("announces a failed report", () => {
+    setup({ reportError: "The report could not be generated." });
+    expect(screen.getByRole("alert")).toHaveTextContent("The report could not be generated.");
   });
 });
 
@@ -82,11 +99,12 @@ describe("LeftNavRail collapsed", () => {
     setup({ collapsed: true });
     expect(screen.queryByText("EcoFate")).toBeNull();
     expect(screen.getByRole("img", { name: "EcoFate" })).toHaveAttribute("title", "EcoFate");
-    for (const name of ["New analysis", "Workspace", "Assess benzene", "Settings", "Expand navigation"]) {
-      const button = screen.getAllByRole("button", { name })[0] as HTMLElement;
+    for (const name of [...ENTRIES, "Expand navigation"]) {
+      const button = screen.getByRole("button", { name });
       expect(button.textContent).toBe("");
     }
     expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("title", "Settings");
+    expect(screen.getByRole("button", { name: "Monitoring" })).toHaveAttribute("title", "Monitoring: Coming soon");
   });
 
   it("opens Settings from its icon", async () => {
@@ -94,5 +112,12 @@ describe("LeftNavRail collapsed", () => {
     const props = setup({ collapsed: true });
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(props.onOpenSettings).toHaveBeenCalled();
+  });
+
+  it("keeps a failed report visible as a titled alert", () => {
+    setup({ collapsed: true, reportError: "The report could not be generated." });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveAttribute("title", "The report could not be generated.");
+    expect(alert).toHaveTextContent("The report could not be generated.");
   });
 });

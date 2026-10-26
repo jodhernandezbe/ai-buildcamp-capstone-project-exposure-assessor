@@ -70,6 +70,24 @@ export const clearKey = (name: KeyName): Promise<KeyStatusResponse> =>
 export const getThread = (threadId: string): Promise<ThreadSnapshot> =>
   json(`/chat/threads/${encodeURIComponent(threadId)}`);
 
+// The server names the file; this is used only if a response arrives without that header.
+const REPORT_FALLBACK_NAME = "assessment-report.docx";
+const ATTACHMENT_NAME = /filename="([^"]+)"/;
+
+/** A file from the server, ready to save. */
+export interface DownloadedFile {
+  name: string;
+  blob: Blob;
+}
+
+/** The thread's Word report; rejects with an `ApiError` (404 gone, 409 busy or nothing yet). */
+export async function getReport(threadId: string): Promise<DownloadedFile> {
+  const response = await request(`/chat/threads/${encodeURIComponent(threadId)}/report`);
+  const header = response.headers.get("content-disposition") ?? "";
+  const name = ATTACHMENT_NAME.exec(header)?.[1] ?? REPORT_FALLBACK_NAME;
+  return { name, blob: await response.blob() };
+}
+
 export async function resetThread(threadId: string): Promise<void> {
   await request(`/chat/threads/${encodeURIComponent(threadId)}`, { method: "DELETE" });
 }

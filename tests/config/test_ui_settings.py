@@ -78,6 +78,28 @@ overview_max_share = 0.75
 [ui.threads]
 max_retained = 5
 
+[ui.report]
+title = "Title"
+disclaimer = "Disclaimer"
+assessor_note = "Note"
+no_assessor_summary = "None available"
+empty_section = "Empty"
+not_reported = "absent"
+file_name = "report-{cas}-{date}.docx"
+brand = "Brand"
+logo = "api/assets/report-logo.png"
+page_label = "Page {page} of {pages}"
+
+[ui.report.headings]
+summary = "H1"
+chemical = "H2"
+sources = "H3"
+releases = "H4"
+exposure = "H5"
+risk = "H6"
+uncertainties = "H7"
+assessor = "H8"
+
 [ui.pricing."model-a"]
 input_usd_per_mtok = 1.5
 cached_input_usd_per_mtok = 0.5

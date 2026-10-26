@@ -943,6 +943,34 @@ overview_max_share = 0.75
 [ui.threads]
 max_retained = 20
 
+# The Word report of a thread (GET /api/v1/chat/threads/{id}/report). Text only: every value in
+# it comes from the thread's workspace. `file_name` takes {cas} (the CAS number, or "chemical")
+# and {date} (YYYY-MM-DD) and must end in .docx. The eight headings are numbered in this order.
+[ui.report]
+title = "Screening-level exposure and risk assessment"
+disclaimer = "Screening-level estimate built from EPA TRI, NEI, CompTox and Census data with conservative defaults. It is not a regulatory determination and is meant to decide where a refined assessment is needed."
+assessor_note = "Written by the AI assistant. It may contain errors and is not the source of the values in sections 1 to 7."
+no_assessor_summary = "No assistant summary is available for this assessment."
+empty_section = "No result was reported for this section."
+not_reported = "not reported"
+file_name = "exposure-screening-{cas}-{date}.docx"
+# Page header of every page: the app logo (PNG, relative to the project root; a copy of
+# frontend/public/logo.svg) beside the app name.
+brand = "EcoFate · Exposure & Risk Studio"
+logo = "api/assets/report-logo.png"
+# Page footer: {page} and {pages} become Word fields, so Word keeps them current.
+page_label = "Page {page} of {pages}"
+
+[ui.report.headings]
+summary = "Summary of findings"
+chemical = "Chemical identity and properties"
+sources = "Data sources"
+releases = "Releases"
+exposure = "Exposure assessment"
+risk = "Risk characterization"
+uncertainties = "Uncertainties and limitations"
+assessor = "Assessor summary"
+
 # Token prices per chat model, USD per million tokens, with the date and page they were taken
 # from. A model without an entry is shown as "unpriced"; never fill these from memory.
 [ui.pricing]

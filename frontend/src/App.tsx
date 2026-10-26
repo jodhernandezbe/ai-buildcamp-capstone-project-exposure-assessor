@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { LeftNavRail } from "./components/layout/LeftNavRail";
 import { SplitWorkspace } from "./components/layout/SplitWorkspace";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 import { ChatDock } from "./features/chat/ChatDock";
 import { MapPanel } from "./features/map/MapPanel";
 import { OverviewPanel } from "./features/overview/OverviewPanel";
@@ -9,29 +10,43 @@ import { SettingsDrawer } from "./features/settings/SettingsDrawer";
 import { useAgentStream } from "./hooks/useAgentStream";
 import { useClientConfig } from "./hooks/useClientConfig";
 import { useKeyStatus } from "./hooks/useKeyStatus";
-import { useRunHistory } from "./hooks/useRunHistory";
+import { useReportDownload } from "./hooks/useReportDownload";
 import { useWorkspaceStore } from "./hooks/useWorkspaceStore";
+import type { WorkspaceState } from "./types/workspace";
 
 // Until the server sends its display settings the ribbon shows these many digits.
 const DEFAULT_DIGITS = 2;
 const DEFAULT_BREAKPOINT_PX = 900;
+const REPLY_IN_PROGRESS = "a reply is in progress";
+const ALREADY_EMPTY = "the workspace is already empty";
+const NO_FINDINGS = "there are no findings yet";
+
+/** A chemical result or a facility: what the server needs before it can write a report. */
+const hasFindings = (state: WorkspaceState): boolean =>
+  state.chemical.cas_number !== null || state.facilities.length > 0;
 
 export function App() {
   const store = useWorkspaceStore();
-  const [firstRun] = useState(() => crypto.randomUUID());
-  const history = useRunHistory(firstRun);
   const chat = useAgentStream({
-    firstThreadId: firstRun,
     onWorkspace: store.apply,
     onReplace: (state) => (state ? store.replace(state) : store.clear()),
-    onNewRun: history.add,
-    onSent: history.title,
-    onGone: history.remove,
   });
+  const report = useReportDownload();
   const key = useKeyStatus();
   const config = useClientConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const digits = config?.significant_digits ?? DEFAULT_DIGITS;
+  const findings = hasFindings(store.workspace);
+  const empty = chat.messages.length === 0 && !findings;
+  const clearBlocked = chat.busy ? REPLY_IN_PROGRESS : empty ? ALREADY_EMPTY : null;
+  const reportBlocked = chat.busy ? REPLY_IN_PROGRESS : findings ? null : NO_FINDINGS;
+  const clear = () => {
+    setConfirmingClear(false);
+    void chat.clearWorkspace().then((cleared) => {
+      if (cleared) report.dismiss();
+    });
+  };
 
   return (
     <>
@@ -42,15 +57,17 @@ export function App() {
           <LeftNavRail
             collapsed={collapsed}
             onToggle={toggle}
-            runs={history.runs}
-            currentId={chat.threadId}
-            canSwitch={!chat.busy}
-            onNewAnalysis={chat.newRun}
-            onSelectRun={(id) => void chat.selectRun(id)}
             onWorkspace={() => {
               setSettingsOpen(false);
+              setConfirmingClear(false);
               exitFullscreen();
             }}
+            onClear={() => setConfirmingClear(true)}
+            clearBlocked={clearBlocked}
+            onReport={() => void report.download(chat.threadId)}
+            reportBlocked={reportBlocked}
+            reporting={report.busy}
+            reportError={report.error}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
@@ -67,7 +84,7 @@ export function App() {
             notice={chat.notice}
             confirmation={chat.confirmation}
             onSend={(text) => void chat.send(text)}
-            onClear={chat.newRun}
+            onClear={() => setConfirmingClear(true)}
             onAnswer={(answers, summary) => {
               if (chat.confirmation) void chat.answer(answers, summary, chat.confirmation);
             }}
@@ -86,6 +103,23 @@ export function App() {
         onClear={key.clear}
         onClose={() => setSettingsOpen(false)}
       />
+      <ConfirmDialog
+        open={confirmingClear && clearBlocked === null}
+        title="Clear this workspace?"
+        confirmLabel="Clear"
+        destructive
+        onConfirm={clear}
+        onCancel={() => setConfirmingClear(false)}
+      >
+        <p>This discards the current analysis. It cannot be recovered.</p>
+        <ul className="list-disc pl-5">
+          <li>The conversation with the copilot</li>
+          <li>Overview figures and risk charts</li>
+          <li>Facilities and buffers on the map</li>
+          <li>Session usage</li>
+        </ul>
+        <p>Generate a report first to keep the findings.</p>
+      </ConfirmDialog>
     </>
   );
 }

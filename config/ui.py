@@ -22,6 +22,7 @@ from config.parsing import (
     section,
     subtable,
 )
+from config.report import ReportSettings, parse_report
 
 _NAME = "ui"
 # The keys the interface can store: the model provider and the two services the tools call.
@@ -202,6 +203,7 @@ class UiSettings:
         layout: Workspace layout limits.
         max_threads: Most conversation threads held in memory.
         pricing: Chat model name -> token prices.
+        report: Fixed text of the Word assessment report.
     """
 
     host: str
@@ -217,6 +219,7 @@ class UiSettings:
     layout: Layout
     max_threads: int
     pricing: Mapping[str, ModelPrice]
+    report: ReportSettings
 
     @property
     def origin(self) -> str:
@@ -471,6 +474,7 @@ def load_ui_settings(path: Path | None = None) -> UiSettings:
         layout=_layout(table),
         max_threads=_max_threads(table),
         pricing=_pricing(table),
+        report=parse_report(table),
     )
 
 

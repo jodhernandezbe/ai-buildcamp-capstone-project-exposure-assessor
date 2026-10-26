@@ -5,7 +5,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.completion import NUDGE_NAME
-from api.services.snapshots import thread_messages, thread_snapshot
+from api.services.snapshots import last_answer, thread_messages, thread_snapshot
 from api.services.threads import ThreadStore
 
 
@@ -67,3 +67,20 @@ def test_a_completion_nudge_is_not_shown_and_the_text_after_it_joins_the_reply()
         ("user", "map hexane"),
         ("assistant", "I will now gather the data.\n\nHere it is."),
     ]
+
+
+def test_last_answer_is_the_last_assistant_text() -> None:
+    messages = [
+        HumanMessage(content="q1"),
+        AIMessage(content="First."),
+        HumanMessage(content="q2"),
+        AIMessage(content="", tool_calls=[{"name": "t", "args": {}, "id": "1"}]),
+        ToolMessage(content="{}", tool_call_id="1"),
+        AIMessage(content="Second."),
+    ]
+    assert last_answer(messages) == "Second."
+
+
+def test_no_answer_without_an_assistant_message() -> None:
+    assert last_answer([HumanMessage(content="q")]) is None
+    assert last_answer([]) is None
