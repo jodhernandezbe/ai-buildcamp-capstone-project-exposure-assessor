@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import api.__main__ as entry
+from config.telemetry import TelemetrySettings
 from config.ui import UiSettings, get_ui_settings
 
 
@@ -66,3 +67,24 @@ def test_main_does_not_start_without_a_frontend(
     with pytest.raises(SystemExit):
         entry.main()
     assert launched == {}
+
+
+def test_main_configures_monitoring_after_the_dotenv_file_and_before_serving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "index.html").write_text("<html></html>")
+    order: list[str] = []
+    settings = replace(get_ui_settings(), frontend_dist=tmp_path)
+
+    def configure(monitoring: TelemetrySettings) -> None:
+        order.append("monitoring")
+
+    def serve(app: object, **kwargs: object) -> None:
+        order.append("serve")
+
+    monkeypatch.setattr(entry, "ui_settings", lambda: settings)
+    monkeypatch.setattr(entry, "load_dotenv", lambda: order.append("env") or True)
+    monkeypatch.setattr(entry, "configure_telemetry", configure)
+    monkeypatch.setattr(entry.uvicorn, "run", serve)
+    entry.main()
+    assert order == ["env", "monitoring", "serve"]

@@ -11,6 +11,8 @@ from uvicorn.config import LOGGING_CONFIG
 from api.core.config import ui_settings
 from api.core.logging_filter import uvicorn_log_config
 from api.main import create_app
+from app.telemetry import configure_telemetry
+from config.telemetry import get_telemetry_settings
 
 BUILD_HINT = (
     "The frontend is not built. Run: npm --prefix frontend ci && npm --prefix frontend run build"
@@ -30,6 +32,7 @@ def main() -> None:
     keys (Census, CompTox). The OpenAI key is not read from there: it comes from the keychain.
     """
     load_dotenv()
+    configure_telemetry(get_telemetry_settings())  # after .env, which may hold the token
     settings = ui_settings()
     require_built_frontend(settings.frontend_dist)
     uvicorn.run(

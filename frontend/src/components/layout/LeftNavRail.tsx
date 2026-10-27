@@ -17,8 +17,12 @@ interface LeftNavRailProps {
   collapsed: boolean;
   /** Absent where the rail cannot expand (a narrow window): the toggle is then not shown. */
   onToggle?: (() => void) | undefined;
+  /** The view on screen; its entry is marked as the current page. */
+  view: "workspace" | "monitoring";
   /** Return to the workspace: leave fullscreen and close whatever is open over it. */
   onWorkspace: () => void;
+  /** Show the Monitoring view: leave fullscreen and close whatever is open over the workspace. */
+  onMonitoring: () => void;
   /** Ask to clear the workspace (the caller confirms first). */
   onClear: () => void;
   /** Why "Clear workspace" is unavailable now; null when it can be used. */
@@ -32,8 +36,6 @@ interface LeftNavRailProps {
   reportError?: string | null | undefined;
   onOpenSettings: () => void;
 }
-
-const MONITORING_SOON = "Coming soon";
 
 interface ItemProps {
   icon: ElementType;
@@ -99,7 +101,9 @@ function ReportError({ text, collapsed }: { text: string; collapsed: boolean }) 
 export function LeftNavRail({
   collapsed,
   onToggle,
+  view,
   onWorkspace,
+  onMonitoring,
   onClear,
   clearBlocked,
   onReport,
@@ -139,7 +143,13 @@ export function LeftNavRail({
         ) : (
           <h2 className="px-3 text-xs font-semibold uppercase tracking-wider text-fg2">Analysis area</h2>
         )}
-        <Item icon={LayoutDashboard} label="Workspace" collapsed={collapsed} onClick={onWorkspace} page />
+        <Item
+          icon={LayoutDashboard}
+          label="Workspace"
+          collapsed={collapsed}
+          onClick={onWorkspace}
+          page={view === "workspace"}
+        />
         <Item
           icon={Trash2}
           label="Clear workspace"
@@ -157,7 +167,13 @@ export function LeftNavRail({
           busy={reporting}
         />
         {reportError ? <ReportError text={reportError} collapsed={collapsed} /> : null}
-        <Item icon={Activity} label="Monitoring" collapsed={collapsed} blocked={MONITORING_SOON} badge={MONITORING_SOON} />
+        <Item
+          icon={Activity}
+          label="Monitoring"
+          collapsed={collapsed}
+          onClick={onMonitoring}
+          page={view === "monitoring"}
+        />
       </div>
       <Item icon={Settings} label="Settings" collapsed={collapsed} onClick={onOpenSettings} />
     </div>

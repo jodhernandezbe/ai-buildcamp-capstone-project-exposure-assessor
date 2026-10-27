@@ -26,5 +26,13 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - `services/report/` writes a thread's Word report (one module per section) from its
   `WorkspaceState` and last assistant message only: it formats values (`values.py`, the same text
   as the dashboard) and never computes one; its fixed text is `[ui.report]`.
+- `services/monitoring/` reads recorded sessions back from the Logfire query API for the
+  Monitoring view (`client.py` the only module that talks to it, `queries.py` the SQL, `rows.py`
+  the untrusted-row parsers, `sessions.py` and `timeline.py` the figures, `service.py` the states).
+  The read token comes from the environment variable named in `[telemetry]`, never from the
+  user or the keychain; it is used only there, protected from the logs, and never returned or
+  given to the agent. Statements take values only as quoted literals (ids match
+  `THREAD_ID_PATTERN`). Everything shown comes from the spans; a missing figure is absent, and
+  Logfire failures are a state with a user-safe message, never invented sessions.
 - Tests mirror the layout under `tests/api/`; they inject a fake vault, a fake chat model and
   an in-memory keyring backend and never touch the real keychain or a real provider.

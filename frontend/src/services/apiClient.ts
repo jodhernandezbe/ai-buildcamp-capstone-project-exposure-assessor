@@ -4,6 +4,8 @@ import type {
   KeyName,
   KeysStatusResponse,
   KeyStatusResponse,
+  SessionDetailResponse,
+  SessionsResponse,
   StreamEvent,
   ThreadSnapshot,
 } from "../types/workspace";
@@ -69,6 +71,13 @@ export const clearKey = (name: KeyName): Promise<KeyStatusResponse> =>
 /** A held thread's messages, workspace and usage; rejects with a 404 `ApiError` when gone. */
 export const getThread = (threadId: string): Promise<ThreadSnapshot> =>
   json(`/chat/threads/${encodeURIComponent(threadId)}`);
+
+/** The most recent recorded sessions, newest first (or the reason there are none). */
+export const getMonitoringSessions = (): Promise<SessionsResponse> => json("/monitoring/sessions");
+
+/** One recorded session with its turns; rejects with a 404 `ApiError` when none was recorded. */
+export const getMonitoringSession = (sessionId: string): Promise<SessionDetailResponse> =>
+  json(`/monitoring/sessions/${encodeURIComponent(sessionId)}`);
 
 // The server names the file; this is used only if a response arrives without that header.
 const REPORT_FALLBACK_NAME = "assessment-report.docx";

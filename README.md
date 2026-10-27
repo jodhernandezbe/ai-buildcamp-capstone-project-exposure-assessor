@@ -131,6 +131,32 @@ off-topic requests with a short redirect, without running the agent.
 For frontend work with hot reload, run `uv run python -m api` in one terminal and
 `npm --prefix frontend run dev` in another, then open http://localhost:5173.
 
+## Monitoring
+
+Every run of the agent can be recorded as a trace in [Pydantic Logfire](https://logfire.pydantic.dev):
+one session per command-line run, or per chat turn of the web interface (tagged with the
+conversation), holding every model call (prompt, answer, tokens) and every tool call (name,
+arguments, result, duration), plus the run's tokens and estimated cost. The cost uses the same
+prices as the chat's usage meter (`[ui.pricing]`), and `uv run python -m app "..."` prints it
+after the answer (on stderr, so the answer can still be piped).
+
+Set up once, by whoever installs the app, in `.env` (never entered in the interface). Both
+tokens come from one Logfire project (Settings -> Write tokens / Read tokens):
+
+    LOGFIRE_TOKEN=...        # lets runs send their traces; without it nothing leaves the machine
+    LOGFIRE_READ_TOKEN=...   # lets the Monitoring view read them back
+
+To check a trace: run `uv run python -m app "What is the molecular weight of benzene, CAS 71-43-2?"`,
+then open the project in Logfire (Live view), or open **Monitoring** in the web interface: it lists
+the recorded sessions with their model calls, tool calls, tokens, estimated cost and duration; a
+session opens into its calls in order, with a link to the trace in Logfire. If Logfire cannot be
+reached, or no read token is set, the view says so and shows nothing else.
+
+When a write token is set, the questions, tool arguments and results (chemical identifiers,
+facility data) are sent to Logfire. API keys and tokens are scrubbed from every span. Turn
+monitoring off with `enabled = false` in `[telemetry]` (`config/settings.toml`). The tests never
+send anything.
+
 ## Evaluating the agent
 
 `uv run pytest -m eval` runs the agent with the `[agent]` model on the scenarios in

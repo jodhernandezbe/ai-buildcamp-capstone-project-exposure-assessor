@@ -10,6 +10,13 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - Model name, key variable, timeout and step limit come from `[agent]` in
   `config/settings.toml`; never hard-code them.
 - Tests inject a fake environment or a fake chat model; never call a real provider.
+- `telemetry.py` is the only place that touches Logfire: `configure_telemetry` runs once at
+  start-up (after `.env` is loaded; `app/__main__` and `api/__main__` call it), `session_span`
+  wraps a run and `run_tracer` is the callback that records its model and tool calls inside it.
+  `agent/` and the tools know nothing about it. `usage_meter.py` is the one place calls are
+  counted and priced (CLI summary, web usage meter and span attributes all use it). Span and
+  attribute names come from `[telemetry]`; keys and tokens are scrubbed from spans with the same
+  patterns as the logs (`commons/key_patterns.py`). `ask` returns a `RunResult` (answer and calls).
 - `key_vault.py` is the only module that touches the OS credential store (`keyring`), for the
   OpenAI, Census and CompTox keys (`ServiceKeys`, one entry each from `[ui.keyring]`). A key
   leaves it only as a `SecretStr`: the OpenAI one to `build_chat_model(..., api_key=...)`, all

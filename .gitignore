@@ -37,3 +37,6 @@ data/raw/
 frontend/*.tsbuildinfo
 # npm is the package manager (package-lock.json); a yarn lockfile would pin other versions.
 frontend/yarn.lock
+
+# Logfire project credentials written by `logfire projects use`
+.logfire/

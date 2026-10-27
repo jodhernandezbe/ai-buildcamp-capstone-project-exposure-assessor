@@ -4,13 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { LeftNavRail } from "./LeftNavRail";
 
 const ENTRIES = ["Workspace", "Clear workspace", "Generate report", "Monitoring", "Settings"];
-const MONITORING_BADGE = "Coming soon";
 
 function setup(over: Partial<Parameters<typeof LeftNavRail>[0]> = {}) {
   const props = {
     collapsed: false,
     onToggle: vi.fn(),
+    view: "workspace" as const,
     onWorkspace: vi.fn(),
+    onMonitoring: vi.fn(),
     onClear: vi.fn(),
     clearBlocked: null,
     onReport: vi.fn(),
@@ -27,7 +28,7 @@ function setup(over: Partial<Parameters<typeof LeftNavRail>[0]> = {}) {
 const names = () =>
   screen
     .getAllByRole("button")
-    .map((button) => button.getAttribute("aria-label") ?? button.textContent?.replace(MONITORING_BADGE, "") ?? "")
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "")
     .filter((name) => !name.includes("navigation"));
 
 describe("LeftNavRail expanded", () => {
@@ -50,11 +51,13 @@ describe("LeftNavRail expanded", () => {
     const props = setup();
     await user.click(screen.getByRole("button", { name: "Collapse navigation" }));
     await user.click(screen.getByRole("button", { name: "Workspace" }));
+    await user.click(screen.getByRole("button", { name: "Monitoring" }));
     await user.click(screen.getByRole("button", { name: "Clear workspace" }));
     await user.click(screen.getByRole("button", { name: "Generate report" }));
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(props.onToggle).toHaveBeenCalledTimes(1);
     expect(props.onWorkspace).toHaveBeenCalledTimes(1);
+    expect(props.onMonitoring).toHaveBeenCalledTimes(1);
     expect(props.onClear).toHaveBeenCalledTimes(1);
     expect(props.onReport).toHaveBeenCalledTimes(1);
     expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
@@ -73,12 +76,18 @@ describe("LeftNavRail expanded", () => {
     expect(props.onOpenSettings).toHaveBeenCalled();
   });
 
-  it("shows Monitoring as unavailable and does nothing", () => {
+  it("marks the entry of the view on screen as the current page, and only that one", () => {
+    setup({ view: "monitoring" });
+    expect(screen.getByRole("button", { name: "Monitoring" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Workspace" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("offers Monitoring as an enabled entry with no 'coming soon' note", () => {
     setup();
-    const monitoring = screen.getByRole("button", { name: /Monitoring/ });
-    expect(monitoring).toBeDisabled();
-    expect(monitoring).toHaveAttribute("title", "Monitoring: Coming soon");
-    expect(monitoring).toHaveTextContent("Coming soon");
+    const monitoring = screen.getByRole("button", { name: "Monitoring" });
+    expect(monitoring).toBeEnabled();
+    expect(monitoring).not.toHaveAttribute("title");
+    expect(screen.queryByText(/Coming soon/i)).toBeNull();
   });
 
   it("shows a busy report entry that cannot start a second request", () => {
@@ -104,7 +113,7 @@ describe("LeftNavRail collapsed", () => {
       expect(button.textContent).toBe("");
     }
     expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("title", "Settings");
-    expect(screen.getByRole("button", { name: "Monitoring" })).toHaveAttribute("title", "Monitoring: Coming soon");
+    expect(screen.getByRole("button", { name: "Monitoring" })).toHaveAttribute("title", "Monitoring");
   });
 
   it("opens Settings from its icon", async () => {

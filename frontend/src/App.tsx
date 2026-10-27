@@ -5,6 +5,7 @@ import { SplitWorkspace } from "./components/layout/SplitWorkspace";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 import { ChatDock } from "./features/chat/ChatDock";
 import { MapPanel } from "./features/map/MapPanel";
+import { MonitoringView } from "./features/monitoring/MonitoringView";
 import { OverviewPanel } from "./features/overview/OverviewPanel";
 import { SettingsDrawer } from "./features/settings/SettingsDrawer";
 import { useAgentStream } from "./hooks/useAgentStream";
@@ -36,6 +37,7 @@ export function App() {
   const config = useClientConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [view, setView] = useState<"workspace" | "monitoring">("workspace");
   const digits = config?.significant_digits ?? DEFAULT_DIGITS;
   const findings = hasFindings(store.workspace);
   const empty = chat.messages.length === 0 && !findings;
@@ -57,7 +59,15 @@ export function App() {
           <LeftNavRail
             collapsed={collapsed}
             onToggle={toggle}
+            view={view}
             onWorkspace={() => {
+              setView("workspace");
+              setSettingsOpen(false);
+              setConfirmingClear(false);
+              exitFullscreen();
+            }}
+            onMonitoring={() => {
+              setView("monitoring");
               setSettingsOpen(false);
               setConfirmingClear(false);
               exitFullscreen();
@@ -71,6 +81,7 @@ export function App() {
             onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
+        covering={view === "monitoring" ? <MonitoringView /> : undefined}
         overview={<OverviewPanel workspace={store.workspace} digits={digits} thresholds={config?.thresholds} />}
         map={<MapPanel workspace={store.workspace} viewEpoch={store.epoch} digits={digits} map={config?.map} />}
         chat={({ collapse }) => (

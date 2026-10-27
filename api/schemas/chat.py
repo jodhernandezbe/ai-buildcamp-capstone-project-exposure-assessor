@@ -9,7 +9,8 @@ from pydantic import Field, RootModel, StrictFloat, StrictInt, model_validator
 from api.schemas.base import ContractModel
 from api.schemas.workspace import WorkspaceState
 
-ThreadId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
+THREAD_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
+ThreadId = Annotated[str, Field(pattern=THREAD_ID_PATTERN)]
 
 
 class EntryAnswer(ContractModel):

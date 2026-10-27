@@ -1694,6 +1694,381 @@
       "title": "Screening",
       "type": "object"
     },
+    "SessionDetailResponse": {
+      "additionalProperties": false,
+      "description": "``GET /api/v1/monitoring/sessions/{session_id}``: one session and its turns.",
+      "properties": {
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "ok",
+            "not_configured",
+            "unavailable",
+            "unauthorized"
+          ],
+          "type": "string"
+        },
+        "turns": {
+          "items": {
+            "$ref": "#/$defs/SessionTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "state",
+        "message",
+        "session",
+        "turns"
+      ],
+      "title": "SessionDetailResponse",
+      "type": "object"
+    },
+    "SessionStep": {
+      "additionalProperties": false,
+      "description": "One model call or tool call of a turn, in start order.\n\nAttributes:\n    kind: ``model`` or ``tool``.\n    name: The model name, or the tool's step label.\n    offset_ms: Start, in milliseconds after the turn started.\n    duration_ms: How long it took.\n    outcome: ``error`` when the call raised.\n    input_tokens: Input tokens (model calls that reported usage).\n    output_tokens: Output tokens (model calls that reported usage).",
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "tool"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "offset_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "error",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "offset_ms",
+        "duration_ms",
+        "outcome",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "SessionStep",
+      "type": "object"
+    },
+    "SessionSummary": {
+      "additionalProperties": false,
+      "description": "A session as listed: a web thread or one command-line run.\n\nCounts come from the trace's spans; tokens and cost are the sums of the turns' recorded\nusage and are None when any turn did not record them. ``cost_status`` is the weakest status\nof its turns (``unknown`` when one is missing).",
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cost_status": {
+          "enum": [
+            "estimate",
+            "lower_bound",
+            "unpriced",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "error",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "question": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "tool_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "turns": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "started_at",
+        "question",
+        "model",
+        "turns",
+        "model_calls",
+        "tool_calls",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "cost_usd",
+        "cost_status",
+        "duration_ms",
+        "outcome"
+      ],
+      "title": "SessionSummary",
+      "type": "object"
+    },
+    "SessionTurn": {
+      "additionalProperties": false,
+      "description": "One turn (web) or run (command line) of a session, with its steps.\n\n``trace_url`` opens the trace in Logfire; None when the project is unknown.",
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "error",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/SessionStep"
+          },
+          "type": "array"
+        },
+        "trace_id": {
+          "type": "string"
+        },
+        "trace_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "trace_id",
+        "started_at",
+        "question",
+        "duration_ms",
+        "outcome",
+        "steps",
+        "trace_url"
+      ],
+      "title": "SessionTurn",
+      "type": "object"
+    },
+    "SessionsResponse": {
+      "additionalProperties": false,
+      "description": "``GET /api/v1/monitoring/sessions``: recent sessions, newest first, or why there are none.\n\n``message`` is a user-safe reason when ``state`` is not ``ok``.",
+      "properties": {
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/SessionSummary"
+          },
+          "type": "array"
+        },
+        "state": {
+          "enum": [
+            "ok",
+            "not_configured",
+            "unavailable",
+            "unauthorized"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "message",
+        "sessions"
+      ],
+      "title": "SessionsResponse",
+      "type": "object"
+    },
     "Stack": {
       "additionalProperties": false,
       "description": "One release point with its provenance tier and, when computed, its results.\n\nAttributes:\n    stack_number: 1-based position in the exposure call that evaluated it, else None.\n    tier: 1 Empirical NEI, 2 PSTK by SCC, 3 EPA global default; None without a source.\n    tier_label: ``Tier 1: Empirical NEI`` and so on.\n    scc: SCC behind a PSTK stack, when reported.\n    scc_description: Most specific process description of that SCC, from an SCC lookup\n        in the same thread; None when no lookup returned it.\n    scc_score: Match score (0-1) of that lookup.",
@@ -2397,6 +2772,12 @@
     "KeysStatusResponse": {
       "$ref": "#/$defs/KeysStatusResponse"
     },
+    "SessionDetailResponse": {
+      "$ref": "#/$defs/SessionDetailResponse"
+    },
+    "SessionsResponse": {
+      "$ref": "#/$defs/SessionsResponse"
+    },
     "StreamEventSchema": {
       "$ref": "#/$defs/StreamEventSchema"
     },
@@ -2416,6 +2797,8 @@
     "KeyStatusResponse",
     "KeyUpdatePayload",
     "KeysStatusResponse",
+    "SessionDetailResponse",
+    "SessionsResponse",
     "StreamEventSchema",
     "ThreadSnapshot",
     "UsageTotals",

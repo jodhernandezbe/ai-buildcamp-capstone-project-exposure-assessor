@@ -4,28 +4,21 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 import threading
 from collections import Counter
 from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from typing import Any
 
-SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{10,}")
-REDACTED = "sk-***REDACTED***"
-# The provider echoes a key back in its error messages with the middle starred out
-# ("sk-proj-****p8UA"), which still shows its end; that is scrubbed too.
-# (The lookahead keeps it from re-matching its own replacement, so redacting twice is harmless.)
-MASKED_KEY_PATTERN = re.compile(r"sk-(?!\*\*\*REDACTED)[A-Za-z0-9_-]*\*+[A-Za-z0-9]*")
-# A bearer token or a key-like assignment of any shape ("Authorization: Bearer ...",
-# "api_key=...", "'x-api-key': '...'"): the value goes, the name stays.
-BEARER_PATTERN = re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}")
-# A key in a URL's query string, as the Census Data API takes it ("...&key=...").
-QUERY_PATTERN = re.compile(r"(?i)([?&](?:key|api_?key|access_token|token)=)[^&\s'\")]+")
-ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\b((?:x-)?api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)"
-    r"(['\"]?\s*[:=]\s*['\"]?)[^\s'\",})]{8,}"
+from commons.key_patterns import (
+    ASSIGNMENT_PATTERN,
+    BEARER_PATTERN,
+    MASKED_KEY_PATTERN,
+    QUERY_PATTERN,
+    SECRET_PATTERN,
 )
+
+REDACTED = "sk-***REDACTED***"
 # Loggers whose records (and handlers) get the filter: the root, the server and the HTTP client.
 REDACTED_LOGGERS = ("", "uvicorn", "uvicorn.error", "uvicorn.access", "httpx", "httpcore")
 _PLAIN = (int, float, bool, type(None))

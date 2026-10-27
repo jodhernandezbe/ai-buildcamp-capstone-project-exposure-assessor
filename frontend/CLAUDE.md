@@ -8,7 +8,7 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
   Commands: `npm --prefix frontend ci`, `run build`, `run check` (contract diff, tsc, eslint,
   vitest). `check` must pass before work is done.
 - Feature-driven layout with one-way imports: `components/` (`layout/`, `ui/`: domain-agnostic
-  HIG primitives) -> `features/` (`overview/`, `map/`, `chat/`, `settings/`) -> `App.tsx`.
+  HIG primitives) -> `features/` (`overview/`, `map/`, `chat/`, `settings/`, `monitoring/`) -> `App.tsx`.
   `hooks/` (stream, stores, key status) and `services/apiClient.ts` serve features;
   `components/` never import `features/`, and features never import each other's internals.
 - Layout: `components/layout/SplitWorkspace` divides the window into rail | analysis (overview
@@ -17,6 +17,11 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
   `inert`), so the map keeps its camera and the chat its stream. The map watches its own
   container with a `ResizeObserver`; nothing else calls `map.resize()`. Escape belongs to the
   topmost layer: a layer that handles it calls `preventDefault()` and `stopPropagation()`.
+- The rail's "Monitoring" shows `features/monitoring` over the analysis area through
+  `SplitWorkspace`'s `covering` prop: the overview and map stay mounted underneath (inert, same
+  size), the chat is untouched, and "Workspace" removes it. The view reads only
+  `/api/v1/monitoring/*`, shows what Logfire returned (absent figures as "not reported"), and
+  never asks for a token (the server holds it).
 - Browser storage holds panel sizes only (through `lib/safeStorage`, which never throws); never
   keys, runs or messages. The page holds one workspace (one thread) at a time; the conversation
   lives on the server, and "Clear workspace" (always behind `components/ui/ConfirmDialog`)

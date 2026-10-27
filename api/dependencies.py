@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import cast
 
 from fastapi import Request
@@ -12,12 +13,14 @@ from agent.guardrails import ScopeGuard
 from api.core.config import ui_settings
 from api.core.security_keyring import default_service_keys
 from api.services.agent_runner import AgentRuntime
+from api.services.monitoring.service import MonitoringService
 from api.services.projectors.rules import WorkspaceRules
 from api.services.threads import ThreadStore
 from app.chat_model import build_chat_model
 from app.key_vault import ServiceKeys
 from config.agent import get_agent_settings
 from config.population import get_population_settings
+from config.telemetry import get_telemetry_settings
 from config.ui import UiSettings
 from prompts.registry import load_prompt
 
@@ -76,9 +79,15 @@ def get_runtime() -> AgentRuntime:
         completion_guard=_completion_guard(ui),
         system_prompt=f"{load_prompt(DEFAULT_SYSTEM_PROMPT)}\n\n{load_prompt(ui.prompts.addendum)}",
         workspace_rules=_workspace_rules(ui),
+        telemetry=get_telemetry_settings(),
     )
 
 
 def get_threads(request: Request) -> ThreadStore:
     """The in-memory thread store of this app."""
     return cast(ThreadStore, request.app.state.threads)
+
+
+def get_monitoring() -> MonitoringService:
+    """The monitoring service; it finds the Logfire read token in the server's environment."""
+    return MonitoringService(get_telemetry_settings(), ui_settings().step_labels, os.environ)

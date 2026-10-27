@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from api.dependencies import get_runtime
 from config.population import get_population_settings
+from config.telemetry import get_telemetry_settings
 from config.ui import get_ui_settings
 
 
@@ -13,3 +14,7 @@ def test_the_workspace_rules_come_from_settings() -> None:
     assert rules.thresholds == get_ui_settings().thresholds
     assert rules.coordinate_tolerance_deg == get_ui_settings().map.coordinate_tolerance_deg
     assert rules.default_radius_km == get_population_settings().default_radius_km
+
+
+def test_each_turn_is_recorded_with_the_monitoring_settings() -> None:
+    assert get_runtime().telemetry == get_telemetry_settings()

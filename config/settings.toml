@@ -814,6 +814,46 @@ timeout_seconds = 120.0
 recursion_limit = 80
 temperature = 0.0
 
+# Monitoring (Pydantic Logfire). `app` and `api` configure it once at start-up; nothing is sent
+# unless a write token (`write_token_env_var`, or `logfire projects use`) is present; Logfire reads
+# that variable itself, the program only keeps its value out of the logs. The Monitoring view
+# reads sessions back with the read token in `read_token_env_var` (set in .env, never entered in
+# the interface). Span and attribute names are the contract between what the telemetry writes and
+# what the Monitoring view queries; usage attributes are `<prefix><field>`.
+[telemetry]
+enabled = true
+service_name = "exposure-assessor"
+environment = "local"
+console = false  # also print spans to the terminal
+write_token_env_var = "LOGFIRE_TOKEN"  # pragma: allowlist secret
+read_token_env_var = "LOGFIRE_READ_TOKEN"  # pragma: allowlist secret
+query_timeout_seconds = 15.0
+session_window_hours = 168
+max_sessions = 50
+max_rows = 2000  # most rows one Logfire query may return
+# {trace_id} is required; {organization} and {project} come from the read token's project.
+trace_url_template = "https://logfire-us.pydantic.dev/{organization}/{project}?q=trace_id%3D%27{trace_id}%27"
+
+[telemetry.spans]
+cli_session = "assessment session"
+web_turn = "assessment turn"
+
+[telemetry.attributes]
+session_id = "session.id"
+question = "exposure.question"
+model = "gen_ai.request.model"
+outcome = "exposure.outcome"
+usage_prefix = "exposure.usage."
+session_usage_prefix = "exposure.session_usage."
+
+# What the LangChain-to-OpenTelemetry bridge writes on its spans (read by the Monitoring view).
+[telemetry.bridge]
+operation = "gen_ai.operation.name"
+model_operation = "chat"
+tool_operation = "execute_tool"
+tool_name = "gen_ai.tool.name"
+usage_metadata = "langsmith.metadata.usage_metadata"
+
 # Agent evaluation (evals/). The agent model comes from [agent]; the judge is a different,
 # stronger model that scores report wording, pinned so runs are repeatable. Network tools are
 # replayed from recordings in `cassette_dir`; the tools in `live_tools` need no network and run

@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
+from typing import cast
+from uuid import uuid4
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph.state import CompiledStateGraph
 
 from agent.completion import CompletionGuard
 from agent.graph import build_agent
+from agent.state import AgentState
 from app.chat_model import build_chat_model
 from app.key_vault import KeyringVault, ServiceKeys, default_service_keys, stored_key
+from app.telemetry import flush_telemetry, run_tracer, session_span
+from app.usage_meter import CallUsage, UsageRecorder
 from config.agent import AgentSettings, get_agent_settings
+from config.telemetry import get_telemetry_settings
 from config.ui import KEY_NAMES, get_ui_settings
 from prompts.registry import load_prompt
 from tools.credentials import HOLDERS
+
+Agent = CompiledStateGraph[AgentState, None, AgentState, AgentState]
 
 
 def completion_guard() -> CompletionGuard | None:
@@ -31,9 +42,15 @@ def completion_guard() -> CompletionGuard | None:
     )
 
 
-def run_config(settings: AgentSettings) -> RunnableConfig:
-    """LangGraph run configuration from the ``[agent]`` settings (the step limit)."""
-    return {"recursion_limit": settings.recursion_limit}
+def run_config(
+    settings: AgentSettings, callbacks: Sequence[BaseCallbackHandler] = ()
+) -> RunnableConfig:
+    """LangGraph run configuration from the ``[agent]`` settings (the step limit) and the
+    callbacks that observe the run, if any."""
+    config: RunnableConfig = {"recursion_limit": settings.recursion_limit}
+    if callbacks:
+        config["callbacks"] = list(callbacks)
+    return config
 
 
 def program_model(
@@ -65,8 +82,37 @@ def stored_keys_provided(keys: ServiceKeys) -> Generator[None]:
         yield
 
 
-def ask(question: str, model: BaseChatModel | None = None, keys: ServiceKeys | None = None) -> str:
-    """Return the agent's final answer to ``question``.
+@dataclass(frozen=True)
+class RunResult:
+    """What one command-line run produced.
+
+    Attributes:
+        answer: The agent's final answer.
+        calls: Every chat model call of the run (the agent's and the checks'), for the cost.
+    """
+
+    answer: str
+    calls: tuple[CallUsage, ...]
+
+
+def _answer_text(result: Mapping[str, object]) -> str:
+    last = cast(list[BaseMessage], result["messages"])[-1]
+    return last.text if isinstance(last, AIMessage) else str(last.content)
+
+
+def _invoke(agent: Agent, question: str, config: RunnableConfig, keys: ServiceKeys) -> str:
+    with stored_keys_provided(keys):
+        result = agent.invoke({"messages": [HumanMessage(content=question)]}, config)
+    return _answer_text(result)
+
+
+def ask(
+    question: str, model: BaseChatModel | None = None, keys: ServiceKeys | None = None
+) -> RunResult:
+    """Run the agent on ``question`` and return its answer with the model calls it made.
+
+    The run is recorded as one session span (see ``app.telemetry``) that ends with the run's
+    token usage and estimated cost.
 
     Args:
         question: The user's request.
@@ -79,7 +125,24 @@ def ask(question: str, model: BaseChatModel | None = None, keys: ServiceKeys | N
         model if model is not None else program_model(settings, vaults.vault("openai")),
         completion_guard=completion_guard(),
     )
-    with stored_keys_provided(vaults):
-        result = agent.invoke({"messages": [HumanMessage(content=question)]}, run_config(settings))
-    last = result["messages"][-1]
-    return last.text if isinstance(last, AIMessage) else str(last.content)
+    return _traced_run(agent, question, settings, vaults)
+
+
+def _traced_run(
+    agent: Agent, question: str, settings: AgentSettings, keys: ServiceKeys
+) -> RunResult:
+    """Run the agent inside the session span, metering every model call."""
+    monitoring = get_telemetry_settings()
+    recorder = UsageRecorder(settings.model)
+    tracer = run_tracer(monitoring)
+    config = run_config(settings, [recorder, *([tracer] if tracer else [])])
+    name = monitoring.spans.cli_session
+    try:
+        with session_span(monitoring, name, uuid4().hex, question, settings.model) as span:
+            try:
+                answer = _invoke(agent, question, config, keys)
+            finally:
+                span.record_usage(recorder.calls, get_ui_settings().pricing)
+    finally:
+        flush_telemetry(monitoring)
+    return RunResult(answer, tuple(recorder.calls))

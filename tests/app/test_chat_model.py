@@ -80,7 +80,7 @@ def test_run_config_carries_the_step_limit() -> None:
 def test_ask_returns_the_final_answer_of_an_injected_model() -> None:
     model = FakeToolModel(messages=iter([AIMessage(content="final answer")]))
     keys = default_service_keys(FakeCredentialStore())  # never the real keychain
-    assert ask("Assess CAS 71-43-2", model, keys) == "final answer"
+    assert ask("Assess CAS 71-43-2", model, keys).answer == "final answer"
 
 
 def test_injected_key_is_used_without_reading_the_environment() -> None:

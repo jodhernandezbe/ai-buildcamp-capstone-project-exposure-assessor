@@ -9,7 +9,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.main import create_app
+from api.main import _environment_keys, create_app  # pyright: ignore[reportPrivateUsage]
+from config.telemetry import get_telemetry_settings
 from config.ui import UiSettings
 from tests.api.conftest import ORIGIN
 
@@ -77,3 +78,12 @@ def test_frontend_is_served_when_built(settings: UiSettings, tmp_path: Path) -> 
     with TestClient(app, base_url=ORIGIN) as client:
         assert "shell" in client.get("/").text
         assert client.get("/api/v1/settings/openai-key").status_code == 200
+
+
+def test_both_logfire_tokens_are_kept_out_of_the_logs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monitoring = get_telemetry_settings()
+    monkeypatch.setenv(monitoring.write_token_env_var, "write-token-" + "w" * 20)
+    monkeypatch.setenv(monitoring.read_token_env_var, "read-token-" + "r" * 20)
+    protected = _environment_keys()
+    assert "write-token-" + "w" * 20 in protected
+    assert "read-token-" + "r" * 20 in protected

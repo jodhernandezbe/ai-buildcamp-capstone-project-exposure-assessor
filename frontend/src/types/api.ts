@@ -25,6 +25,8 @@ export interface ApiContract {
   KeyStatusResponse: KeyStatusResponse;
   KeyUpdatePayload: KeyUpdatePayload;
   KeysStatusResponse: KeysStatusResponse;
+  SessionDetailResponse: SessionDetailResponse;
+  SessionsResponse: SessionsResponse;
   StreamEventSchema: StreamEventSchema;
   ThreadSnapshot: ThreadSnapshot;
   UsageTotals: UsageTotals;
@@ -195,6 +197,98 @@ export interface KeysStatusResponse {
   census: KeyStatusResponse;
   comptox: KeyStatusResponse;
   openai: KeyStatusResponse;
+}
+/**
+ * ``GET /api/v1/monitoring/sessions/{session_id}``: one session and its turns.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "SessionDetailResponse".
+ */
+export interface SessionDetailResponse {
+  message: string | null;
+  session: SessionSummary | null;
+  state: "ok" | "not_configured" | "unavailable" | "unauthorized";
+  turns: SessionTurn[];
+}
+/**
+ * A session as listed: a web thread or one command-line run.
+ *
+ * Counts come from the trace's spans; tokens and cost are the sums of the turns' recorded
+ * usage and are None when any turn did not record them. ``cost_status`` is the weakest status
+ * of its turns (``unknown`` when one is missing).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "SessionSummary".
+ */
+export interface SessionSummary {
+  cached_input_tokens: number | null;
+  cost_status: "estimate" | "lower_bound" | "unpriced" | "unknown";
+  cost_usd: number | null;
+  duration_ms: number | null;
+  input_tokens: number | null;
+  model: string | null;
+  model_calls: number | null;
+  outcome: "ok" | "error" | "unknown";
+  output_tokens: number | null;
+  question: string | null;
+  session_id: string;
+  started_at: string;
+  tool_calls: number | null;
+  turns: number;
+}
+/**
+ * One turn (web) or run (command line) of a session, with its steps.
+ *
+ * ``trace_url`` opens the trace in Logfire; None when the project is unknown.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "SessionTurn".
+ */
+export interface SessionTurn {
+  duration_ms: number | null;
+  outcome: "ok" | "error" | "unknown";
+  question: string | null;
+  started_at: string;
+  steps: SessionStep[];
+  trace_id: string;
+  trace_url: string | null;
+}
+/**
+ * One model call or tool call of a turn, in start order.
+ *
+ * Attributes:
+ *     kind: ``model`` or ``tool``.
+ *     name: The model name, or the tool's step label.
+ *     offset_ms: Start, in milliseconds after the turn started.
+ *     duration_ms: How long it took.
+ *     outcome: ``error`` when the call raised.
+ *     input_tokens: Input tokens (model calls that reported usage).
+ *     output_tokens: Output tokens (model calls that reported usage).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "SessionStep".
+ */
+export interface SessionStep {
+  duration_ms: number | null;
+  input_tokens: number | null;
+  kind: "model" | "tool";
+  name: string;
+  offset_ms: number;
+  outcome: "ok" | "error" | "unknown";
+  output_tokens: number | null;
+}
+/**
+ * ``GET /api/v1/monitoring/sessions``: recent sessions, newest first, or why there are none.
+ *
+ * ``message`` is a user-safe reason when ``state`` is not ``ok``.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "SessionsResponse".
+ */
+export interface SessionsResponse {
+  message: string | null;
+  sessions: SessionSummary[];
+  state: "ok" | "not_configured" | "unavailable" | "unauthorized";
 }
 /**
  * This interface was referenced by `ApiContract`'s JSON-Schema

@@ -9,7 +9,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from api.schemas.workspace import WorkspaceState
-from api.services.usage_meter import CallUsage
+from app.usage_meter import CallUsage
 from tools.schemas import ConfirmationRequest
 
 

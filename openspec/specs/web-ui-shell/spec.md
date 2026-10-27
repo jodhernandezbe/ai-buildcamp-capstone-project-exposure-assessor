@@ -289,39 +289,6 @@ SHALL say which lookups will be unavailable.
 - **WHEN** a key has been saved
 - **THEN** `localStorage` and `sessionStorage` contain no key material
 
-### Requirement: Navigation rail
-The leftmost region SHALL be a navigation rail with two states: collapsed (an icon rail of about
-60 px) and expanded (resizable within its configured limits, 200–320 px by default). A toggle
-next to the brand mark at the top SHALL switch between them. In order, the rail SHALL show: at
-the top, the brand mark and the toggle. Below them, the entries "Workspace", "Clear workspace",
-"Generate report" and "Monitoring". At the bottom, a Settings entry. The rail SHALL NOT list
-runs and SHALL NOT offer a "New analysis" action. "Workspace" SHALL be marked as the current
-page, in words for assistive technology and not by colour alone; activating it SHALL leave
-fullscreen and close the Settings drawer and any open dialog. "Monitoring" SHALL be shown
-disabled with the note "Coming soon" and SHALL do nothing when activated. In the collapsed
-state every entry SHALL show only its icon with an accessible name and a tooltip; a disabled
-entry's tooltip SHALL say why it is disabled.
-
-#### Scenario: Collapse and expand
-- **WHEN** the user activates the toggle on an expanded rail
-- **THEN** the rail collapses to icons, the analysis area widens, and the map redraws at its new size
-
-#### Scenario: Collapsed entries remain usable
-- **WHEN** the rail is collapsed and the user focuses the Settings icon
-- **THEN** it announces "Settings" and opens the settings drawer when activated
-
-#### Scenario: Entries in order
-- **WHEN** the rail is expanded
-- **THEN** it shows Workspace, Clear workspace, Generate report and Monitoring in that order, then Settings at the bottom, and no run list
-
-#### Scenario: Return to the workspace
-- **WHEN** the map is fullscreen and the Settings drawer is open, and the user activates "Workspace"
-- **THEN** the drawer closes and the overview, map and chat are all visible again
-
-#### Scenario: Monitoring not yet available
-- **WHEN** the user activates "Monitoring"
-- **THEN** nothing changes and the entry is announced as unavailable with "Coming soon"
-
 ### Requirement: Analysis panels with fullscreen
 The analysis area SHALL hold an Overview panel (the executive summary) and a Map panel, each
 with a header naming it. They SHALL be separated by a splitter that can be dragged, with the
@@ -466,3 +433,38 @@ and leave the workspace unchanged. The interface SHALL NOT build or alter the re
 #### Scenario: Report fails
 - **WHEN** the server answers the report request with an error
 - **THEN** a message with the generic error text is shown and no file is saved
+
+### Requirement: Navigation rail with workspace and monitoring views
+The leftmost region SHALL be a navigation rail with two states: collapsed (an icon rail of about
+60 px) and expanded (resizable within its configured limits, 200–320 px by default). A toggle
+next to the brand mark at the top SHALL switch between them. In order, the rail SHALL show: at
+the top, the brand mark and the toggle. Below them, the entries "Workspace", "Clear workspace",
+"Generate report" and "Monitoring". At the bottom, a Settings entry. The rail SHALL NOT list
+runs and SHALL NOT offer a "New analysis" action. The entry for the view on screen
+("Workspace" or "Monitoring") SHALL be marked as the current page, in words for assistive
+technology and not by colour alone. Activating "Workspace" SHALL show the workspace, leave
+fullscreen and close the Settings drawer and any open dialog. Activating "Monitoring" SHALL
+show the Monitoring view and close the Settings drawer and any open dialog. The workspace
+panels and the chat stay mounted and keep their state. In the collapsed state every entry SHALL
+show only its icon with an accessible name and a tooltip; a disabled entry's tooltip SHALL say
+why it is disabled.
+
+#### Scenario: Collapse and expand
+- **WHEN** the user activates the toggle on an expanded rail
+- **THEN** the rail collapses to icons, the analysis area widens, and the map redraws at its new size
+
+#### Scenario: Collapsed entries remain usable
+- **WHEN** the rail is collapsed and the user focuses the Settings icon
+- **THEN** it announces "Settings" and opens the settings drawer when activated
+
+#### Scenario: Entries in order
+- **WHEN** the rail is expanded
+- **THEN** it shows Workspace, Clear workspace, Generate report and Monitoring in that order, then Settings at the bottom, and no run list
+
+#### Scenario: Return to the workspace
+- **WHEN** the map is fullscreen and the Settings drawer is open, and the user activates "Workspace"
+- **THEN** the drawer closes and the overview, map and chat are all visible again
+
+#### Scenario: Open Monitoring
+- **WHEN** the user activates "Monitoring"
+- **THEN** the Monitoring view is shown, "Monitoring" is announced as the current page, and returning to "Workspace" shows the panels and chat as they were left

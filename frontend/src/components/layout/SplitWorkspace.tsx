@@ -35,6 +35,11 @@ interface SplitWorkspaceProps {
   overview: ReactNode;
   map: ReactNode;
   chat: (controls: ChatControls) => ReactNode;
+  /**
+   * A view that covers the analysis area (overview and map) while given. They stay mounted
+   * underneath, inert and at their size, so the map keeps its camera and nothing resizes.
+   */
+  covering?: ReactNode;
 }
 
 type Pane = "overview" | "copilot";
@@ -69,7 +74,7 @@ function Segments({ pane, onChange }: { pane: Pane; onChange: (pane: Pane) => vo
   );
 }
 
-function Narrow({ rail, overview, map, chat }: Omit<SplitWorkspaceProps, "layout" | "narrowBreakpointPx">) {
+function Narrow({ rail, overview, map, chat, covering }: Omit<SplitWorkspaceProps, "layout" | "narrowBreakpointPx">) {
   const [pane, setPane] = useState<Pane>("overview");
   const { fullscreen, toggle, exit } = useFullscreen();
   const hide = (id: Pane) => (pane !== id ? "hidden" : "");
@@ -80,8 +85,11 @@ function Narrow({ rail, overview, map, chat }: Omit<SplitWorkspaceProps, "layout
       </nav>
       <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
         <Segments pane={pane} onChange={setPane} />
-        <div className="min-h-0 min-w-0">
-          <div className={`grid h-full min-h-0 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] ${hide("overview")}`}>
+        <div className="relative min-h-0 min-w-0">
+          <div
+            inert={Boolean(covering)}
+            className={`grid h-full min-h-0 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] ${hide("overview")}`}
+          >
             <PanelFrame id="overview" title="Overview" fullscreen={fullscreen} onToggle={toggle} scroll>
               {overview}
             </PanelFrame>
@@ -89,6 +97,7 @@ function Narrow({ rail, overview, map, chat }: Omit<SplitWorkspaceProps, "layout
               {map}
             </PanelFrame>
           </div>
+          {covering && pane === "overview" ? <div className="absolute inset-0 z-10 bg-bg">{covering}</div> : null}
           <section aria-label="Copilot" inert={fullscreen !== null} className={`h-full min-h-0 ${hide("copilot")}`}>
             {chat({ collapse: () => setPane("overview") })}
           </section>
@@ -122,7 +131,7 @@ function limits(layout: LayoutConfig | undefined) {
   };
 }
 
-function Wide({ layout, rail, overview, map, chat }: Omit<SplitWorkspaceProps, "narrowBreakpointPx">) {
+function Wide({ layout, rail, overview, map, chat, covering }: Omit<SplitWorkspaceProps, "narrowBreakpointPx">) {
   // Handles held in state, not refs: the controls handed to the render props read them.
   const [railPanel, setRailPanel] = usePanelCallbackRef();
   const [chatPanel, setChatPanel] = usePanelCallbackRef();
@@ -177,32 +186,37 @@ function Wide({ layout, rail, overview, map, chat }: Omit<SplitWorkspaceProps, "
         </Panel>
         <PanelSplitter axis="column" label="Resize navigation" />
         <Panel id="analysis" minSize="20%">
-          <Group
-            id="analysis"
-            orientation="vertical"
-            defaultLayout={inner.defaultLayout}
-            onLayoutChanged={inner.onLayoutChanged}
-            className="h-full w-full"
-          >
-            <Panel id="overview" {...sizes.overview}>
-              <PanelFrame
-                id="overview"
-                title="Overview"
-                fullscreen={fullscreen}
-                onToggle={toggle}
-                scroll
-                actions={showChat}
+          <div className="relative h-full w-full">
+            <div inert={Boolean(covering)} className="h-full w-full">
+              <Group
+                id="analysis"
+                orientation="vertical"
+                defaultLayout={inner.defaultLayout}
+                onLayoutChanged={inner.onLayoutChanged}
+                className="h-full w-full"
               >
-                {overview}
-              </PanelFrame>
-            </Panel>
-            <PanelSplitter axis="row" label="Resize overview and map" />
-            <Panel id="map" minSize="15%">
-              <PanelFrame id="map" title="Map" fullscreen={fullscreen} onToggle={toggle} scroll={false}>
-                {map}
-              </PanelFrame>
-            </Panel>
-          </Group>
+                <Panel id="overview" {...sizes.overview}>
+                  <PanelFrame
+                    id="overview"
+                    title="Overview"
+                    fullscreen={fullscreen}
+                    onToggle={toggle}
+                    scroll
+                    actions={showChat}
+                  >
+                    {overview}
+                  </PanelFrame>
+                </Panel>
+                <PanelSplitter axis="row" label="Resize overview and map" />
+                <Panel id="map" minSize="15%">
+                  <PanelFrame id="map" title="Map" fullscreen={fullscreen} onToggle={toggle} scroll={false}>
+                    {map}
+                  </PanelFrame>
+                </Panel>
+              </Group>
+            </div>
+            {covering ? <div className="absolute inset-0 z-10 bg-bg">{covering}</div> : null}
+          </div>
         </Panel>
         <PanelSplitter axis="column" label="Resize copilot" />
         <Panel

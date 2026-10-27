@@ -9,11 +9,12 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import AsyncGenerator, Callable, Generator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import cast
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -52,8 +53,11 @@ from api.services.projectors.rules import WorkspaceRules
 from api.services.provider_errors import explain
 from api.services.state_serializer import build_workspace
 from api.services.threads import ThreadStore
-from api.services.usage_meter import UsageRecorder, summarize
+from api.services.usage_meter import summarize
 from app.key_vault import KeychainUnavailableError, ServiceKeys, stored_key
+from app.telemetry import SessionSpan, run_tracer, session_span
+from app.usage_meter import UsageRecorder
+from config.telemetry import TelemetrySettings
 from config.ui import ModelPrice
 from tools.credentials import HOLDERS
 from tools.schemas import ConfirmationRequest
@@ -80,6 +84,7 @@ class AgentRuntime:
         completion_guard: Sends a reply that only announced its next steps back to work, when given.
         system_prompt: The agent's system prompt; None keeps the standard one.
         workspace_rules: Builds the workspace sent after each tool batch; None sends none.
+        telemetry: Monitoring settings; each turn is then recorded as a trace. None records none.
     """
 
     build_model: ModelFactory
@@ -91,6 +96,7 @@ class AgentRuntime:
     completion_guard: CompletionGuard | None = None
     system_prompt: str | None = None
     workspace_rules: WorkspaceRules | None = None
+    telemetry: TelemetrySettings | None = None
 
 
 class UserFacingError(Exception):
@@ -254,6 +260,12 @@ def _build(model: BaseChatModel, threads: ThreadStore, runtime: AgentRuntime) ->
     )
 
 
+def _callbacks(runtime: AgentRuntime, recorder: UsageRecorder) -> list[BaseCallbackHandler]:
+    """What observes the run: the usage recorder and, when monitoring is on, the tracer."""
+    tracer = run_tracer(runtime.telemetry) if runtime.telemetry is not None else None
+    return [recorder, *([tracer] if tracer is not None else [])]
+
+
 def _run_config(
     request: ChatRequest, threads: ThreadStore, runtime: AgentRuntime, recorder: UsageRecorder
 ) -> RunnableConfig:
@@ -265,7 +277,7 @@ def _run_config(
             "thread_id": request.thread_id,
             "user_values": {"supplied": supplied, "declined": sorted(declined)},
         },
-        "callbacks": [recorder],
+        "callbacks": _callbacks(runtime, recorder),
     }
 
 
@@ -371,12 +383,16 @@ def _usage_event(
     threads: ThreadStore,
     runtime: AgentRuntime,
     recorder: UsageRecorder,
+    span: SessionSpan,
 ) -> Usage:
     threads.add_usage(request.thread_id, recorder.calls)
+    session_calls = threads.session_calls(request.thread_id)
+    span.record_usage(recorder.calls, runtime.pricing)
+    span.record_usage(session_calls, runtime.pricing, session=True)
     return Usage(
         seq=seq.next(),
         turn=summarize(recorder.calls, runtime.pricing),
-        session=summarize(threads.session_calls(request.thread_id), runtime.pricing),
+        session=summarize(session_calls, runtime.pricing),
     )
 
 
@@ -410,6 +426,28 @@ async def run_turn(
     a known provider failure (no credits, a refused key, a rate limit, no connection), otherwise
     a generic message (the details are logged, redacted, under the same id).
     """
+    with _turn_span(request, runtime) as span:
+        async for event in _turn_events(request, keys, threads, runtime, plan, span):
+            yield event
+
+
+def _turn_span(request: ChatRequest, runtime: AgentRuntime) -> AbstractContextManager[SessionSpan]:
+    """The trace of one turn (session id = the thread); records nothing without monitoring."""
+    settings = runtime.telemetry
+    if settings is None:
+        return nullcontext(SessionSpan.inactive())
+    name = settings.spans.web_turn
+    return session_span(settings, name, request.thread_id, request.message, runtime.model_name)
+
+
+async def _turn_events(
+    request: ChatRequest,
+    keys: ServiceKeys,
+    threads: ThreadStore,
+    runtime: AgentRuntime,
+    plan: TurnPlan | None,
+    span: SessionSpan,
+) -> AsyncGenerator[StreamEvent]:
     seq = EventSequence()
     recorder = UsageRecorder(runtime.model_name)
     yield TurnStarted(seq=seq.next(), thread_id=request.thread_id, turn_id=uuid.uuid4().hex[:12])
@@ -421,8 +459,10 @@ async def run_turn(
             async for event in _agent_events(request, model, threads, runtime, seq, recorder, turn):
                 yield event
     except UserFacingError as error:
+        span.fail()
         yield _error(seq, str(error))
     except Exception as error:
+        span.fail()
         yield _failure(seq, error)
-    yield _usage_event(seq, request, threads, runtime, recorder)
+    yield _usage_event(seq, request, threads, runtime, recorder, span)
     yield TurnFinished(seq=seq.next())

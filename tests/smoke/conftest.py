@@ -1,6 +1,7 @@
 """Smoke-test setup: load ``.env`` and skip tests whose API key is missing.
 
-A test marked ``comptox`` needs the CompTox key and one marked ``census`` the Census key; the
+A test marked ``comptox`` needs the CompTox key, one marked ``census`` the Census key and one
+marked ``logfire`` the Logfire read token; the
 environment variable names come from the settings, never from here.
 """
 
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 
 from config.loader import get_comptox_settings
 from config.population import get_population_settings
+from config.telemetry import get_telemetry_settings
 
 
 def _key_variables() -> dict[str, str]:
@@ -20,6 +22,7 @@ def _key_variables() -> dict[str, str]:
     return {
         "comptox": get_comptox_settings().api_key_env_var,
         "census": get_population_settings().api_key_env_var,
+        "logfire": get_telemetry_settings().read_token_env_var,
     }
 
 
