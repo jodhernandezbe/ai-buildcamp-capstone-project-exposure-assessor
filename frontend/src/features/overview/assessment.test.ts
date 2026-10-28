@@ -21,6 +21,7 @@ const exposure = {
   cancer_risk_representative: null,
   concentration_worst: null,
   concentration_representative: null,
+  dose: null,
   warnings: [],
 };
 

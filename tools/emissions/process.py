@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 from langchain_core.tools import tool
 
@@ -30,6 +31,20 @@ def _match(hit: SccHit) -> SccMatch:
         sector=document.sector,
         score=round(hit.score, 4),
     )
+
+
+def prefetch_scc_descriptions(naics_descriptions: Sequence[str]) -> None:
+    """Embed many industry descriptions in one request so their lookups need no request.
+
+    Not a tool: the batch assessment calls it before it looks the industries up one by one.
+    Best effort; any failure is logged and each lookup then reports its own.
+    """
+    try:
+        warning = _get_retriever().prefetch(naics_descriptions)
+    except EmbeddingError as exc:
+        warning = f"SCC lookup unavailable: {exc}"
+    if warning:
+        logger.warning("prefetch_scc_descriptions: %s", warning)
 
 
 @tool

@@ -20,6 +20,18 @@ ProvenanceKind = Literal[
 NOT_COMPUTED = "not yet computed"
 
 
+class Dose(ContractModel):
+    """Inhalation average daily dose, mg/(kg·day), of the worst case, by age band of the residents.
+
+    ``highest_band`` is the band with the largest dose (``highest_mg_kg_day``); ``by_band`` has
+    every band that has residents. Children get larger doses because they breathe more per kg.
+    """
+
+    highest_mg_kg_day: float | None = None
+    highest_band: str | None = None
+    by_band: dict[str, float] = Field(default_factory=dict[str, float])
+
+
 class Scenario(ContractModel):
     """Screening result for one set of weather: concentration µg/m³, HQ and cancer risk unitless."""
 
@@ -55,6 +67,7 @@ class Stack(ContractModel):
     scc_score: float | None = None
     worst_case: Scenario | None = None
     representative: Scenario | None = None
+    dose: Dose | None = None
     warnings: list[str] = Field(default_factory=list[str])
 
 
@@ -78,6 +91,9 @@ class ExposureRanges(ContractModel):
     hq_representative: Extreme | None = None
     cancer_risk_representative: Extreme | None = None
     concentration_representative: Extreme | None = None
+    dose: Dose | None = Field(
+        default=None, description="Per age band, the highest worst-case dose over the stacks."
+    )
     warnings: list[str] = Field(default_factory=list[str])
 
 

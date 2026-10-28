@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from api.schemas.workspace import (
+    Dose,
     ExposureRanges,
     Extreme,
     Facility,
@@ -34,7 +35,7 @@ from api.services.projectors.payloads import (
     StackPayload,
 )
 from api.services.projectors.rules import WorkspaceRules, cancer_status, hq_status, worse
-from api.services.projectors.stacks import facility_stacks
+from api.services.projectors.stacks import dose_of, facility_stacks
 
 SCREENING_DEFAULT = "screening default"
 
@@ -107,6 +108,19 @@ def _extreme(entry: RangeEntryPayload | None) -> Extreme | None:
     )
 
 
+def _highest_dose(payload: ExposurePayload) -> Dose | None:
+    """Per age band, the largest dose any stack reported (a maximum of reported numbers)."""
+    doses = [d for d in map(dose_of, payload.results) if d is not None]
+    by_band = {
+        band: max(d.by_band[band] for d in doses if band in d.by_band)
+        for band in dict.fromkeys(b for d in doses for b in d.by_band)
+    }
+    if not by_band:
+        return None
+    top = max(by_band, key=lambda band: by_band[band])
+    return Dose(highest_mg_kg_day=by_band[top], highest_band=top, by_band=by_band)
+
+
 def _ranges(payload: ExposurePayload) -> ExposureRanges:
     found = payload.range
     return ExposureRanges(
@@ -120,6 +134,7 @@ def _ranges(payload: ExposurePayload) -> ExposureRanges:
         concentration_representative=_extreme(
             found.representative.max_concentration if found else None
         ),
+        dose=_highest_dose(payload),
         warnings=list(payload.warnings),
     )
 

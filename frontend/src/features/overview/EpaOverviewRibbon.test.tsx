@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 
 import { EMPTY_WORKSPACE } from "../../hooks/useWorkspaceStore";
-import { extremum, workspace } from "../../test/fixtures";
+import { extremum, facility, workspace } from "../../test/fixtures";
 import { EpaOverviewRibbon } from "./EpaOverviewRibbon";
 
 const card = (name: string) => screen.getByRole("region", { name });
@@ -146,6 +146,30 @@ describe("population card", () => {
     expect(pop.getByText("3 km")).toBeInTheDocument();
     expect(pop.getByRole("img", { name: "0-4: 10%, 5-17: 20%, 18-64: 50%, 65+: 20%" })).toBeInTheDocument();
     expect(pop.queryByText("screening default")).toBeNull();
+  });
+
+  it("shows the dose of each age band for the selected facility, the highest marked", () => {
+    const exposure = {
+      stacks_given: 1, stacks_evaluated: 1, hq_worst: null, cancer_risk_worst: null,
+      concentration_worst: null, hq_representative: null, cancer_risk_representative: null,
+      concentration_representative: null, warnings: [],
+      dose: { highest_mg_kg_day: 0.5, highest_band: "0-4", by_band: { "0-4": 0.5, "18-64": 0.25 } },
+    };
+    const state = workspace({
+      receptors,
+      selected_frs_id: "F1",
+      facilities: [facility({ frs_id: "F1", exposure })],
+    });
+    render(<EpaOverviewRibbon workspace={state} digits={2} />);
+    const pop = within(card("Exposed population"));
+    expect(pop.getByText("Age 0-4 (highest)")).toBeInTheDocument();
+    expect(pop.getByText("0.5")).toBeInTheDocument();
+    expect(pop.getByText("0.25")).toBeInTheDocument();
+  });
+
+  it("shows no dose when no tool reported one", () => {
+    render(<EpaOverviewRibbon workspace={workspace({ receptors })} digits={2} />);
+    expect(within(card("Exposed population")).queryByText(/Inhalation dose/)).toBeNull();
   });
 
   it("marks a screening default", () => {

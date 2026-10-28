@@ -4,6 +4,12 @@ import { MeteorologyCard } from "./MeteorologyCard";
 import { ReadAcrossCard } from "./ReadAcrossCard";
 import { RiskMetricCard } from "./RiskMetricCard";
 
+/** The dose of the facility whose receptors the ribbon shows. */
+function selectedDose(workspace: WorkspaceState) {
+  const facility = workspace.facilities.find((f) => f.frs_id === workspace.selected_frs_id);
+  return facility?.exposure?.dose ?? null;
+}
+
 /** The four summary cards, filled only from what the tools reported. */
 export function EpaOverviewRibbon({ workspace, digits }: { workspace: WorkspaceState; digits: number }) {
   return (
@@ -16,7 +22,7 @@ export function EpaOverviewRibbon({ workspace, digits }: { workspace: WorkspaceS
     >
       <RiskMetricCard risk={workspace.risk} digits={digits} />
       <ReadAcrossCard chemical={workspace.chemical} digits={digits} />
-      <DemographicsCard receptors={workspace.receptors} digits={digits} />
+      <DemographicsCard receptors={workspace.receptors} dose={selectedDose(workspace)} digits={digits} />
       <MeteorologyCard weather={workspace.meteorology} digits={digits} />
     </div>
   );

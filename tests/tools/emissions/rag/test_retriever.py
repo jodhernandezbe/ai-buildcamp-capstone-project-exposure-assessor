@@ -166,3 +166,22 @@ def test_a_title_that_contains_a_label_word_is_kept_when_no_number_is_given(tmp_
     embeddings = _Recording()
     _retriever(tmp_path, embeddings).lookup("Number Plate Manufacturing")
     assert embeddings.queried == ["Number Plate Manufacturing"]
+
+
+def test_prefetch_embeds_the_industries_together_and_cleans_them(tmp_path: Path) -> None:
+    embeddings = KeywordEmbeddings()
+    retriever = _retriever(tmp_path, embeddings)
+    assert (
+        retriever.prefetch(["Petroleum Refineries", "324110 Petroleum Refineries", "324110"])
+        is None
+    )
+    assert embeddings.document_calls == 1  # the code-only one is dropped, the twin shared
+    retriever.lookup("Petroleum Refineries")
+    assert embeddings.query_calls == 0
+
+
+def test_prefetch_failure_is_a_warning_and_lookup_still_works(tmp_path: Path) -> None:
+    embeddings = KeywordEmbeddings(fail_after_documents=0)
+    embeddings.error = EmbeddingError("embedding request failed (APITimeoutError)")
+    warning = _retriever(tmp_path, embeddings).prefetch(["Petroleum Refineries"])
+    assert warning is not None and "APITimeoutError" in warning

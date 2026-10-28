@@ -144,6 +144,9 @@ class StackExposurePayload(ScenarioPayload):
     exit_velocity: Num | None = None
     exit_temperature: Num | None = None
     stack_source: str | None = None
+    add: Num | None = None
+    add_band: str | None = None
+    add_by_band: dict[str, Num] = Field(default_factory=dict[str, Num])
     representative: ScenarioPayload
     warnings: list[str] = Field(default_factory=list[str])
 

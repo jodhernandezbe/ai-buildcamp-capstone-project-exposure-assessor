@@ -236,3 +236,35 @@ def test_a_not_assessed_facility_unknown_to_the_workspace_is_ignored() -> None:
 def test_an_invalid_not_assessed_item_is_left_out_with_a_warning() -> None:
     state = _build(_tiered([], [], [{"frs_id": 5}]))
     assert any("batch assessment was left out" in w for w in state.warnings)
+
+
+def _dosed(add_by_band: dict[str, float]) -> dict[str, object]:
+    top = max(add_by_band, key=lambda band: add_by_band[band]) if add_by_band else None
+    return {
+        **SCENARIO,
+        "add": add_by_band[top] if top else None,
+        "add_band": top,
+        "add_by_band": add_by_band,
+    }
+
+
+def test_facility_dose_is_the_highest_per_band_over_its_stacks() -> None:
+    stacks = [stack(10.0), stack(20.0)]
+    results = [
+        stack_result(1, stacks[0], _dosed({"0-4": 2.0, "18-64": 1.0}), TYPICAL),
+        stack_result(2, stacks[1], _dosed({"0-4": 1.0, "18-64": 3.0}), TYPICAL),
+    ]
+    exposure = {**_exposure(stacks, 2.0), "results": results}
+    facility = _build(_assessed(_item("F1", 1.0, stacks, exposure=exposure))).facilities[0]
+    assert facility.stacks[0].dose is not None and facility.stacks[0].dose.highest_band == "0-4"
+    assert facility.exposure is not None and facility.exposure.dose is not None
+    assert facility.exposure.dose.by_band == {"0-4": 2.0, "18-64": 3.0}
+    assert facility.exposure.dose.highest_band == "18-64"
+    assert facility.exposure.dose.highest_mg_kg_day == 3.0
+
+
+def test_no_reported_dose_stays_absent() -> None:
+    state = _build(_assessed(_item("F1", 1.0, [stack(10.0)])))
+    facility = state.facilities[0]
+    assert facility.exposure is not None and facility.exposure.dose is None
+    assert facility.stacks[0].dose is None

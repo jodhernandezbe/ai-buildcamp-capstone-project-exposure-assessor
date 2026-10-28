@@ -32,6 +32,7 @@ categories = ["Point"]
 statuses = ["Active"]
 top_k = 3
 batch_size = 10
+query_cache_size = 4
 
 [scc_index.columns]
 scc = "SCC"
@@ -99,6 +100,7 @@ def test_default_file_indexes_point_active() -> None:
         ("top_k = 3", "top_k = 0", "scc_index.top_k"),
         ("top_k = 3", "top_k = 2.5", "scc_index.top_k"),
         ("batch_size = 10", "batch_size = 0", "scc_index.batch_size"),
+        ("query_cache_size = 4", "query_cache_size = 0", "scc_index.query_cache_size"),
         ('categories = ["Point"]', "categories = []", "scc_index.categories"),
         ('statuses = ["Active"]', 'statuses = [""]', "scc_index.statuses"),
         ('collection = "test_collection"', 'collection = ""', "scc_index.collection"),

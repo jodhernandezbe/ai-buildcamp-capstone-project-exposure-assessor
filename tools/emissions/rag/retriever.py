@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import cast
@@ -16,7 +17,8 @@ from config.retrieval import (
 )
 from tools.emissions.rag.documents import SccHit, fingerprint, load_documents
 from tools.emissions.rag.embeddings import build_embeddings
-from tools.emissions.rag.graph import SccGraph, SccState, build_scc_graph
+from tools.emissions.rag.errors import RetrievalError
+from tools.emissions.rag.graph import SccGraph, SccState, build_scc_graph, industry_text
 from tools.emissions.rag.vectorstore import IndexedDocument, VectorIndex
 
 
@@ -35,8 +37,12 @@ class SccRetriever:
         self, settings: SccIndexSettings, embedding: EmbeddingSettings, embeddings: Embeddings
     ) -> None:
         """Args: index settings, embedding settings (for the fingerprint), embeddings."""
-        index = VectorIndex(
-            settings.persist_dir, settings.collection, embeddings, settings.batch_size
+        self._index = index = VectorIndex(
+            settings.persist_dir,
+            settings.collection,
+            embeddings,
+            settings.batch_size,
+            settings.query_cache_size,
         )
         self._graph: SccGraph = build_scc_graph(
             index,
@@ -44,6 +50,18 @@ class SccRetriever:
             fingerprint=lambda: fingerprint(settings, embedding),
             load=lambda: _indexed(settings),
         )
+
+    def prefetch(self, descriptions: Sequence[str]) -> str | None:
+        """Embed the descriptions together, in one request, so their lookups need none.
+
+        Best effort: a failure is returned as a warning and each lookup then embeds its own.
+        """
+        texts = [t for t in map(industry_text, descriptions) if t]
+        try:
+            self._index.warm(texts)
+        except RetrievalError as exc:
+            return f"SCC queries could not be embedded together: {exc}"
+        return None
 
     def lookup(self, description: str) -> SccLookup:
         """Return up to ``top_k`` SCCs for ``description``; failures become warnings.

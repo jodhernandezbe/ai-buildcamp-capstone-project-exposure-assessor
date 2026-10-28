@@ -65,6 +65,7 @@ class SccIndexSettings:
         statuses: ``status`` values to index, e.g. ``("Active",)``.
         top_k: Results returned per query.
         batch_size: Documents embedded per request while indexing.
+        query_cache_size: Query embeddings kept in memory, least recently used dropped.
         columns: Field (see ``SCC_COLUMN_KEYS``) -> column of the SCC table.
     """
 
@@ -75,6 +76,7 @@ class SccIndexSettings:
     statuses: tuple[str, ...]
     top_k: int
     batch_size: int
+    query_cache_size: int
     columns: Mapping[str, str]
 
 
@@ -153,6 +155,7 @@ def load_scc_index_settings(path: Path | None = None) -> SccIndexSettings:
         statuses=names(table, "statuses", name, allow_empty=False),
         top_k=require_int(table, "top_k", minimum=1, name=name),
         batch_size=require_int(table, "batch_size", minimum=1, name=name),
+        query_cache_size=require_int(table, "query_cache_size", minimum=1, name=name),
         columns=_scc_columns(table),
     )
 

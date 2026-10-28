@@ -9,6 +9,8 @@ documents written, so a stale or half-built index is never reused.
 from __future__ import annotations
 
 import sqlite3
+import threading
+from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,15 +72,24 @@ class VectorIndex:
     """A named, persisted collection of embedded documents."""
 
     def __init__(
-        self, persist_dir: Path, collection: str, embeddings: Embeddings, batch_size: int
+        self,
+        persist_dir: Path,
+        collection: str,
+        embeddings: Embeddings,
+        batch_size: int,
+        query_cache_size: int,
     ) -> None:
-        """Args: index directory, collection name, embeddings (injected), docs per request."""
+        """Args: index directory, collection name, embeddings (injected), docs per request,
+        query embeddings kept in memory."""
         self._persist_dir = persist_dir
         self._name = collection
         self._embeddings = embeddings
         self._batch_size = batch_size
         self._client: ClientAPI | None = None
         self._ready_fingerprint: str | None = None
+        self._cache_size = query_cache_size
+        self._vectors: OrderedDict[str, list[float]] = OrderedDict()
+        self._vectors_lock = threading.Lock()
 
     def _open(self) -> ClientAPI:
         if self._client is None:
@@ -136,6 +147,39 @@ class VectorIndex:
         self._ready_fingerprint = fingerprint
         return not current
 
+    def _remember(self, text: str, vector: list[float]) -> None:
+        with self._vectors_lock:
+            self._vectors[text] = vector
+            self._vectors.move_to_end(text)
+            while len(self._vectors) > self._cache_size:
+                self._vectors.popitem(last=False)
+
+    def _remembered(self, text: str) -> list[float] | None:
+        with self._vectors_lock:
+            vector = self._vectors.get(text)
+            if vector is not None:
+                self._vectors.move_to_end(text)
+            return None if vector is None else list(vector)
+
+    def warm(self, texts: Sequence[str]) -> None:
+        """Embed the queries not yet remembered in ONE request, so later queries need none.
+
+        Raises:
+            EmbeddingError: If the queries cannot be embedded.
+        """
+        missing = [t for t in dict.fromkeys(texts) if self._remembered(t) is None]
+        for start in range(0, len(missing), self._batch_size):
+            batch = missing[start : start + self._batch_size]
+            for text, vector in zip(batch, self._embeddings.embed_documents(batch), strict=True):
+                self._remember(text, vector)
+
+    def _query_vector(self, text: str) -> list[float]:
+        vector = self._remembered(text)
+        if vector is None:
+            vector = self._embeddings.embed_query(text)
+            self._remember(text, vector)
+        return vector
+
     def query(self, text: str, k: int) -> list[ScoredDocument]:
         """Return up to ``k`` documents most similar to ``text``, best first.
 
@@ -143,7 +187,7 @@ class VectorIndex:
             VectorStoreError: If the store cannot be queried.
             EmbeddingError: If the query cannot be embedded.
         """
-        vector = self._embeddings.embed_query(text)
+        vector = self._query_vector(text)
         try:
             collection = self._open().get_collection(self._name, embedding_function=None)
             result = collection.query(

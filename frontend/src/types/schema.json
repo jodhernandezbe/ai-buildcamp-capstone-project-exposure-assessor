@@ -343,6 +343,47 @@
       "title": "ConfirmationRequested",
       "type": "object"
     },
+    "Dose": {
+      "additionalProperties": false,
+      "description": "Inhalation average daily dose, mg/(kg\u00b7day), of the worst case, by age band of the residents.\n\n``highest_band`` is the band with the largest dose (``highest_mg_kg_day``); ``by_band`` has\nevery band that has residents. Children get larger doses because they breathe more per kg.",
+      "properties": {
+        "by_band": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "highest_band": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "highest_mg_kg_day": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "highest_mg_kg_day",
+        "highest_band",
+        "by_band"
+      ],
+      "title": "Dose",
+      "type": "object"
+    },
     "EntryAnswer": {
       "additionalProperties": false,
       "description": "The user's answer to one missing value: a number in one of its units, or a decline.",
@@ -471,6 +512,18 @@
           ],
           "default": null
         },
+        "dose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per age band, the highest worst-case dose over the stacks."
+        },
         "hq_representative": {
           "anyOf": [
             {
@@ -515,6 +568,7 @@
         "hq_representative",
         "cancer_risk_representative",
         "concentration_representative",
+        "dose",
         "warnings"
       ],
       "title": "ExposureRanges",
@@ -2084,6 +2138,17 @@
           ],
           "default": null
         },
+        "dose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "exit_temperature_k": {
           "anyOf": [
             {
@@ -2242,6 +2307,7 @@
         "scc_score",
         "worst_case",
         "representative",
+        "dose",
         "warnings"
       ],
       "title": "Stack",

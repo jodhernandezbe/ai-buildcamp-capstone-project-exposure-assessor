@@ -27,6 +27,7 @@ const exposure = (hq: number, risk: number | null) => ({
   cancer_risk_representative: null,
   concentration_worst: extreme(10),
   concentration_representative: null,
+  dose: null,
   warnings: [],
 });
 const cond = (stage: string, category: string) => ({

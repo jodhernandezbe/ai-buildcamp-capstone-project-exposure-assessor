@@ -6,7 +6,7 @@ network problems); the default steps are those tools themselves, built at the to
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from tools.schemas import (
@@ -33,6 +33,7 @@ class Steps:
         weather: (latitude, longitude, reporting year) -> representative meteorology.
         people: (latitude, longitude, radius km or None) -> residents and age mix.
         exposure: (emission rate g/s, stacks, meteorology, population, toxicity) -> result.
+        prefetch: industry titles -> nothing; lets ``scc`` find them without a request each.
     """
 
     nei: Callable[[str, list[str]], NeiStackResult]
@@ -44,3 +45,4 @@ class Steps:
     exposure: Callable[
         [float, list[StackParameters], Meteorology, Population, Toxicity], FacilityExposure
     ]
+    prefetch: Callable[[Sequence[str]], None] = lambda titles: None

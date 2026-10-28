@@ -5,6 +5,7 @@ from __future__ import annotations
 from docx.document import Document
 
 from api.schemas.workspace import (
+    Dose,
     ExposureRanges,
     Extreme,
     Facility,
@@ -21,6 +22,7 @@ from api.services.report.document import (
     subheading,
     table,
 )
+from config.exposure import get_exposure_settings
 
 _STACK_HEADER = (
     "Stack",
@@ -32,6 +34,7 @@ _STACK_HEADER = (
     "Source",
 )
 _CONCENTRATION = "µg/m³"
+_DOSE = "mg/(kg·day)"
 _DEFAULT = " (screening default)"
 
 
@@ -90,6 +93,45 @@ def _people(receptors: Receptors | None, ctx: ReportContext) -> list[list[str]]:
     ]
 
 
+def _dose(dose: Dose | None, ctx: ReportContext) -> list[list[str]]:
+    """The worst-case inhalation dose of each age band, the most exposed one marked."""
+    if dose is None or not dose.by_band:
+        return [["Inhalation dose by age band", ctx.fmt.absent()]]
+    return [
+        [
+            f"Average daily dose, age {band}" + (" (highest)" if band == dose.highest_band else ""),
+            ctx.fmt.number(value, _DOSE),
+        ]
+        for band, value in dose.by_band.items()
+    ]
+
+
+def _band_row(band: str, rate: float, weight: float, ctx: ReportContext) -> list[str]:
+    fmt = ctx.fmt
+    return [
+        f"Age {band}: inhalation rate, body weight",
+        f"{fmt.number(rate, 'm³/day')}, {fmt.number(weight, 'kg')}",
+    ]
+
+
+def _assumptions(doc: Document, ctx: ReportContext) -> None:
+    """The resident-air exposure factors and inhalation rates the doses and risks rest on."""
+    settings = get_exposure_settings()
+    f, fmt = settings.factors, ctx.fmt
+    rows = [
+        ["Exposure time", fmt.number(f.exposure_time_hours_per_day, "h/day")],
+        ["Exposure frequency", fmt.number(f.exposure_frequency_days_per_year, "days/yr")],
+        ["Exposure duration", fmt.number(f.exposure_duration_years, "yr")],
+        ["Lifetime (cancer averaging time)", fmt.number(f.lifetime_years, "yr")],
+        *(
+            _band_row(band, v.inhalation_rate_m3_per_day, v.body_weight_kg, ctx)
+            for band, v in settings.age_bands.items()
+        ),
+    ]
+    subheading(doc, "Inhalation exposure assumptions")
+    table(doc, ("Item", "Value"), rows)
+
+
 def _facility(doc: Document, facility: Facility, ctx: ReportContext) -> None:
     subheading(doc, facility_label(facility))
     if facility.stacks:
@@ -100,6 +142,7 @@ def _facility(doc: Document, facility: Facility, ctx: ReportContext) -> None:
         *_ranges(facility.exposure, ctx),
         *_weather(facility.meteorology, ctx),
         *_people(facility.receptors, ctx),
+        *_dose(facility.exposure.dose if facility.exposure else None, ctx),
     ]
     table(doc, ("Item", "Value"), rows)
 
@@ -111,3 +154,4 @@ def write_exposure(doc: Document, state: WorkspaceState, ctx: ReportContext) -> 
         return
     for facility in state.facilities:
         _facility(doc, facility, ctx)
+    _assumptions(doc, ctx)

@@ -9,6 +9,7 @@ export type {
   MissingValue,
   ClientConfig,
   Chemical,
+  Dose,
   ErrorEvent,
   Extreme,
   Extremum,

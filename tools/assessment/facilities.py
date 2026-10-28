@@ -21,7 +21,7 @@ from tools.assessment.helpers.view import Findings, assessment_view
 from tools.emissions.helpers.inventory.lookup import TriReadError
 from tools.emissions.industry import fetch_facility_industry
 from tools.emissions.inventory import inventory_listing, with_eis_ids
-from tools.emissions.process import lookup_scc_process_description
+from tools.emissions.process import lookup_scc_process_description, prefetch_scc_descriptions
 from tools.emissions.stack import fetch_stack_parameters_from_nei, fetch_stack_parameters_from_scc
 from tools.exposure.meteorology import get_meteorological_boundary
 from tools.exposure.metrics import calculate_exposure_metrics
@@ -93,6 +93,7 @@ def default_steps() -> Steps:
         nei=_nei,
         industry=lambda doc: fetch_facility_industry.invoke({"doc_ctrl_num": doc}),
         scc=_scc,
+        prefetch=prefetch_scc_descriptions,
         pstk=lambda scc: fetch_stack_parameters_from_scc.invoke({"scc_code": scc}),
         weather=_weather,
         people=_people,
@@ -389,6 +390,7 @@ def _assess(
     records, notes = _inventory(cas, place)
     tox, source, warnings = _toxicity(cas, toxicity)
     tox, source, warnings = _analogue_toxicity(cas, tox, source, warnings)
+    steps.prefetch(sorted({r["naics_title"] for r in records if r["naics_title"]}))
     steps = replace(steps, scc=_once_per_title(steps.scc))
     call = _Call(cas, records, tox, source, [*warnings, *notes], radius_km, steps, settings)
     findings = _by_id(call, frs_ids) if frs_ids else _screened(call)

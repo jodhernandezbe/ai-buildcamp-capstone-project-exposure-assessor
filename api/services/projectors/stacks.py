@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from api.schemas.workspace import Scenario, Stack, Tier
+from api.schemas.workspace import Dose, Scenario, Stack, Tier
 from api.services.projectors.ledger import Ledger
 from api.services.projectors.payloads import (
     ExposurePayload,
@@ -48,6 +48,15 @@ def _scenario(result: ScenarioPayload) -> Scenario:
     )
 
 
+def dose_of(result: StackExposurePayload) -> Dose | None:
+    """The dose the tool reported for a stack; None when it reported none."""
+    if not result.add_by_band:
+        return None
+    return Dose(
+        highest_mg_kg_day=result.add, highest_band=result.add_band, by_band=dict(result.add_by_band)
+    )
+
+
 def _provenance(
     source: str | None, scc: str | None, lookups: Mapping[str, SccMatchPayload]
 ) -> dict[str, object]:
@@ -85,6 +94,7 @@ def _with_result(stack: Stack, result: StackExposurePayload) -> Stack:
             "stack_number": result.stack_number,
             "worst_case": _scenario(result),
             "representative": _scenario(result.representative),
+            "dose": dose_of(result),
             "warnings": [*stack.warnings, *result.warnings],
         }
     )

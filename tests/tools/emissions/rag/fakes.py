@@ -82,5 +82,6 @@ def scc_settings(tmp_path: Path, text: str = HEADER + ROWS, **changes: object) -
         persist_dir=tmp_path / "index",
         collection="scc_test",
         batch_size=2,
+        query_cache_size=4,
     )
     return replace(base, **changes)  # type: ignore[arg-type]

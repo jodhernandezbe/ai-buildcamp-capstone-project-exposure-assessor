@@ -8,6 +8,7 @@ from datetime import datetime
 
 from api.schemas.workspace import Chemical, WorkspaceState
 from api.services.report.builder import build_report, file_name, has_findings
+from config.exposure import get_exposure_settings
 from tests.api.services.report.fixtures import (
     assessed,
     chemical_only,
@@ -47,6 +48,24 @@ def _leaves(value: object) -> Iterator[object]:
         yield value
 
 
+def _exposure_factors() -> list[float | str]:
+    """The resident-air factors and age-band rates the report prints from the settings."""
+    settings = get_exposure_settings()
+    f = settings.factors
+    return [
+        *settings.age_bands,
+        f.exposure_time_hours_per_day,
+        f.exposure_frequency_days_per_year,
+        f.exposure_duration_years,
+        f.lifetime_years,
+        *(
+            x
+            for v in settings.age_bands.values()
+            for x in (v.inhalation_rate_m3_per_day, v.body_weight_kg)
+        ),
+    ]
+
+
 def _allowed(state: WorkspaceState) -> set[str]:
     """Every way the report may print a number of ``state`` or of the settings."""
     ctx = context()
@@ -58,6 +77,7 @@ def _allowed(state: WorkspaceState) -> set[str]:
         t.hq_near_lower,
         t.cancer_lower,
         t.cancer_upper,
+        *_exposure_factors(),
     ]:
         if isinstance(leaf, bool) or leaf is None:
             continue

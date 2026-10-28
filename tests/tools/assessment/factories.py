@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -184,7 +185,17 @@ class FakeSteps:
         self.calls.append(("exposure", (rate, len(stacks), weather["ambient_temperature"])))
         return exposure_of(rate, stacks, weather["ambient_temperature"], toxicity)
 
+    def prefetch(self, titles: Sequence[str]) -> None:
+        self.calls.append(("prefetch", tuple(titles)))
+
     def steps(self) -> Steps:
         return Steps(
-            self.nei, self.industry, self.scc, self.pstk, self.weather, self.people, self.exposure
+            self.nei,
+            self.industry,
+            self.scc,
+            self.pstk,
+            self.weather,
+            self.people,
+            self.exposure,
+            self.prefetch,
         )

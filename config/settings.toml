@@ -358,6 +358,9 @@ statuses = ["Active"]
 # Results returned per query, and documents embedded per request while indexing.
 top_k = 5
 batch_size = 500
+# Query embeddings kept in memory (least recently used dropped) so an industry asked again, in
+# this call or a later one, is not embedded again.
+query_cache_size = 500
 
 # Field -> column of the SCC table.
 [scc_index.columns]

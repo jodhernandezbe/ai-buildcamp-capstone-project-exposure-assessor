@@ -189,6 +189,8 @@ def test_the_scc_search_is_made_once_per_industry_title(
     view, _ = _run()
     assert sum(name == "scc" for name, _ in _offline.calls) == 1
     assert view["stack_tiers"] == {"PSTK": 3}
+    prefetched = [titles for name, titles in _offline.calls if name == "prefetch"]
+    assert prefetched == [("Same Industry",)]  # all the titles together, once, before any search
 
 
 def test_an_invalid_cas_number_assesses_nothing() -> None:

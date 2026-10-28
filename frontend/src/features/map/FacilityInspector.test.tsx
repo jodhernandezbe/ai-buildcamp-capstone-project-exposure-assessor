@@ -28,6 +28,7 @@ const stack = (over: Partial<Stack> = {}): Stack => ({
   scc_score: null,
   worst_case: null,
   representative: null,
+  dose: null,
   warnings: [],
   ...over,
 });
@@ -272,6 +273,7 @@ describe("card content", () => {
           cancer_risk_representative: null,
           concentration_worst: extreme(4, 8),
           concentration_representative: null,
+          dose: null,
           warnings: [],
         },
       }),

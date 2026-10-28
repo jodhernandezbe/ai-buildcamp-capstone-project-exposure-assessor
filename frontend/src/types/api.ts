@@ -538,6 +538,10 @@ export interface ExposureRanges {
   cancer_risk_worst: Extreme | null;
   concentration_representative: Extreme | null;
   concentration_worst: Extreme | null;
+  /**
+   * Per age band, the highest worst-case dose over the stacks.
+   */
+  dose: Dose | null;
   hq_representative: Extreme | null;
   hq_worst: Extreme | null;
   stacks_evaluated: number;
@@ -555,6 +559,22 @@ export interface Extreme {
   high_stack: number;
   low: number;
   low_stack: number;
+}
+/**
+ * Inhalation average daily dose, mg/(kg·day), of the worst case, by age band of the residents.
+ *
+ * ``highest_band`` is the band with the largest dose (``highest_mg_kg_day``); ``by_band`` has
+ * every band that has residents. Children get larger doses because they breathe more per kg.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "Dose".
+ */
+export interface Dose {
+  by_band: {
+    [k: string]: number;
+  };
+  highest_band: string | null;
+  highest_mg_kg_day: number | null;
 }
 /**
  * Primary industry of the TRI submission; origin is reported, assigned or None.
@@ -662,6 +682,7 @@ export interface Screening {
  */
 export interface Stack {
   diameter_m: number | null;
+  dose: Dose | null;
   exit_temperature_k: number | null;
   exit_velocity_m_s: number | null;
   height_m: number | null;
