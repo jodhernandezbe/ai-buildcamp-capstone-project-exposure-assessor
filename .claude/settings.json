@@ -10,10 +10,31 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-review-reminder.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/security-audit-gate.sh\"",
+            "timeout": 15
+          }
+        ]
       }
     ]
   },
-    "enabledPlugins": {
+  "enabledPlugins": {
     "claude-security@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
