@@ -158,6 +158,12 @@ interface ContentProps {
   onClear: (name: KeyName) => Promise<boolean>;
 }
 
+/** The state of a section's keys in words, so a collapsed section still says what it holds. */
+export function keysSummary(saved: number, total: number): string {
+  if (total === 1) return saved === 1 ? "Key saved" : "Key missing";
+  return `${saved} of ${total} keys saved`;
+}
+
 function DrawerContent({ statuses, busy, outcomes, loadError, onSave, onClear }: ContentProps) {
   const [drafts, setDrafts] = useState(EMPTY);
   // The required key's section opens by itself while that key is missing.
@@ -179,6 +185,7 @@ function DrawerContent({ statuses, busy, outcomes, loadError, onSave, onClear }:
         <AccordionSection
           key={group.id}
           title={group.title}
+          summary={statuses ? keysSummary(group.keys.filter((f) => statuses[f.name].configured === true).length, group.keys.length) : null}
           open={expanded.includes(group.id)}
           onToggle={() => toggle(group.id)}
         >

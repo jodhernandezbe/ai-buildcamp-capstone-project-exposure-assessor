@@ -42,6 +42,24 @@ describe("SettingsDrawer", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("says the state of each section's keys in words while collapsed", () => {
+    setup({ statuses: { ...NO_KEYS, openai: { configured: true }, census: { configured: true } } });
+    expect(screen.getByRole("button", { name: "Assistant" })).toBeInTheDocument();
+    expect(screen.getByText("Key saved")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 keys saved")).toBeInTheDocument();
+  });
+
+  it("says a key is missing, and nothing before the statuses are known", () => {
+    const { unmount } = render(
+      <SettingsDrawer open statuses={null} busy={null} outcomes={{} as KeyOutcomes} loadError={null} onSave={vi.fn()} onClear={vi.fn()} onClose={vi.fn()} />,
+    );
+    expect(screen.queryByText(/Key (saved|missing)/)).toBeNull();
+    unmount();
+    setup();
+    expect(screen.getByText("Key missing")).toBeInTheDocument();
+    expect(screen.getByText("0 of 2 keys saved")).toBeInTheDocument();
+  });
+
   it("groups the keys into Assistant and Data services sections", async () => {
     setup();
     await open("Data services");

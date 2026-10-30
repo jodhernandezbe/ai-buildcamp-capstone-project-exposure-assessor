@@ -72,8 +72,13 @@ the client configuration, never from a constant.
   show direction. Under `prefers-reduced-motion` all animation collapses to 0.01 ms and camera
   moves jump instead of fly.
 - **Focus**: `:focus-visible` is a 2px `--accent` outline with 2px offset, never removed.
-- **Layering**: fullscreen is CSS only; other regions become `inert`. Escape belongs to the
-  topmost layer. Confirmations are in-page (`ConfirmDialog`), never browser dialogs.
+- **Layering ladder**: panel content < overlays inside their own region (the map is `isolate`,
+  so its basemap button, legend and inspector never leave it) < a view covering the analysis area
+  (`z-10`) < a fullscreen panel (`z-30`) < drawers and dialogs over a scrim. Fullscreen is CSS
+  only; other regions become `inert`. Escape belongs to the topmost layer. Confirmations are
+  in-page (`ConfirmDialog`), never browser dialogs.
+- **Empty sections take their content height.** Grid rows share the panel only when they hold
+  data; a section with one sentence never claims a band of empty space.
 
 ## Primitives
 
@@ -111,7 +116,7 @@ Icons are Lucide, sized `size-4` inline and `size-7` as icon buttons; icon-only 
 | Error | `role="alert"`, `text-bad`, inside a hairline `rounded-xl` box (or a plain line in the rail) | What failed and what to do; never a raw exception |
 | Ready | Value in `text-sm font-medium tabular-nums` with its unit; status as a pill with words | Scientific notation as `1.2 × 10⁻⁵`; digits from configuration |
 | Streaming or partial | `aria-live="polite"` text in `text-fg2` while the assistant works | What the assistant is doing (tool pill) |
-| Interactive | Visible focus ring, `aria-pressed` on toggles, disabled controls dimmed and inert | Labels on every icon-only control |
+| Interactive | Visible focus ring, `aria-pressed` on toggles, disabled controls dimmed and inert | Labels on every icon-only control; a disabled control says why (tooltip and `aria-description`) |
 
 ## Copy
 
@@ -123,6 +128,8 @@ Icons are Lucide, sized `size-4` inline and `size-7` as icon buttons; icon-only 
   "unreasonable risk" or any regulatory determination.
 - Every number carries its unit; the UI shows only values the API sent and never computes,
   converts or rounds beyond the configured digits.
+- Counts of items (pins, rows) are shown only when there are items to count; before that one
+  sentence says there is nothing yet.
 - Errors name the thing that failed in plain words and what the user can do next.
 - Assistant Markdown renders without raw HTML.
 

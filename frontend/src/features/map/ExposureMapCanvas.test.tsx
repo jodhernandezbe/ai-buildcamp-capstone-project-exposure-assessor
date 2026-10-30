@@ -230,6 +230,19 @@ describe("legend", () => {
         ],
       });
 
+    it("says no facility is mapped yet, without counts, while the workspace is empty", () => {
+      render(<ExposureMapCanvas digits={2} workspace={workspace()} config={config} />);
+      const legend = screen.getByRole("complementary", { name: "Map legend" });
+      expect(legend).toHaveTextContent("No facilities mapped yet.");
+      expect(entry(/Above concern/).textContent).not.toMatch(/\d/);
+      expect(entry(/Not computed/).textContent).not.toMatch(/\d/);
+    });
+
+    it("keeps its overlays inside the map's own stacking context", () => {
+      const { container } = render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
+      expect(container.firstElementChild).toHaveClass("isolate");
+    });
+
     it("counts the facilities of each status in the legend", () => {
       render(<ExposureMapCanvas digits={2} workspace={two()} config={config} />);
       expect(entry(/Above concern/)).toHaveTextContent("1");

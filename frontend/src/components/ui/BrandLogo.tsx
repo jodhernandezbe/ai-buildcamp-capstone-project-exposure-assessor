@@ -115,17 +115,11 @@ export function CompartmentPill() {
   return (
     <ul
       aria-label="Compartments"
-      className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+      className="inline-flex items-center gap-2.5 rounded-full border border-hairline px-2.5 py-0.5 text-[11px] font-medium"
     >
-      {COMPARTMENTS.map(({ name, note, active }, index) => (
-        <li key={name} title={note} className="flex items-center gap-1.5">
-          {index > 0 ? (
-            <span aria-hidden="true" className="text-fg2">
-              •
-            </span>
-          ) : null}
-          <span className={active ? "text-accent" : "text-fg2 opacity-60"}>{name}</span>
-          <span className="sr-only">{active ? "(available)" : "(planned)"}</span>
+      {COMPARTMENTS.map(({ name, note, active }) => (
+        <li key={name} title={note} className={active ? "text-accent" : "text-fg2"}>
+          {active ? name : `${name} (planned)`}
         </li>
       ))}
     </ul>

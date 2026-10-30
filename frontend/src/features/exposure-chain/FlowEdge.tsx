@@ -41,10 +41,10 @@ export function FlowEdge(props: EdgeProps<FlowFlowEdge>) {
         <EdgeLabelRenderer>
           <div
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-            className={`pointer-events-none absolute w-max max-w-[136px] rounded-md border border-hairline bg-solid px-1.5 py-0.5 text-center leading-tight shadow-sm ${dimmed ? "opacity-30" : ""}`}
+            className={`pointer-events-none absolute w-max max-w-[168px] rounded-lg border border-hairline bg-solid px-1.5 py-0.5 text-center leading-tight shadow-sm ${dimmed ? "opacity-30" : ""}`}
           >
-            <span className="block text-[9px] text-fg2">{quantity.label}</span>
-            <span className={`block text-[10px] font-medium tabular-nums ${quantity.value === null ? "text-fg2" : "text-fg"}`}>
+            <span className="block text-[11px] text-fg2">{quantity.label}</span>
+            <span className={`block text-xs font-medium tabular-nums ${quantity.value === null ? "text-fg2" : "text-fg"}`}>
               {formatQuantity(quantity, data?.digits ?? 2)}
             </span>
           </div>

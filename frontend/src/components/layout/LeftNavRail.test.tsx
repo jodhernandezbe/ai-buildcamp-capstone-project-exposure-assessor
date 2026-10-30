@@ -76,6 +76,12 @@ describe("LeftNavRail expanded", () => {
     expect(props.onOpenSettings).toHaveBeenCalled();
   });
 
+  it("describes why an entry is disabled for assistive technology too", () => {
+    setup({ clearBlocked: "a reply is in progress", reportBlocked: null });
+    expect(screen.getByRole("button", { name: "Clear workspace" })).toHaveAttribute("aria-description", "a reply is in progress");
+    expect(screen.getByRole("button", { name: "Generate report" })).not.toHaveAttribute("aria-description");
+  });
+
   it("marks the entry of the view on screen as the current page, and only that one", () => {
     setup({ view: "monitoring" });
     expect(screen.getByRole("button", { name: "Monitoring" })).toHaveAttribute("aria-current", "page");

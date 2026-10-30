@@ -59,6 +59,8 @@ function WorkerRings({ facilities }: { facilities: Facility[] }) {
 /** What the marker colours and sizes mean; each entry shows or hides its markers. */
 export function MapLegend({ facilities, hidden, onToggle, drivers = [], ref }: Props) {
   const showsSector = facilities.some((f) => f.sector !== null);
+  // Counts are shown only once there is something to count; before that a zero would read as data.
+  const empty = facilities.length === 0;
   const counts = new Map<StatusKey, number>();
   for (const facility of facilities) {
     const key = statusKey(facility);
@@ -85,13 +87,14 @@ export function MapLegend({ facilities, hidden, onToggle, drivers = [], ref }: P
               >
                 <span aria-hidden className={`inline-block size-2.5 shrink-0 rounded-full ${item.tone}`} />
                 <span className={off ? "line-through" : ""}>{item.label}</span>
-                <span className="ml-auto pl-1.5 text-fg2">{count}</span>
+                {empty ? null : <span className="ml-auto pl-1.5 text-fg2">{count}</span>}
               </button>
             </li>
           );
         })}
       </ul>
       <WorkerRings facilities={facilities} />
+      {empty && <p className="m-0 mt-1.5 text-fg2">No facilities mapped yet.</p>}
       <p className="m-0 mt-1.5 text-fg2">Marker size follows the emission rate (g/s).</p>
       <p className="m-0 mt-1 text-fg2">Click an entry to hide or show its markers.</p>
       {drivers.length > 0 && (

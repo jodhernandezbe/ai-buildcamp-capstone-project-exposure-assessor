@@ -59,6 +59,7 @@ function Item({ icon: Icon, label, collapsed, onClick, page, blocked, busy, badg
     <button
       type="button"
       aria-label={collapsed ? label : undefined}
+      aria-description={blocked ?? undefined}
       title={title}
       aria-current={page ? "page" : undefined}
       aria-busy={busy || undefined}

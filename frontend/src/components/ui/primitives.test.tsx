@@ -29,6 +29,18 @@ describe("AccordionSection", () => {
   });
 });
 
+describe("AccordionSection summary", () => {
+  it("shows the summary beside the heading without changing the button's name", () => {
+    render(
+      <AccordionSection title="Assistant" open={false} onToggle={() => {}} summary="Key saved">
+        <p>inside</p>
+      </AccordionSection>,
+    );
+    expect(screen.getByRole("button", { name: "Assistant" })).toBeInTheDocument();
+    expect(screen.getByText("Key saved")).toBeInTheDocument();
+  });
+});
+
 describe("InfoTooltip", () => {
   it("describes its button with the tooltip text", () => {
     render(<InfoTooltip label="About the key" text="Runs the assistant." />);

@@ -36,6 +36,19 @@ describe("risk card", () => {
   });
 });
 
+describe("ribbon layout", () => {
+  it("gives an empty worst-case section its content height so the cards follow at first load", () => {
+    render(<EpaOverviewRibbon workspace={EMPTY_WORKSPACE} digits={2} />);
+    expect(screen.getByRole("group", { name: "Executive summary" })).toHaveClass("grid-rows-[auto]");
+  });
+
+  it("lets every row share the panel once there are scenarios", () => {
+    const driver = { facility_name: "Plant F1", frs_id: "F1", pathway_key: "community", quantity: "hq", stack_number: 1, value: 2 };
+    render(<EpaOverviewRibbon workspace={workspace({ scenario_drivers: [driver] })} digits={2} />);
+    expect(screen.getByRole("group", { name: "Executive summary" })).not.toHaveClass("grid-rows-[auto]");
+  });
+});
+
 describe("provenance card", () => {
   it("shows no badge until the read-across tool ran", () => {
     render(<EpaOverviewRibbon workspace={EMPTY_WORKSPACE} digits={2} />);
@@ -154,6 +167,15 @@ describe("population card", () => {
     expect(pop.getByText("3 km")).toBeInTheDocument();
     expect(pop.getByRole("img", { name: "0-4: 10%, 5-17: 20%, 18-64: 50%, 65+: 20%" })).toBeInTheDocument();
     expect(pop.queryByText("screening default")).toBeNull();
+  });
+
+  it("leaves out a band the API did not send and names it, instead of drawing it as 0 %", () => {
+    const partial = { ...receptors, age_distribution: { "0-4": 10, "18-64": 90 } };
+    render(<EpaOverviewRibbon workspace={workspace({ receptors: partial })} digits={2} />);
+    const pop = within(card("Exposed population"));
+    expect(pop.getByRole("img", { name: "0-4: 10%, 18-64: 90%" })).toBeInTheDocument();
+    expect(pop.getByText("Not reported: ages 5-17, 65+")).toBeInTheDocument();
+    expect(pop.queryByText("0%")).toBeNull();
   });
 
   it("shows the dose of each age band for the selected facility, the highest marked", () => {

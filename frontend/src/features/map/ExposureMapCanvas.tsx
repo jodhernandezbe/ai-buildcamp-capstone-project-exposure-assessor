@@ -199,7 +199,9 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0, on
   }, [version, viewEpoch]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl border border-hairline">
+    // `isolate`: the map's overlays (basemap button, legend, inspector) stack inside the map only,
+    // never above a layer that covers the analysis area (Monitoring, drawers, fullscreen).
+    <div className="relative isolate h-full w-full overflow-hidden rounded-2xl border border-hairline">
       {/* Inline, not a utility class: MapLibre's own stylesheet is unlayered, so its
           `position: relative` would beat Tailwind's layered `absolute` and collapse the map. */}
       <div

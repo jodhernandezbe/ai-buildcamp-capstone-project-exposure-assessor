@@ -36,7 +36,11 @@ For the surface in each screenshot, go through:
 - The project's lint, type and unit checks.
 - The design document test (tokens documented and declared).
 - The contrast test (token pairs meet WCAG AA).
-- The screenshot test, approving only images you have looked at.
+- The screenshot test, approving only images you have looked at. A pixel tolerance (for
+  example 1 %) absorbs small text changes, and `-u` rewrites only failing references: after a
+  deliberate change to small text, delete that surface's references and regenerate them.
+- For layout fixes, measure instead of trusting class names: in the browser, compare a
+  container's `scrollWidth` with its `clientWidth` at the widths that matter.
 
 ## 4. Write the evidence
 

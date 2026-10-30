@@ -35,11 +35,7 @@ describe("BrandLogo", () => {
   it("marks air as available and water and soil as planned", () => {
     render(<BrandLogo compartments />);
     const items = within(screen.getByRole("list", { name: "Compartments" })).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual([
-      "Air(available)",
-      "•Water(planned)",
-      "•Soil(planned)",
-    ]);
+    expect(items.map((item) => item.textContent)).toEqual(["Air", "Water (planned)", "Soil (planned)"]);
     expect(items[1]).toHaveAttribute("title", expect.stringContaining("planned"));
   });
 });
