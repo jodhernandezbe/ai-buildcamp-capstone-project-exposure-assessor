@@ -35,4 +35,4 @@
 - [x] 4.2 Run the auditor prompt against a security-relevant commit and record what it found
 - [x] 4.3 Run `/pr-review` end to end on pull request #1: reviewer dispatched, questions answered, dry run shown, review posted; two gaps found and fixed (no anchorable lines in a rename, and GitHub refusing a verdict on your own pull request)
 - [x] 4.4 Verify the `Stop` gate inside a real session: both subagents loaded after the settings and agent files were written, and the gate fired on this change's own shell scripts
-- [ ] 4.5 Pre-commit passes on the changed files; commit the `.claude/` additions
+- [x] 4.5 Pre-commit passes on the changed files; the `.claude/` additions are committed (a08bb06, 1863e11)
