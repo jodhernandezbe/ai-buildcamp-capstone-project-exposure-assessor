@@ -43,6 +43,13 @@ Everything `/pr-review` posts is attributed to your account, not to an app or a 
 exact payload before anything is sent, and nothing is posted or approved without you saying so
 in that turn.
 
+## Reviewing your own pull request
+
+GitHub allows a comment on your own pull request but refuses a verdict: both approval and a
+request for changes come back as a 422. The posting script detects this before sending and
+tells you, and the findings can still go up as a comment with the intended verdict written into
+the body. A real verdict needs a second account.
+
 ## Organisations
 
 If the repository belongs to an organisation with SAML single sign-on, authorise your token for

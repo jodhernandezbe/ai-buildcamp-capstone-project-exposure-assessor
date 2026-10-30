@@ -27,12 +27,12 @@
 - [x] 3.2 Install the GitHub CLI on this machine
 - [x] 3.3 Write `.claude/security-audit-scanners.md` from this project's real, verified commands, with exit-code meanings, the known `pip-audit` state and the honest gap list
 - [x] 3.4 Write `.claude/pr-review-rules.md` from the root and folder `CLAUDE.md` files, the design principles and the specs
-- [ ] 3.5 Authenticate the GitHub CLI (`gh auth login`, run by the user)
+- [x] 3.5 Authenticate the GitHub CLI (`gh auth login`, run by the user)
 
 ## 4. Verification
 
 - [x] 4.1 Run the scanner layer on a real commit; fix the invocation that reported "no files to check" and record the cause in the scanner file
 - [x] 4.2 Run the auditor prompt against a security-relevant commit and record what it found
-- [ ] 4.3 Run `/pr-review` end to end on a pull request of this repository, stopping at the dry run
-- [ ] 4.4 Verify the `Stop` gate inside a real session after a restart
+- [x] 4.3 Run `/pr-review` end to end on pull request #1: reviewer dispatched, questions answered, dry run shown, review posted; two gaps found and fixed (no anchorable lines in a rename, and GitHub refusing a verdict on your own pull request)
+- [x] 4.4 Verify the `Stop` gate inside a real session: both subagents loaded after the settings and agent files were written, and the gate fired on this change's own shell scripts
 - [ ] 4.5 Pre-commit passes on the changed files; commit the `.claude/` additions

@@ -37,6 +37,18 @@ case "$EVENT" in
 esac
 
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+
+# GitHub refuses APPROVE and REQUEST_CHANGES on your own pull request. Catch it here, with the
+# fallback spelled out, rather than letting it surface as a raw 422 after the review is drafted.
+if [ "$EVENT" != "COMMENT" ]; then
+  AUTHOR="$(gh pr view "$PR" --json author -q .author.login 2>/dev/null || true)"
+  ME="$(gh api user -q .login 2>/dev/null || true)"
+  if [ -n "$AUTHOR" ] && [ "$AUTHOR" = "$ME" ]; then
+    die "GitHub does not allow '$EVENT' on your own pull request (#$PR is authored by $ME).
+  Post the same findings with \"event\": \"COMMENT\", stating the verdict in the body,
+  or have another account submit the verdict."
+  fi
+fi
 DIFF="$(mktemp)"; VALID="$(mktemp)"; CLEAN="$(mktemp)"; DROPPED="$(mktemp)"
 trap 'rm -f "$DIFF" "$VALID" "$CLEAN" "$DROPPED"' EXIT
 gh pr diff "$PR" > "$DIFF" || die "could not read the diff of PR #$PR"

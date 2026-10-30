@@ -61,8 +61,14 @@ Then ask for the verdict with AskUserQuestion:
 - **Post nothing** ends the review here.
 
 Respect what `.claude/pr-review-rules.md` says about approval. Never choose approval yourself:
-an approval is the user's signature, and the user must pick it in this turn. Do not approve a
-pull request authored by the account that is posting, and say so if that is the case.
+an approval is the user's signature, and the user must pick it in this turn.
+
+**When the pull request is authored by the account that is posting**, GitHub refuses both
+approval and a request for changes: a verdict on your own pull request is not possible through
+the API. Say so when you present the options, before the user picks one, rather than letting it
+fail afterwards. The findings can still be posted as a comment with the intended verdict stated
+in the body, which is the fallback to offer. Compare `gh pr view <pr> --json author -q
+.author.login` with `gh api user -q .login` to know in advance.
 
 ## 6. Post
 

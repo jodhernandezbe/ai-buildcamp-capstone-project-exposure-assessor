@@ -82,3 +82,29 @@ used `mapfile` (bash 4+).
 
 Open: no end-to-end review against a real pull request yet. It needs `gh auth login`, which only
 the user can complete, and an open pull request on the repository.
+
+### End-to-end on a real pull request (#1, a README rename)
+
+Run after the user authenticated the GitHub CLI. The reviewer subagent was dispatched with the
+pull request's refs, files, title and body and the project rules, and with no reading of the
+change from the dispatching session.
+
+It returned two blocking findings, both caused by the rename rather than by the file's content:
+`pyproject.toml` still declares `readme = "README.md"`, so a metadata build would fail; and
+GitHub renders a landing-page README only for canonical names, so the repository front page
+would show no README at all. It raised four questions, two of which were put to the user and
+answered before any comment text was drafted. It correctly reported that the diff contains no
+changed content lines, so no finding could anchor inline.
+
+Posted as review 5711183240.
+
+Two things this run established that testing against a stub could not:
+
+1. **A pure rename has zero commentable lines.** The posting script's line check derived an empty
+   set from the diff, which is correct: a 100% similarity rename produces no hunks. The findings
+   went in the review body.
+2. **GitHub refuses a verdict on your own pull request.** `REQUEST_CHANGES` came back 422 with
+   "Can not request changes on your own pull request". The script now compares the author with
+   the authenticated account and stops before sending, naming the comment fallback; the command
+   presents the restriction before the user picks a verdict; the README and the setup note say
+   so. The findings were posted as a comment with the intended verdict stated in the body.
