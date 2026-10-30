@@ -16,7 +16,16 @@ from typing import cast
 from config.parsing import read_toml, require_number, section, subtable
 from config.stack import StackRange
 
-USER_QUANTITIES = ("molecular_weight", "vapor_pressure", "density", "rfd", "rfc", "sf", "iur")
+USER_QUANTITIES = (
+    "molecular_weight",
+    "vapor_pressure",
+    "density",
+    "oel_twa",
+    "rfd",
+    "rfc",
+    "sf",
+    "iur",
+)
 
 
 @dataclass(frozen=True)

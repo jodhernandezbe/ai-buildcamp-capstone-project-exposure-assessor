@@ -8,7 +8,14 @@ from api.schemas.workspace import Chemical, ReadAcross, WorkspaceState
 from api.services.report.document import ReportContext, paragraph, subheading, table
 
 # Keys of ``Chemical.sources`` (the properties tool's field names) and how the report names them.
-PROPERTY_LABELS = {"molecular_weight": "Molecular weight", "rfc": "RfC", "iur": "IUR"}
+PROPERTY_LABELS = {
+    "molecular_weight": "Molecular weight",
+    "vapor_pressure": "Vapor pressure",
+    "density": "Density",
+    "oel_twa": "Occupational limit (8-hour average)",
+    "rfc": "RfC",
+    "iur": "IUR",
+}
 _KIND_LABELS = {
     "not_evaluated": "Not evaluated",
     "direct_tri_match": "Direct TRI match",
@@ -33,6 +40,9 @@ def _properties(chemical: Chemical, ctx: ReportContext) -> list[list[str]]:
     fmt = ctx.fmt
     quantities = (
         ("molecular_weight", chemical.molecular_weight_g_mol, "g/mol"),
+        ("vapor_pressure", chemical.vapor_pressure_mmhg, "mmHg"),
+        ("density", chemical.density_g_cm3, "g/cm³"),
+        ("oel_twa", chemical.oel_twa_mg_m3, "mg/m³"),
         ("rfc", chemical.rfc_mg_m3, "mg/m³"),
         ("iur", chemical.iur_per_ug_m3, "(µg/m³)⁻¹"),
     )

@@ -1,8 +1,8 @@
 import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { formatNumber } from "../../lib/format";
-import type { Thresholds } from "../../types/api";
-import { describeBar, type Group, type Quantity } from "./riskGroups";
+import type { Thresholds, WorkerThresholds } from "../../types/api";
+import { describeBar, type Group, type Pathway, type Quantity } from "./riskGroups";
 
 const BAR_COLOR = "var(--accent)";
 const AXIS_TEXT = { fill: "var(--fg-2)", fontSize: 11 };
@@ -38,18 +38,33 @@ export function thresholdLines(quantity: Quantity, thresholds: Thresholds): { y:
   ].map((line) => ({ ...line, text: line.text.replace(/\s+/g, " ") }));
 }
 
+/** The reference lines of a worker quantity: where it becomes elevated and where it exceeds. */
+export function workerLines(quantity: Quantity, limits: WorkerThresholds): { y: number; text: string }[] {
+  const [low, high] =
+    quantity === "hq"
+      ? [limits.hq_elevated, limits.hq_exceedance]
+      : quantity === "risk"
+        ? [limits.cancer_elevated, limits.cancer_exceedance]
+        : [limits.ratio_elevated, limits.ratio_exceedance];
+  return [
+    { y: low, text: `elevated ${compactTick(low)}` },
+    { y: high, text: `exceedance ${compactTick(high)}` },
+  ];
+}
+
 interface TooltipProps {
   active?: boolean;
   payload?: readonly { payload?: unknown }[];
   quantity: Quantity;
   digits: number;
+  pathway?: Pathway;
 }
 
 /** The hover card of a bar: its value, the facility and concentration behind it, the counts. */
-export function BarTooltip({ active, payload, quantity, digits }: TooltipProps) {
+export function BarTooltip({ active, payload, quantity, digits, pathway = "outdoor" }: TooltipProps) {
   const row = payload?.[0]?.payload as ChartRow | undefined;
   if (!active || !row) return null;
-  const detail = describeBar(row.group, quantity, digits);
+  const detail = describeBar(row.group, quantity, digits, pathway);
   return (
     <div className="max-w-72 rounded-xl border border-hairline bg-solid p-2.5 text-xs shadow-[var(--shadow)]">
       <p className="m-0 font-semibold">{detail.group}</p>
@@ -107,6 +122,10 @@ interface Props {
   /** The chart's heading, also its name for assistive technology. */
   title: string;
   thresholds: Thresholds | undefined;
+  /** Tier boundaries of the worker screening, drawn instead when the pathway is indoor air. */
+  workerThresholds?: WorkerThresholds;
+  /** The exposure pathway the bars belong to; outdoor air unless said otherwise. */
+  pathway?: Pathway;
   digits: number;
   /** Characters of an x-axis label shown before it is cut (the tooltip and text have it all). */
   labelChars: number;
@@ -117,12 +136,26 @@ interface Props {
 }
 
 /** One bar per group: the highest worst-case value of one quantity, with its thresholds dashed. */
-export function RiskGroupChart({ groups, quantity, title, thresholds, digits, labelChars, heightClass, angled }: Props) {
-  const lines = thresholds ? thresholdLines(quantity, thresholds) : [];
+export function RiskGroupChart({
+  groups,
+  quantity,
+  title,
+  thresholds,
+  workerThresholds,
+  pathway = "outdoor",
+  digits,
+  labelChars,
+  heightClass,
+  angled,
+}: Props) {
+  const limits = pathway === "indoor" ? workerThresholds : thresholds;
+  const lines = pathway === "indoor"
+    ? workerThresholds ? workerLines(quantity, workerThresholds) : []
+    : thresholds ? thresholdLines(quantity, thresholds) : [];
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <h3 className="m-0 text-xs font-medium">{title}</h3>
-      {thresholds && (
+      {limits && (
         <p className="m-0 text-[11px] text-fg2">
           Dashed lines: {lines.map((l) => l.text).join(", ")}
         </p>
@@ -163,7 +196,7 @@ export function RiskGroupChart({ groups, quantity, title, thresholds, digits, la
             ))}
             <Tooltip
               cursor={{ fill: "var(--hairline)" }}
-              content={(props) => <BarTooltip {...props} quantity={quantity} digits={digits} />}
+              content={(props) => <BarTooltip {...props} quantity={quantity} digits={digits} pathway={pathway} />}
             />
             <Bar dataKey="value" name={title} fill={BAR_COLOR} radius={[3, 3, 0, 0]} isAnimationActive={false} />
           </BarChart>

@@ -23,6 +23,9 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - The workspace shows only what tools returned: never compute, estimate or convert values
   (geometry for drawing the buffer and schematic sector is the one exception); anything
   unverified or unattributable becomes absent with a reason.
+- `services/exposure_graph/` turns each validated `Facility` into its `exposure_graph` (source, one
+  lane per pathway, nodes and edges with value, unit and source or a reason). It only rearranges
+  values; a lane is one module in `LANES`; its fixed text and units are `[ui.exposure_graph]`.
 - `services/report/` writes a thread's Word report (one module per section) from its
   `WorkspaceState` and last assistant message only: it formats values (`values.py`, the same text
   as the dashboard) and never computes one; its fixed text is `[ui.report]`.

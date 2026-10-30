@@ -12,11 +12,14 @@ from api.services.projectors.payloads import (
     ExposurePayload,
     IndustryPayload,
     MeteorologyPayload,
+    OccupationalPayload,
     PopulationPayload,
+    ProfilePayload,
     PropertiesPayload,
     ReadAcrossPayload,
     SccMatchPayload,
     StackPayload,
+    WorstCaseScenarioPayload,
     decode_json,
     validate,
 )
@@ -78,6 +81,13 @@ class Ledger:
     # Keyed by the emission rate the model passed, or by FRS ID (batch assessment).
     exposures: list[tuple[float | str, ExposurePayload]] = field(
         default_factory=list[tuple[float | str, ExposurePayload]]
+    )
+    # FRS ID -> the worker screening and the operational profile of the batch assessment.
+    worker: dict[str, OccupationalPayload] = field(default_factory=dict[str, OccupationalPayload])
+    profiles: dict[str, ProfilePayload] = field(default_factory=dict[str, ProfilePayload])
+    # FRS ID -> the worst-case scenarios of the batch assessment.
+    scenarios: dict[str, list[WorstCaseScenarioPayload]] = field(
+        default_factory=dict[str, list[WorstCaseScenarioPayload]]
     )
     # FRS ID -> how the batch assessment screened that facility.
     screening: dict[str, Screening] = field(default_factory=dict[str, Screening])

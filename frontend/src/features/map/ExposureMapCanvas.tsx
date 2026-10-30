@@ -7,11 +7,11 @@ import "./maplibreWorker";
 import { useEffect, useRef, useState } from "react";
 
 import { DARK_MODE, REDUCED_MOTION, matches, usePrefers } from "../../lib/usePrefers";
-import type { ClientConfig, Facility, WorkspaceState } from "../../types/workspace";
+import type { ClientConfig, Facility, ScenarioDriver, WorkspaceState } from "../../types/workspace";
 import { SOURCES, addOverlays, readPalette, setSourceData } from "./layers";
 import { FacilityInspector } from "./FacilityInspector";
 import { MapLegend, statusKey, type StatusKey } from "./MapLegend";
-import { bufferCollection, facilityCollection, sectorCollection } from "./mapData";
+import { bufferCollection, facilityCollection, receptorCollection, sectorCollection } from "./mapData";
 
 const FIT_PADDING_PX = 64;
 const FIT_MAX_ZOOM = 14;
@@ -28,6 +28,8 @@ interface Props {
   digits: number;
   /** Rises when the workspace is replaced as a whole, so the camera reframes anyway. */
   viewEpoch?: number;
+  /** Told which facility the user pinned on the map. */
+  onPin?: (frsId: string) => void;
 }
 
 type Box = { west: number; south: number; east: number; north: number };
@@ -36,12 +38,18 @@ const corners = (box: Box): [[number, number], [number, number]] => [
   [box.east, box.north],
 ];
 
-function useOverlayData(shown: Facility[], config: Props["config"]) {
+function useOverlayData(
+  shown: Facility[],
+  config: Props["config"],
+  drivers: ScenarioDriver[],
+  pinnedId: string | null,
+) {
   const scale = { minPx: config.marker_min_px, maxPx: config.marker_max_px };
   return {
-    [SOURCES.facilities]: facilityCollection(shown, scale),
+    [SOURCES.facilities]: facilityCollection(shown, scale, drivers),
     [SOURCES.buffers]: bufferCollection(shown),
     [SOURCES.sectors]: sectorCollection(shown),
+    [SOURCES.receptors]: receptorCollection(shown, drivers, pinnedId),
   };
 }
 
@@ -82,7 +90,7 @@ const hasSize = (element: HTMLElement | null): boolean =>
   element !== null && element.clientWidth > 0 && element.clientHeight > 0;
 
 /** The basemap with the facility markers, receptor circles and schematic downwind sectors. */
-export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: Props) {
+export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0, onPin }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const ready = useRef(false);
@@ -94,7 +102,8 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
   // Statuses the user switched off in the legend; their markers and shapes leave the map.
   const [hidden, setHidden] = useState<ReadonlySet<StatusKey>>(new Set<StatusKey>());
   const shown = workspace.facilities.filter((f) => !hidden.has(statusKey(f)));
-  const data = useOverlayData(shown, config);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const data = useOverlayData(shown, config, workspace.scenario_drivers, pinnedId);
   const latest = useRef({ data, styleUrl, start: config.initial_view, bounds: workspace.bounds });
   useEffect(() => {
     latest.current = { data, styleUrl, start: config.initial_view, bounds: workspace.bounds };
@@ -205,6 +214,8 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
           facilities={shown}
           scale={{ minPx: config.marker_min_px, maxPx: config.marker_max_px }}
           digits={digits}
+          onPin={onPin}
+          onPinned={setPinnedId}
         />
       )}
       <button
@@ -220,6 +231,7 @@ export function ExposureMapCanvas({ workspace, config, digits, viewEpoch = 0 }: 
       <MapLegend
         ref={legend}
         facilities={workspace.facilities}
+        drivers={workspace.scenario_drivers}
         hidden={hidden}
         onToggle={(key) =>
           setHidden((now) => {

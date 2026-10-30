@@ -18,6 +18,7 @@ from tests.tools.informatics.pubchem_fakes import FakePubchem
 from tools.informatics import properties
 from tools.informatics.helpers.comptox import ComptoxLookup
 from tools.informatics.helpers.pubchem import PubchemFallback
+from tools.informatics.helpers.pubchem.limits import empty_limits
 from tools.informatics.properties import fetch_chemical_properties, lookup_chemical_properties
 from tools.schemas import ChemicalProperties
 from tools.user_values import UserValueInputs
@@ -378,6 +379,7 @@ def test_tool_invoke_delegates_with_default_services(monkeypatch: pytest.MonkeyP
         "toxicity_details": {},
         "warnings": ["x"],
         "missing": [],
+        "occupational_limits": empty_limits("not looked up"),
     }
     seen: list[str] = []
 
@@ -490,7 +492,7 @@ def _answers(
 def test_missing_iur_is_listed_for_the_user_with_its_units_and_range() -> None:
     result, _ = _run(tox=NO_IUR)
     entries = {e["quantity"]: e for e in result["missing"]}
-    assert set(entries) == {"iur"}
+    assert set(entries) == {"iur", "oel_twa"}  # no limit was looked up in this run
     entry = entries["iur"]
     assert entry["entry_id"] == f"iur:{CAS}"
     assert entry["accepted_units"][0] == "1/(ug/m^3)"
@@ -499,9 +501,38 @@ def test_missing_iur_is_listed_for_the_user_with_its_units_and_range() -> None:
     assert "cancer" in entry["purpose"]
 
 
-def test_vapor_pressure_and_density_are_not_asked_for() -> None:
+def test_every_value_no_source_has_is_asked_for() -> None:
     result, _ = _run(props=[], tox=[])
-    assert {e["quantity"] for e in result["missing"]} == {"rfc", "iur"}
+    asked = {e["quantity"] for e in result["missing"]}
+    assert asked == {"rfc", "iur", "vapor_pressure", "density", "oel_twa"}  # the weight was found
+
+
+def test_each_asked_value_says_what_it_is_for_and_what_it_is_not_used_for() -> None:
+    result, _ = _run(props=[], tox=[], mass=None)
+    purposes = {e["quantity"]: e["purpose"] for e in result["missing"]}
+    assert "molecular_weight" in purposes and "ppm" in purposes["molecular_weight"]
+    assert "not used in an equation" in purposes["vapor_pressure"]
+    assert "not used in an equation" in purposes["density"]
+    assert "occupational limit" in purposes["oel_twa"]
+
+
+def test_a_supplied_occupational_limit_is_used_labelled_and_no_longer_asked() -> None:
+    answers = _answers(supplied={f"oel_twa:{CAS}": 3.0})
+    result, _ = _run(inputs=answers)
+    limits = result["occupational_limits"]
+    assert limits["oel_twa_mg_m3"] == pytest.approx(3.0)
+    assert (
+        limits["oel_source"] == "user-provided" and result["sources"]["oel_twa"] == "user-provided"
+    )
+    assert all(e["quantity"] != "oel_twa" for e in result["missing"])
+
+
+def test_a_supplied_limit_in_micrograms_is_converted_and_a_bad_one_is_refused() -> None:
+    ok, _ = _run(inputs=_answers(supplied={f"oel_twa:{CAS}": 3000.0}))
+    assert ok["occupational_limits"]["oel_twa_mg_m3"] is not None
+    bad, _ = _run(inputs=_answers(supplied={f"oel_twa:{CAS}": -1.0}))
+    assert bad["occupational_limits"]["oel_twa_mg_m3"] is None
+    assert "oel_twa" in {e["quantity"] for e in bad["missing"]}
 
 
 def test_found_benchmark_is_never_listed_or_replaced() -> None:
@@ -518,7 +549,7 @@ def test_supplied_missing_benchmark_is_used_and_labelled() -> None:
     assert _field(result, "iur") == pytest.approx(2e-6)
     assert result["sources"]["iur"] == "user-provided"
     assert not any(w.startswith("iur:") for w in result["warnings"])
-    assert result["missing"] == []
+    assert [e["quantity"] for e in result["missing"]] == ["oel_twa"]
 
 
 def test_declined_benchmark_stays_none_with_its_warning() -> None:
@@ -526,14 +557,14 @@ def test_declined_benchmark_stays_none_with_its_warning() -> None:
     result, _ = _run(tox=NO_IUR, inputs=answers)
     assert _field(result, "iur") is None
     assert "iur: not found in CompTox" in result["warnings"]
-    assert result["missing"] == []
+    assert [e["quantity"] for e in result["missing"]] == ["oel_twa"]
 
 
 def test_supplied_value_is_rechecked_and_out_of_range_is_not_used() -> None:
     answers = _answers(supplied={f"iur:{CAS}": -1.0})
     result, _ = _run(tox=NO_IUR, inputs=answers)
     assert _field(result, "iur") is None
-    assert [e["quantity"] for e in result["missing"]] == ["iur"]
+    assert [e["quantity"] for e in result["missing"]] == ["iur", "oel_twa"]
 
 
 def test_a_value_for_another_chemical_is_not_used() -> None:

@@ -331,6 +331,7 @@ class LatestReports:
         """Args: TRI settings; the first reporting year that counts (older rows are ignored);
         the activity flags to read (none reads no activities)."""
         self._settings = settings
+        self._read_media = (*settings.media, settings.fugitive_medium)
         self._flags = flags
         self._first_year = first_year
         self._slots: dict[tuple[str, str], Slot] = {}
@@ -346,7 +347,7 @@ class LatestReports:
             self.stats.secondary_naics += 1
             return
         report = parse_report(row, self._settings, self._flags)
-        if report is None or report.medium not in self._settings.media:
+        if report is None or report.medium not in self._read_media:
             self.stats.skipped_rows += 1
             return
         if report.year < self._first_year:
@@ -498,6 +499,8 @@ class _Reported(_Industry):
     emission_rate: float
     operating_hours_per_year: float
     operating_hours_source: str
+    fugitive_release_kg_per_year: float | None
+    fugitive_reporting_year: int | None
 
 
 class _Conditions(TypedDict):
@@ -544,6 +547,8 @@ def _reported(
         "emission_rate": rate,
         "operating_hours_per_year": hours.hours_per_year,
         "operating_hours_source": hours.source,
+        "fugitive_release_kg_per_year": None,  # filled by the lookup from the fugitive medium
+        "fugitive_reporting_year": None,
     }
 
 

@@ -167,3 +167,77 @@ The workspace's chemical SHALL carry the preferred name the properties result ga
 #### Scenario: Name absent
 - **WHEN** the properties result has no name
 - **THEN** the chemical's name is None and nothing else fills it
+
+### Requirement: Occupational exposure and operational profile on each facility
+The state SHALL carry, for each facility, the `occupational_exposure` and `operational_profile` exactly as the assessment tool returned them (the TWA, benchmark and its source, limit ratio, hazard quotient, cancer risk, tier, warnings; the NAICS code, life cycle stages, condition-of-use categories, CDR sector, operating days, hours per day and annual operating hours), each absent (null) with its reason when the tool did not report it, under the same fail-closed rules as the other values. They SHALL be sent in the `workspace_update` event and described in the generated schema and TypeScript types.
+
+#### Scenario: Values come from the tool
+- **WHEN** the assessment reports a TWA for a facility
+- **THEN** the facility's state shows that value and its source
+
+#### Scenario: Non-finite value
+- **WHEN** a result contains a non-finite or boolean number
+- **THEN** that value is left out with a warning and the rest of the facility is kept
+
+#### Scenario: Not reported
+- **WHEN** the tool reported no occupational result for a facility
+- **THEN** the fields are null with a reason and the facility's community values are unaffected
+
+#### Scenario: Contract
+- **WHEN** the schema is generated
+- **THEN** the TypeScript types include the two new objects and the contract test passes
+
+### Requirement: Highest worker values across facilities
+The state SHALL carry a worker risk summary with the highest limit ratio, worker hazard quotient and worker cancer risk over the assessed facilities, for the baseline and the enclosed-zone tiers, each naming the facility it comes from and that facility's tier; each is a selection among the values the tools returned, never a sum, mean or conversion. When no facility has a worker result the summary SHALL be empty with a reason.
+
+#### Scenario: Highest value
+- **WHEN** two facilities have worker results
+- **THEN** each figure of the summary is the larger of the two and names its facility
+
+#### Scenario: Nothing yet
+- **WHEN** no facility has a worker result
+- **THEN** every figure is absent and a reason is given
+
+### Requirement: Each facility carries its exposure graph
+The state SHALL carry, for each facility, an exposure graph: lanes (one per pathway, with whether it is
+available and why not, and its status), nodes (source facility, each evaluated stack, the pathway, the
+route, each receptor group and the endpoint) and edges (each with the quantity it carries). Every
+quantity SHALL carry its value as the tools reported it, its unit and its source, or no value and a
+reason; no value SHALL be computed, converted or estimated to build the graph. Fixed text and units SHALL
+come from configuration. The graph SHALL be sent in `workspace_update` and described in the generated
+schema and types.
+
+#### Scenario: Community branches
+- **WHEN** a facility has two evaluated stacks and residents in four age bands
+- **THEN** its graph has two stack nodes feeding the outdoor air and four age-band receptor nodes, each with its dose
+
+#### Scenario: Worker lane
+- **WHEN** a facility has an occupational result
+- **THEN** the worker lane carries the fugitive release, the worst-case and baseline concentrations, the TWA, the limit and its source, the ratio and the tier
+
+#### Scenario: Unavailable lane
+- **WHEN** a facility has no occupational result
+- **THEN** the worker lane is marked unavailable with the configured reason and has no nodes
+
+#### Scenario: Absent quantity
+- **WHEN** a tool did not report a value (for example no cancer risk)
+- **THEN** that quantity has no value and carries the reason, and the rest of the graph is unchanged
+
+#### Scenario: Contract
+- **WHEN** the schema is exported
+- **THEN** the TypeScript types include the graph and the contract check passes
+
+### Requirement: Scenarios and their drivers in the workspace
+The workspace SHALL carry, for each pathway and quantity that has a scenario, the driving facility and its worst-case scenario in the generic shape, and for every assessed facility its scenarios with their receptors, projected from tool results only. A scenario or receptor list that is not valid SHALL be left out alone with a warning. A scenario SHALL never mix values of different facilities or stacks.
+
+#### Scenario: Driver per result
+- **WHEN** a run assesses several facilities
+- **THEN** the workspace names the driving facility of each result, which may differ from result to result
+
+#### Scenario: Invalid scenario
+- **WHEN** one facility's scenario is not valid
+- **THEN** it is left out with a warning and the others are kept
+
+#### Scenario: Older server
+- **WHEN** the server sends no scenarios
+- **THEN** the workspace has none and the dashboard shows the results it showed before

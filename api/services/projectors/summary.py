@@ -14,10 +14,16 @@ from api.schemas.workspace import (
     Facility,
     ReadAcross,
     RiskSummary,
+    ScenarioDriver,
     Status,
+    VentilationTier,
+    WorkerExtremum,
+    WorkerRiskSummary,
+    WorkerTierSummary,
+    WorstCaseScenario,
 )
 from api.services.projectors.ledger import Ledger
-from api.services.projectors.payloads import ReadAcrossPayload
+from api.services.projectors.payloads import PropertiesPayload, ReadAcrossPayload
 from api.services.projectors.rules import WorkspaceRules, cancer_status, hq_status
 
 UNATTRIBUTED_EXPOSURE = "the exposure result could not be matched to one facility"
@@ -48,22 +54,31 @@ def _read_across(payload: ReadAcrossPayload) -> ReadAcross:
     )
 
 
+def _property_fields(props: PropertiesPayload) -> dict[str, object]:
+    """The chemical's values and where each came from, as the properties tool gave them."""
+    limits = props.occupational_limits
+    sources = dict(props.sources)
+    if limits is not None and limits.oel_source:
+        sources.setdefault("oel_twa", limits.oel_source)
+    return {
+        "name": props.preferred_name,
+        "molecular_weight_g_mol": props.molecular_weight,
+        "vapor_pressure_mmhg": props.vapor_pressure,
+        "density_g_cm3": props.density,
+        "oel_twa_mg_m3": limits.oel_twa_mg_m3 if limits else None,
+        "rfc_mg_m3": props.rfc,
+        "iur_per_ug_m3": props.iur,
+        "sources": sources,
+        "warnings": list(props.warnings),
+    }
+
+
 def chemical(ledger: Ledger) -> Chemical:
     """The chemical last asked about, with the results that were for that CAS number only."""
     cas = ledger.cas
     result = Chemical(cas_number=cas)
     if ledger.properties and _digits(ledger.properties[0]) == _digits(cas):
-        props = ledger.properties[1]
-        result = result.model_copy(
-            update={
-                "name": props.preferred_name,
-                "molecular_weight_g_mol": props.molecular_weight,
-                "rfc_mg_m3": props.rfc,
-                "iur_per_ug_m3": props.iur,
-                "sources": dict(props.sources),
-                "warnings": list(props.warnings),
-            }
-        )
+        result = result.model_copy(update=_property_fields(ledger.properties[1]))
     if ledger.read_across and _digits(ledger.read_across[0]) == _digits(cas):
         result = result.model_copy(update={"read_across": _read_across(ledger.read_across[1])})
     return result
@@ -109,6 +124,62 @@ def risk_summary(
     )
 
 
+NO_WORKER_RESULT = "no facility has a worker screening result yet"
+
+
+def _worst_worker(
+    facilities: Sequence[Facility], pick: Callable[[Facility], float | None]
+) -> WorkerExtremum | None:
+    """The facility with the highest value of one worker quantity (a selection, never a sum)."""
+    best: WorkerExtremum | None = None
+    for facility in facilities:
+        value = pick(facility)
+        if value is not None and (best is None or value > best.value):
+            tier = (
+                facility.occupational_exposure.risk_tier if facility.occupational_exposure else None
+            )
+            best = WorkerExtremum(
+                value=value, frs_id=facility.frs_id, facility_name=facility.name, risk_tier=tier
+            )
+    return best
+
+
+def _tier_summary(
+    facilities: Sequence[Facility], tier: Callable[[Facility], VentilationTier | None]
+) -> WorkerTierSummary:
+    def of(field: Callable[[VentilationTier], float | None]) -> WorkerExtremum | None:
+        return _worst_worker(facilities, lambda f: _field(tier(f), field))
+
+    return WorkerTierSummary(
+        oel_ratio=of(lambda t: t.oel_ratio),
+        hq=of(lambda t: t.hq),
+        cancer_risk=of(lambda t: t.cancer_risk),
+    )
+
+
+def _field(
+    tier: VentilationTier | None, field: Callable[[VentilationTier], float | None]
+) -> float | None:
+    return field(tier) if tier is not None else None
+
+
+def worker_summary(facilities: Sequence[Facility]) -> WorkerRiskSummary:
+    """The highest worker limit ratio, hazard quotient and cancer risk, for both tiers."""
+    summary = WorkerRiskSummary(
+        baseline=_tier_summary(
+            facilities,
+            lambda f: f.occupational_exposure.baseline if f.occupational_exposure else None,
+        ),
+        worst_case=_tier_summary(
+            facilities,
+            lambda f: f.occupational_exposure.worst_case if f.occupational_exposure else None,
+        ),
+    )
+    if any(f.occupational_exposure for f in facilities):
+        return summary
+    return summary.model_copy(update={"reason": NO_WORKER_RESULT})
+
+
 def select(facilities: Sequence[Facility], summary: RiskSummary) -> Facility | None:
     """The facility the ribbon follows: the highest risk one, else the latest with receptors,
     else the only one."""
@@ -119,3 +190,31 @@ def select(facilities: Sequence[Facility], summary: RiskSummary) -> Facility | N
     if with_receptors:
         return with_receptors[-1]
     return facilities[0] if len(facilities) == 1 else None
+
+
+def scenario_drivers(facilities: Sequence[Facility]) -> list[ScenarioDriver]:
+    """For each pathway and quantity, the facility with the highest value (a selection).
+
+    The first facility wins a tie. Nothing is computed: each driver is one facility's own
+    scenario value.
+    """
+    best: dict[tuple[str, str], ScenarioDriver] = {}
+    for facility in facilities:
+        for scenario in facility.scenarios:
+            key = (scenario.pathway_key, scenario.quantity)
+            held = best.get(key)
+            if held is None or scenario.value > held.value:
+                best[key] = _driver(facility, scenario)
+    return list(best.values())
+
+
+def _driver(facility: Facility, scenario: WorstCaseScenario) -> ScenarioDriver:
+    stack = next((f.value for f in scenario.factors if f.key == "stack_number"), None)
+    return ScenarioDriver(
+        pathway_key=scenario.pathway_key,
+        quantity=scenario.quantity,
+        frs_id=facility.frs_id,
+        facility_name=facility.name,
+        stack_number=int(stack) if isinstance(stack, int | float) else None,
+        value=scenario.value,
+    )

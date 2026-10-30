@@ -20,6 +20,7 @@ GOOD = {
     "max_digits": "6",
     "days_per_year": "365",
     "max_hours_per_week": "168",
+    "shift_hours_per_day": "8",
 }
 
 
@@ -36,6 +37,7 @@ def test_explicit_values(tmp_path: Path) -> None:
     assert (s.code_column, s.hours_column, s.min_digits, s.max_digits) == ("code", "hours", 3, 6)
     assert (s.days_per_year, s.max_hours_per_week) == (365.0, 168.0)
     assert s.baseline_path.is_absolute() and s.baseline_path.name == "x.parquet"
+    assert s.shift_hours_per_day == 8.0
 
 
 def test_shipped_settings_point_at_the_committed_baseline() -> None:
@@ -47,6 +49,9 @@ def test_shipped_settings_point_at_the_committed_baseline() -> None:
 @pytest.mark.parametrize(
     ("key", "value"),
     [
+        ("shift_hours_per_day", "0"),
+        ("shift_hours_per_day", "25"),
+        ("shift_hours_per_day", "true"),
         ("min_digits", "0"),
         ("min_digits", "true"),
         ("min_digits", "7"),

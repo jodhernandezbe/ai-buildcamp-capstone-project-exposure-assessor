@@ -16,6 +16,7 @@ from config.parsing import (
 )
 
 NAME = "plant_hours"
+_HOURS_PER_DAY = 24.0
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ class PlantHoursSettings:
         max_digits: Longest code accepted, in the baseline and for a facility.
         days_per_year: Days in a year, d/yr; hours per year = h/week x days_per_year / 7.
         max_hours_per_week: Largest plausible hours per week (24 h x 7 d = 168), in h/week.
+        shift_hours_per_day: Hours of one working day, used to derive how many days a week a
+            plant with the matched hours per week runs (QPC gives hours, not days), in h/day.
     """
 
     baseline_path: Path
@@ -40,6 +43,7 @@ class PlantHoursSettings:
     max_digits: int
     days_per_year: float
     max_hours_per_week: float
+    shift_hours_per_day: float
 
 
 def _text(table: dict[str, object], key: str) -> str:
@@ -52,6 +56,13 @@ def _digits(table: dict[str, object]) -> tuple[int, int]:
     if low > high:
         raise ValueError(f"{NAME}.min_digits must be at most {NAME}.max_digits")
     return low, high
+
+
+def _shift_hours(table: dict[str, object]) -> float:
+    hours = require_number(table, "shift_hours_per_day", minimum=1e-9, name=NAME)
+    if hours > _HOURS_PER_DAY:
+        raise ValueError(f"{NAME}.shift_hours_per_day must be at most 24")
+    return hours
 
 
 def load_plant_hours_settings(path: Path | None = None) -> PlantHoursSettings:
@@ -74,6 +85,7 @@ def load_plant_hours_settings(path: Path | None = None) -> PlantHoursSettings:
         max_digits=high,
         days_per_year=require_number(table, "days_per_year", minimum=1, name=NAME),
         max_hours_per_week=require_number(table, "max_hours_per_week", minimum=1, name=NAME),
+        shift_hours_per_day=_shift_hours(table),
     )
 
 

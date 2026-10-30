@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { WorkspaceState } from "../types/workspace";
+import type { Facility, WorkspaceState } from "../types/workspace";
 
 /** What the server sends before any tool has run (nothing placed, nothing computed). */
 export const EMPTY_WORKSPACE: WorkspaceState = {
@@ -12,6 +12,9 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
     cas_number: null,
     name: null,
     molecular_weight_g_mol: null,
+    vapor_pressure_mmhg: null,
+    density_g_cm3: null,
+    oel_twa_mg_m3: null,
     rfc_mg_m3: null,
     iur_per_ug_m3: null,
     sources: {},
@@ -34,11 +37,45 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
     cancer_risk_representative: null,
     reason: "not yet computed",
   },
+  worker_risk: {
+    baseline: { oel_ratio: null, hq: null, cancer_risk: null },
+    worst_case: { oel_ratio: null, hq: null, cancer_risk: null },
+    reason: "not yet computed",
+  },
+  scenario_drivers: [],
   receptors: null,
   meteorology: null,
   unattributed: [],
   warnings: [],
 };
+
+/** The fields added after the first contract; a server that predates them does not send them. */
+const FACILITY_DEFAULTS: Pick<
+  Facility,
+  | "fugitive_release_kg_per_year"
+  | "fugitive_reporting_year"
+  | "occupational_exposure"
+  | "operational_profile"
+  | "scenarios"
+> = {
+  fugitive_release_kg_per_year: null,
+  fugitive_reporting_year: null,
+  occupational_exposure: null,
+  operational_profile: null,
+  scenarios: [],
+};
+
+/**
+ * The state with every field filled: what the server sent wins, and a field an older server (or a
+ * snapshot saved by one) does not send is absent, not undefined, so no view reads past it.
+ */
+export function withDefaults(state: WorkspaceState): WorkspaceState {
+  return {
+    ...EMPTY_WORKSPACE,
+    ...state,
+    facilities: state.facilities.map((f) => ({ ...FACILITY_DEFAULTS, ...f })),
+  };
+}
 
 /**
  * The workspace the analysis area shows: the latest `workspace_update`, empty before any.
@@ -48,9 +85,9 @@ export const EMPTY_WORKSPACE: WorkspaceState = {
 export function useWorkspaceStore() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(EMPTY_WORKSPACE);
   const [epoch, setEpoch] = useState(0);
-  const apply = useCallback((state: WorkspaceState) => setWorkspace(state), []);
+  const apply = useCallback((state: WorkspaceState) => setWorkspace(withDefaults(state)), []);
   const replace = useCallback((state: WorkspaceState) => {
-    setWorkspace(state);
+    setWorkspace(withDefaults(state));
     setEpoch((now) => now + 1);
   }, []);
   const clear = useCallback(() => replace(EMPTY_WORKSPACE), [replace]);

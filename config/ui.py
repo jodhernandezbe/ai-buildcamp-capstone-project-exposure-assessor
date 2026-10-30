@@ -11,6 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, get_args
 
+from config.exposure_graph import GraphText, parse_exposure_graph
 from config.parsing import (
     as_table,
     names,
@@ -204,6 +205,7 @@ class UiSettings:
         max_threads: Most conversation threads held in memory.
         pricing: Chat model name -> token prices.
         report: Fixed text of the Word assessment report.
+        exposure_graph: Fixed text and units of the exposure chain graph.
     """
 
     host: str
@@ -220,6 +222,7 @@ class UiSettings:
     max_threads: int
     pricing: Mapping[str, ModelPrice]
     report: ReportSettings
+    exposure_graph: GraphText
 
     @property
     def origin(self) -> str:
@@ -475,6 +478,7 @@ def load_ui_settings(path: Path | None = None) -> UiSettings:
         max_threads=_max_threads(table),
         pricing=_pricing(table),
         report=parse_report(table),
+        exposure_graph=parse_exposure_graph(table),
     )
 
 

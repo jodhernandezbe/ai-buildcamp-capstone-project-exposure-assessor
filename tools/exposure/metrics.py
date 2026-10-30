@@ -30,6 +30,14 @@ def calculate_exposure_metrics(
         tools, exactly as they returned it. One call per facility: each facility has its own
         emission rate, weather and population.
 
+    Scope:
+        This is the community (neighbourhood) result only. It does not screen the people who
+        work in the plant; that worker screening, from the facility's fugitive release, is
+        part of the batch facility assessment, which gives both results for every facility. A
+        complete assessment of a chemical therefore comes from the batch assessment, not from
+        this tool alone; use this one when a single facility's community result is what is
+        needed with inputs you already hold, and say that the worker result was not computed.
+
     Method:
         The U.S. EPA SCREEN3 screening procedure, flat terrain, rural dispersion, no building
         downwash, no mixing-height limit, one source, no deposition or chemistry. The WORST

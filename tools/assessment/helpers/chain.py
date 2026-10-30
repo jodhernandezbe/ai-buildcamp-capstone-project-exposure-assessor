@@ -12,13 +12,19 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from config.assessment import AssessmentSettings
+from config.occupational import get_occupational_settings
+from tools.assessment.helpers.occupational import Workplace, occupational_exposure, unavailable
+from tools.assessment.helpers.scenarios import with_scenarios
 from tools.assessment.helpers.screening import Worst, worst_case
 from tools.assessment.helpers.stacks import StackChoice, choose_stacks
 from tools.assessment.helpers.steps import Steps
+from tools.emissions.profile import operational_profile
 from tools.schemas import (
     EmissionRecord,
     FacilityAssessment,
     Meteorology,
+    OccupationalExposure,
+    OperationalProfile,
     ScreeningBound,
     Toxicity,
 )
@@ -102,8 +108,23 @@ def _shared_weather(
     return dict(zip(first, found, strict=True))
 
 
-def worst_case_only(item: Refined, radius_km: float | None) -> FacilityAssessment:
-    """A refined facility kept at its own-stack worst case (no weather or residents)."""
+def _worker_view(
+    item: Refined, toxicity: Toxicity, workplace: Workplace | None
+) -> tuple[OccupationalExposure, OperationalProfile]:
+    """The worker screening and operational profile of a facility (if given a workplace)."""
+    profile = operational_profile(item.record)
+    if workplace is None:
+        reason = "the chemical's workplace information was not given"
+        return unavailable(get_occupational_settings(), reason), profile
+    return occupational_exposure(item.record, profile, toxicity, workplace), profile
+
+
+def _own_stack_assessment(
+    item: Refined,
+    radius_km: float | None,
+    worker: OccupationalExposure,
+    profile: OperationalProfile,
+) -> FacilityAssessment:
     return FacilityAssessment(
         record=item.record,
         level="worst case only",
@@ -116,8 +137,21 @@ def worst_case_only(item: Refined, radius_km: float | None) -> FacilityAssessmen
         population=None,
         radius_km=radius_km,
         exposure=item.worst.exposure,
+        occupational_exposure=worker,
+        operational_profile=profile,
         notes=item.choice.notes,
     )
+
+
+def worst_case_only(
+    item: Refined,
+    radius_km: float | None,
+    workplace: Workplace | None = None,
+    toxicity: Toxicity | None = None,
+) -> FacilityAssessment:
+    """A refined facility kept at its own-stack worst case (no weather or residents)."""
+    worker, profile = _worker_view(item, toxicity or Toxicity(rfc=None, iur=None), workplace)
+    return with_scenarios(_own_stack_assessment(item, radius_km, worker, profile))
 
 
 def assess_all(
@@ -126,6 +160,7 @@ def assess_all(
     radius_km: float | None,
     steps: Steps,
     settings: AssessmentSettings,
+    workplace: Workplace | None = None,
 ) -> list[FacilityAssessment]:
     """The full chain for each refined facility, in the order given."""
     weather = _shared_weather(items, steps, settings)
@@ -136,13 +171,15 @@ def assess_all(
         people = steps.people(record["latitude"], record["longitude"], radius_km)
         rate, stacks = record["emission_rate"], item.choice.stacks
         exposure = steps.exposure(rate, stacks, here, people, toxicity)
-        partial = worst_case_only(item, radius_km)
-        return {
-            **partial,
-            "level": "full",
-            "meteorology": here,
-            "population": people,
-            "exposure": exposure,
-        }
+        partial = worst_case_only(item, radius_km, workplace, toxicity)
+        return with_scenarios(
+            {
+                **partial,
+                "level": "full",
+                "meteorology": here,
+                "population": people,
+                "exposure": exposure,
+            }
+        )
 
     return in_pool(one, items, settings.max_workers)

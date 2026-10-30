@@ -62,6 +62,7 @@ def _workspace_rules(ui: UiSettings) -> WorkspaceRules:
         default_radius_km=get_population_settings().default_radius_km,
         sector_half_angle_deg=ui.map.sector_half_angle_deg,
         vertex_spacing_deg=ui.map.vertex_spacing_deg,
+        graph=ui.exposure_graph,
     )
 
 

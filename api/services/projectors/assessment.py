@@ -17,7 +17,10 @@ from api.services.projectors.payloads import (
     AssessedPayload,
     EmissionPayload,
     NotAssessedPayload,
+    OccupationalPayload,
+    ProfilePayload,
     ScreenedOutPayload,
+    WorstCaseScenarioPayload,
     validate,
 )
 
@@ -41,6 +44,59 @@ def _site(item: AssessedPayload, ledger: Ledger) -> None:
         ledger.population.append(Receptor(Located(*point, item.population), radius))
 
 
+def _keep[T](
+    raw: object, model: type[T], store: dict[str, T], frs_id: str, ledger: Ledger, name: str
+) -> None:
+    """File ``raw`` as ``model``; an invalid one is left out alone, with a warning."""
+    if raw is None:
+        return
+    parsed = validate(model, raw)
+    if parsed is None:
+        ledger.warnings.append(f"Left out the {name} of facility {frs_id}: it was not valid.")
+    else:
+        store[frs_id] = parsed
+
+
+def _worker(item: AssessedPayload, ledger: Ledger) -> None:
+    """The worker screening and the operational profile of one facility."""
+    frs_id = item.record.frs_id
+    _keep(
+        item.occupational_exposure,
+        OccupationalPayload,
+        ledger.worker,
+        frs_id,
+        ledger,
+        "worker exposure",
+    )
+    _keep(
+        item.operational_profile,
+        ProfilePayload,
+        ledger.profiles,
+        frs_id,
+        ledger,
+        "operational profile",
+    )
+
+
+def _scenarios(item: AssessedPayload, ledger: Ledger) -> None:
+    """The facility's worst-case scenarios; an invalid one is left out alone, with a warning."""
+    frs_id = item.record.frs_id
+    for raw in item.scenarios:
+        parsed = validate(WorstCaseScenarioPayload, raw)
+        if parsed is None:
+            ledger.warnings.append(
+                f"Left out a worst-case scenario of facility {frs_id}: it was not valid."
+            )
+        else:
+            ledger.scenarios.setdefault(frs_id, []).append(parsed)
+
+
+def _results(item: AssessedPayload, ledger: Ledger) -> None:
+    """The worker screening, the operational profile and the scenarios of one facility."""
+    _worker(item, ledger)
+    _scenarios(item, ledger)
+
+
 def _file(item: AssessedPayload, ledger: Ledger, cas: str | None) -> None:
     """One facility's results, keyed so they attach to that facility only."""
     record = item.record
@@ -52,6 +108,7 @@ def _file(item: AssessedPayload, ledger: Ledger, cas: str | None) -> None:
     if item.industry is not None and record.doc_ctrl_num is not None:
         ledger.industries.append((record.doc_ctrl_num, item.industry))
     _site(item, ledger)
+    _results(item, ledger)
     ledger.exposures.append((frs_id, item.exposure))
     outcome: ScreeningOutcome = "full" if item.level == "full" else "worst_case_only"
     bound = item.bound

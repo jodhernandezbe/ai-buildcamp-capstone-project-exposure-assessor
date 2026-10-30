@@ -18,9 +18,12 @@ from api.services.projectors.payloads import (
     RangeEntryPayload,
     ReadAcrossPayload,
     SccMatchPayload,
+    ScenarioFactorPayload,
+    ScenarioReceptorPayload,
     ScreenedOutPayload,
     StackExposurePayload,
     StackPayload,
+    WorstCaseScenarioPayload,
     decode_json,
     validate,
 )
@@ -38,10 +41,13 @@ from tools.schemas import (
     RangeEntry,
     ReadAcrossMatch,
     SccMatch,
+    ScenarioFactor,
+    ScenarioReceptor,
     ScreenedOut,
     ScreeningBound,
     StackExposure,
     StackParameters,
+    WorstCaseScenario,
 )
 
 PAIRS: list[tuple[type[BaseModel], type]] = [
@@ -60,6 +66,9 @@ PAIRS: list[tuple[type[BaseModel], type]] = [
     (AssessedPayload, FacilityAssessment),
     (ScreenedOutPayload, ScreenedOut),
     (BoundPayload, ScreeningBound),
+    (WorstCaseScenarioPayload, WorstCaseScenario),
+    (ScenarioFactorPayload, ScenarioFactor),
+    (ScenarioReceptorPayload, ScenarioReceptor),
 ]
 
 

@@ -67,6 +67,13 @@ def test_client_config_comes_from_settings(client: TestClient) -> None:
     assert body["model"]
 
 
+def test_client_config_carries_the_worker_tier_boundaries(client: TestClient) -> None:
+    worker = client.get("/api/v1/settings/client").json()["worker_thresholds"]
+    assert worker["ratio_exceedance"] == 1.0 and worker["ratio_elevated"] == 0.1
+    assert worker["hq_elevated"] < worker["hq_exceedance"]
+    assert worker["cancer_elevated"] < worker["cancer_exceedance"]
+
+
 def test_client_config_carries_the_layout_limits(client: TestClient) -> None:
     layout = client.get("/api/v1/settings/client").json()["layout"]
     assert layout["rail"]["min_px"] < layout["rail"]["default_px"] <= layout["rail"]["max_px"]

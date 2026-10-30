@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TypedDict
 
 from config.assessment import ScreeningSettings
+from tools.assessment.helpers.scenarios import drivers_of
 from tools.assessment.helpers.screening import exceedance
 from tools.schemas import (
     AssessmentResult,
@@ -89,12 +91,34 @@ def _ranges(item: FacilityAssessment) -> FacilityRanges:
     )
 
 
+class _Setting(TypedDict):
+    """Where the facility was assessed and what the workers face (the summary's context fields)."""
+
+    weather_source: str
+    residents: int
+    radius_km: float | None
+    worker_risk_tier: str | None
+    worker_oel_ratio: float | None
+
+
+def _setting(item: FacilityAssessment) -> _Setting:
+    weather, people = item["meteorology"], item["population"]
+    worker = item["occupational_exposure"]
+    return _Setting(
+        weather_source=weather["source"] if weather else "not requested (worst case only)",
+        residents=people["total_population"] if people else 0,
+        radius_km=item["radius_km"],
+        worker_risk_tier=worker["risk_tier"],
+        worker_oel_ratio=worker["baseline"]["oel_ratio"],
+    )
+
+
 def summarize(item: FacilityAssessment) -> FacilitySummary:
     """One fully assessed facility as the model reads it."""
     record = item["record"]
-    weather, people = item["meteorology"], item["population"]
     return FacilitySummary(
         **_ranges(item),
+        **_setting(item),
         frs_id=record["frs_id"],
         facility_name=record["facility_name"],
         city=record["city"],
@@ -104,9 +128,6 @@ def summarize(item: FacilityAssessment) -> FacilitySummary:
         stacks_evaluated=item["exposure"]["stacks_evaluated"],
         sccs=[match["scc"] for match in item["scc_matches"]],
         industry=record["naics_title"] or (item["industry"] or {}).get("naics_title"),
-        weather_source=weather["source"] if weather else "not requested (worst case only)",
-        residents=people["total_population"] if people else 0,
-        radius_km=item["radius_km"],
         notes=_notes(item),
     )
 
@@ -209,4 +230,5 @@ def assessment_view(
         not_assessed=f.skipped,
         note=_note(f),
         warnings=f.warnings,
+        drivers=drivers_of([*f.full, *f.worst_only]),
     )

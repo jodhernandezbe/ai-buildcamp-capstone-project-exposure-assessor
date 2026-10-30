@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from config.loader import EmissionsSettings, TriSettings
 from tools.emissions.helpers.efservice import EfserviceError
 from tools.emissions.helpers.inventory.conditions import ConditionsMapper
+from tools.emissions.helpers.inventory.fugitive import fold_fugitive
 from tools.emissions.helpers.inventory.rate import HoursFor
 from tools.emissions.helpers.inventory.reduce import LatestReports, Locator
 from tools.emissions.helpers.inventory.tri import TriFetcher
@@ -18,6 +19,15 @@ logger = logging.getLogger(__name__)
 
 class TriReadError(RuntimeError):
     """TRI could not be read for a chemical (a failed request, not an absence of releases)."""
+
+
+def _warn_page_cap(cas: str, medium: str, tri: TriSettings) -> None:
+    logger.warning(
+        "TRI %s %s: page cap (%d pages) reached; the result may be incomplete",
+        cas,
+        medium,
+        tri.max_pages,
+    )
 
 
 def lookup_emissions(
@@ -50,7 +60,8 @@ def lookup_emissions(
             names the activity columns to read. Without it records carry no conditions.
 
     Returns:
-        One record per (medium, facility); empty if nothing was reported. Data problems and a
+        One record per (medium, facility) of the configured media, each with its facility's
+        fugitive air release; empty if nothing was reported. Data problems and a
         hit page cap are logged as warnings.
 
     Raises:
@@ -60,18 +71,14 @@ def lookup_emissions(
     flags = conditions.flags if conditions is not None else ()
     reducer = LatestReports(tri, tri.first_year(current_year), flags)
     try:
-        for medium in tri.media:
+        for medium in (*tri.media, tri.fugitive_medium):
             if fetcher.fetch(cas, medium, reducer.add_rows):
-                logger.warning(
-                    "TRI %s %s: page cap (%d pages) reached; the result may be incomplete",
-                    cas,
-                    medium,
-                    tri.max_pages,
-                )
+                _warn_page_cap(cas, medium, tri)
     except EfserviceError as exc:
         logger.warning("TRI emissions lookup for %s failed: %s", cas, exc)
         raise TriReadError(f"TRI could not be read for {cas}: {exc}") from exc
-    records = reducer.records(emissions, aliases, locate, hours_for, conditions)
+    found = reducer.records(emissions, aliases, locate, hours_for, conditions)
+    records = fold_fugitive(found, tri.fugitive_medium, aliases)
     for message in reducer.stats.warnings():
         logger.warning("TRI %s: %s", cas, message)
     return records

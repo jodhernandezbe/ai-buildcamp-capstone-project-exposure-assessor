@@ -3,14 +3,21 @@
 Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `frontend/`.
 
 - React + TypeScript (strict) + Vite + Tailwind; MapLibre GL for the map, Recharts for the
-  age-band bar, Lucide for icons (react-icons only for the `TbMessageChatbot` copilot toggle and the
+  age-band bar, React Flow + ELK for the exposure chain, Lucide for icons (react-icons only for the `TbMessageChatbot` copilot toggle and the
   `AiOutlineClear` chat clear button).
   Commands: `npm --prefix frontend ci`, `run build`, `run check` (contract diff, tsc, eslint,
-  vitest). `check` must pass before work is done.
+  vitest). `check` must pass before work is done. `run test:visual` renders `*.visual.tsx` in
+  Playwright Chromium (light and dark) and compares screenshots with `__screenshots__/`; after a
+  deliberate change, look at every new image before approving it with `-u` (references are per OS).
 - Feature-driven layout with one-way imports: `components/` (`layout/`, `ui/`: domain-agnostic
-  HIG primitives) -> `features/` (`overview/`, `map/`, `chat/`, `settings/`, `monitoring/`) -> `App.tsx`.
+  HIG primitives) -> `features/` (`overview/`, `map/`, `chat/`, `settings/`, `monitoring/`, `exposure-chain/`) -> `App.tsx`.
   `hooks/` (stream, stores, key status) and `services/apiClient.ts` serve features;
   `components/` never import `features/`, and features never import each other's internals.
+- `features/exposure-chain` is the Overview's "Exposure chain" tab (composed by `App.tsx` as a slot):
+  it draws the focused facility's `exposure_graph` (a map pin, the tab's picker, else the chat's
+  selection) exactly as the API built it, laid out by ELK (`layout.ts`) on a React Flow canvas with
+  flowing, labelled edges. It never decides what a pathway is: a new lane or node is a backend change
+  (`api/services/exposure_graph/`). Quantities are formatted with `lib/format` only.
 - Layout: `components/layout/SplitWorkspace` divides the window into rail | analysis (overview
   over map) | chat with `react-resizable-panels` splitters. Limits come from `layout` in the
   client config, never from constants. Fullscreen is CSS only (nothing unmounts; the others go

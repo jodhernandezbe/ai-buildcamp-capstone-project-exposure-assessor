@@ -56,3 +56,13 @@ def test_an_oversized_radius_is_refused_without_a_request() -> None:
     )
     assert result["source"] == "screening default"
     assert "radius" in result["warnings"][0]
+
+
+def test_tracts_are_listed_nearest_first_within_the_circle(town: Population) -> None:
+    tracts = town.get("tracts", [])
+    assert tracts, town["warnings"]
+    distances = [t["distance_m"] for t in tracts]
+    assert distances == sorted(distances)
+    assert all(0.0 <= t["bearing_deg"] < 360.0 and t["residents"] > 0 for t in tracts)
+    assert all(set(t["age_distribution"]) == BANDS for t in tracts)
+    assert all(len(t["geoid"]) == 11 for t in tracts)

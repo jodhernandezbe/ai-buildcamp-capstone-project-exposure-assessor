@@ -1,11 +1,18 @@
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useMemo } from "react";
 
-import type { Thresholds } from "../../types/api";
+import type { Thresholds, WorkerThresholds } from "../../types/api";
 import type { Facility } from "../../types/workspace";
 import { isAssessed } from "./assessment";
 import { RiskGroupChart } from "./RiskGroupChart";
-import { groupFacilities, type GroupBy, type Quantity, topGroups, TOP_N } from "./riskGroups";
+import {
+  groupFacilities,
+  type GroupBy,
+  type Pathway,
+  type Quantity,
+  topGroups,
+  TOP_N,
+} from "./riskGroups";
 
 const COPY: Record<GroupBy, { title: string; ungrouped: string; overlap: boolean }> = {
   subsector: { title: "Risk by industry (NAICS subsector)", ungrouped: "industry not reported", overlap: false },
@@ -13,7 +20,14 @@ const COPY: Record<GroupBy, { title: string; ungrouped: string; overlap: boolean
   stage: { title: "Risk by life cycle stage", ungrouped: "no life cycle stage reported", overlap: true },
 };
 
-const CHARTS: { quantity: Quantity; label: string; title: string; missing: string }[] = [
+interface Chart {
+  quantity: Quantity;
+  label: string;
+  title: string;
+  missing: string;
+}
+
+const OUTDOOR_CHARTS: Chart[] = [
   {
     quantity: "hq",
     label: "Hazard quotient",
@@ -28,6 +42,30 @@ const CHARTS: { quantity: Quantity; label: string; title: string; missing: strin
   },
 ];
 
+const INDOOR_CHARTS: Chart[] = [
+  {
+    quantity: "hq",
+    label: "Hazard quotient",
+    title: "Worker hazard quotient (non-cancer, unitless)",
+    missing: "No group has a worker hazard quotient to rank (no fugitive release, or no RfC).",
+  },
+  {
+    quantity: "risk",
+    label: "Cancer risk",
+    title: "Worker lifetime cancer risk (unitless)",
+    missing: "No group has a worker cancer risk to rank (no fugitive release, or no unit risk).",
+  },
+  {
+    quantity: "ratio",
+    label: "Limit ratio",
+    title: "8-hour average over the occupational limit (unitless)",
+    missing: "No group has a limit ratio to rank (no fugitive release, or no occupational limit).",
+  },
+];
+
+/** The quantities a pathway offers. */
+export const chartsFor = (pathway: Pathway): Chart[] => (pathway === "indoor" ? INDOOR_CHARTS : OUTDOOR_CHARTS);
+
 const SHORT_LABEL_CHARS = 16;
 const LONG_LABEL_CHARS = 30;
 
@@ -37,11 +75,14 @@ interface Props {
   /** Which quantity the chart shows; chosen with the switch in the section's header. */
   quantity: Quantity;
   onQuantity: (quantity: Quantity) => void;
+  /** The exposure pathway (medium, route, receptor) shown; chosen with the one dropdown above the sections. */
+  pathway: Pathway;
   expanded: boolean;
   /** Another section is expanded: this one stays mounted but is not shown. */
   hidden: boolean;
   onToggleExpand: () => void;
   thresholds: Thresholds | undefined;
+  workerThresholds?: WorkerThresholds;
   digits: number;
 }
 
@@ -62,10 +103,18 @@ function Notes({ by, ungrouped, cut }: { by: GroupBy; ungrouped: number; cut: nu
   );
 }
 
-function QuantitySwitch({ quantity, onQuantity }: { quantity: Quantity; onQuantity: (quantity: Quantity) => void }) {
+function QuantitySwitch({
+  charts,
+  quantity,
+  onQuantity,
+}: {
+  charts: Chart[];
+  quantity: Quantity;
+  onQuantity: (quantity: Quantity) => void;
+}) {
   return (
     <div role="group" aria-label="Quantity shown" className="inline-flex rounded-full bg-fg2/10 p-0.5 text-[11px]">
-      {CHARTS.map(({ quantity: key, label }) => (
+      {charts.map(({ quantity: key, label }) => (
         <button
           key={key}
           type="button"
@@ -93,11 +142,12 @@ function EmptyChart({ title, text, tall }: { title: string; text: string; tall: 
 
 /** Two charts of the worst-case hazard quotient and cancer risk by a grouping of the facilities. */
 export function RiskGroupSection(props: Props) {
-  const { by, facilities, quantity, expanded, hidden, thresholds, digits } = props;
+  const { by, facilities, quantity, pathway, expanded, hidden, thresholds, workerThresholds, digits } = props;
   const copy = COPY[by];
-  const grouping = useMemo(() => groupFacilities(facilities, by), [facilities, by]);
+  const grouping = useMemo(() => groupFacilities(facilities, by, pathway), [facilities, by, pathway]);
   const { shown, hidden: cut } = useMemo(() => topGroups(grouping.groups, quantity), [grouping, quantity]);
-  const chart = CHARTS.find((c) => c.quantity === quantity) ?? CHARTS[0];
+  const charts = chartsFor(pathway);
+  const chart = charts.find((c) => c.quantity === quantity) ?? charts[0];
   const anyAssessed = useMemo(() => facilities.some(isAssessed), [facilities]);
   const Icon = expanded ? Minimize2 : Maximize2;
   const emptyText = (missing: string) =>
@@ -112,10 +162,10 @@ export function RiskGroupSection(props: Props) {
       hidden={hidden}
       className={`glass flex min-w-0 flex-col gap-2 rounded-2xl p-3.5 ${hidden ? "hidden" : ""} ${expanded ? "col-span-full flex-1" : ""}`}
     >
-      <header className="flex items-start justify-between gap-2">
+      <header className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="m-0 text-xs font-semibold uppercase tracking-wide text-fg2">{copy.title}</h2>
-        <div className="flex items-center gap-1.5">
-          <QuantitySwitch quantity={quantity} onQuantity={props.onQuantity} />
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <QuantitySwitch charts={charts} quantity={chart?.quantity ?? quantity} onQuantity={props.onQuantity} />
           <button
             type="button"
             aria-label={expanded ? "Restore section" : "Expand section"}
@@ -133,6 +183,8 @@ export function RiskGroupSection(props: Props) {
           quantity={chart.quantity}
           title={chart.title}
           thresholds={thresholds}
+          workerThresholds={workerThresholds}
+          pathway={pathway}
           digits={digits}
           labelChars={expanded ? LONG_LABEL_CHARS : SHORT_LABEL_CHARS}
           heightClass={expanded ? "h-[56vh] min-h-56" : "h-52"}

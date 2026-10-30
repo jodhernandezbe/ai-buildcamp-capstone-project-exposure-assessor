@@ -86,6 +86,7 @@ export interface ClientConfig {
   significant_digits: number;
   suggestions: string[];
   thresholds: Thresholds;
+  worker_thresholds: WorkerThresholds;
 }
 /**
  * Workspace layout limits from the configuration.
@@ -165,6 +166,21 @@ export interface Thresholds {
   cancer_upper: number;
   hq_concern: number;
   hq_near_lower: number;
+}
+/**
+ * Tier boundaries of the worker screening: above `*_exceedance` is "exceedance", above
+ * `*_elevated` is "elevated" (unitless; cancer risk is a probability).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "WorkerThresholds".
+ */
+export interface WorkerThresholds {
+  cancer_elevated: number;
+  cancer_exceedance: number;
+  hq_elevated: number;
+  hq_exceedance: number;
+  ratio_elevated: number;
+  ratio_exceedance: number;
 }
 /**
  * Whether a key is stored; never the key or any part of it.
@@ -370,6 +386,8 @@ export interface WorkspaceUpdate {
  *         only one); None when no single facility stands out.
  *     chemical: The queried chemical and its provenance.
  *     risk: Highest risk values across the attributed facilities.
+ *     worker_risk: Highest worker (occupational) values across the assessed facilities.
+ *     scenario_drivers: For each pathway and quantity, the facility with the highest value.
  *     receptors: Receptors of the selected facility.
  *     meteorology: Meteorology of the selected facility, else the latest result.
  *     unattributed: Results not attached to any facility.
@@ -386,9 +404,11 @@ export interface WorkspaceState {
   meteorology: Meteorology | null;
   receptors: Receptors | null;
   risk: RiskSummary;
+  scenario_drivers: ScenarioDriver[];
   selected_frs_id: string | null;
   unattributed: Unattributed[];
   warnings: string[];
+  worker_risk: WorkerRiskSummary;
 }
 /**
  * Extent of the placed facilities and buffers, decimal degrees (WGS84).
@@ -410,6 +430,9 @@ export interface BoundingBox {
  *     name: The name the properties result gave (CompTox's preferred name); None when it
  *         gave none, and then the CAS number stands alone.
  *     molecular_weight_g_mol: Molecular weight, g/mol.
+ *     vapor_pressure_mmhg: Vapor pressure, mmHg (its source is in ``sources``).
+ *     density_g_cm3: Density, g/cm³.
+ *     oel_twa_mg_m3: 8-hour occupational exposure limit, mg/m³ (source under ``oel_twa``).
  *     rfc_mg_m3: Inhalation reference concentration, mg/m³.
  *     iur_per_ug_m3: Inhalation unit risk, (µg/m³)⁻¹.
  *     sources: Field name -> source the value came from.
@@ -419,14 +442,17 @@ export interface BoundingBox {
  */
 export interface Chemical {
   cas_number: string | null;
+  density_g_cm3: number | null;
   iur_per_ug_m3: number | null;
   molecular_weight_g_mol: number | null;
   name: string | null;
+  oel_twa_mg_m3: number | null;
   read_across: ReadAcross;
   rfc_mg_m3: number | null;
   sources: {
     [k: string]: string;
   };
+  vapor_pressure_mmhg: number | null;
   warnings: string[];
 }
 /**
@@ -454,6 +480,13 @@ export interface ReadAcross {
  *     emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
  *     operating_hours_source: Where those hours came from (industry survey or default); None
  *         when the record predates the field.
+ *     fugitive_release_kg_per_year: TRI fugitive air release, kg/yr; None when TRI has none.
+ *     exposure: The community (ambient fenceline) result.
+ *     occupational_exposure: The worker screening; None when no assessment produced it.
+ *     operational_profile: Schedule, life cycle stage, condition of use and CDR sector.
+ *     scenarios: The worst-case scenarios of the facility, one per pathway and quantity that
+ *         has a value.
+ *     exposure_graph: How the worst-case exposure arises, source to endpoint, per pathway.
  *     naics_subsector: First three digits of the inventory's NAICS code (e.g. "325").
  *     naics_subsector_title: That subsector's title from the Census lists; None if unknown.
  *     conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
@@ -481,7 +514,10 @@ export interface Facility {
   doc_ctrl_num: string | null;
   emission_rate_g_s: number;
   exposure: ExposureRanges | null;
+  exposure_graph: ExposureGraph | null;
   frs_id: string;
+  fugitive_release_kg_per_year: number | null;
+  fugitive_reporting_year: number | null;
   industry: Industry | null;
   latitude: number;
   lifecycle_stages: string[];
@@ -491,11 +527,14 @@ export interface Facility {
   naics_subsector: string | null;
   naics_subsector_title: string | null;
   name: string | null;
+  occupational_exposure: OccupationalExposure | null;
   operating_hours_per_year: number;
   operating_hours_source: string | null;
+  operational_profile: OperationalProfile | null;
   receptors: Receptors | null;
   release_unit: string;
   reporting_year: number;
+  scenarios: WorstCaseScenario[];
   screening: Screening | null;
   sector: Polygon | null;
   stacks: Stack[];
@@ -577,6 +616,96 @@ export interface Dose {
   highest_mg_kg_day: number | null;
 }
 /**
+ * The source facility, then each lane's steps, joined by labelled edges.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ExposureGraph".
+ */
+export interface ExposureGraph {
+  edges: GraphEdge[];
+  lanes: GraphLane[];
+  nodes: GraphNode[];
+}
+/**
+ * A connection from one node to the next, with the quantity it carries when there is one.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "GraphEdge".
+ */
+export interface GraphEdge {
+  id: string;
+  lane: string;
+  quantity: GraphQuantity | null;
+  source: string;
+  target: string;
+}
+/**
+ * A number a tool reported, with its label and unit, or no number and why.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "GraphQuantity".
+ */
+export interface GraphQuantity {
+  key: string;
+  label: string;
+  /**
+   * Why ``value`` is absent.
+   */
+  reason: string | null;
+  source: string | null;
+  unit: string;
+  value: number | null;
+}
+/**
+ * One pathway (community outdoor air, worker indoor air), its status and if it is drawn.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "GraphLane".
+ */
+export interface GraphLane {
+  available: boolean;
+  id: string;
+  label: string;
+  reason: string | null;
+  status: ("below" | "near" | "above") | null;
+  status_label: string | null;
+}
+/**
+ * One step of a lane, or the source facility shared by every lane.
+ *
+ * Attributes:
+ *     lane: Lane id; None for the source facility.
+ *     headline: Key of the quantity shown on the node, when it has one.
+ *     status_label: The status in the lane's own words (the worker tier); None to use the default.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "GraphNode".
+ */
+export interface GraphNode {
+  facts: GraphFact[];
+  headline: string | null;
+  id: string;
+  kind: "source" | "release" | "pathway" | "route" | "receptor" | "endpoint";
+  lane: string | null;
+  quantities: GraphQuantity[];
+  status: ("below" | "near" | "above") | null;
+  status_label: string | null;
+  title: string;
+  warnings: string[];
+}
+/**
+ * A text value a tool reported (a source, a class, a list), or none and why.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "GraphFact".
+ */
+export interface GraphFact {
+  key: string;
+  label: string;
+  reason: string | null;
+  text: string | null;
+}
+/**
  * Primary industry of the TRI submission; origin is reported, assigned or None.
  *
  * This interface was referenced by `ApiContract`'s JSON-Schema
@@ -624,6 +753,112 @@ export interface Meteorology {
   wind_toward_deg: number;
 }
 /**
+ * Worker screening of a facility: EPA ChemSTEER box model and RAGS Part F dosimetry.
+ *
+ * A screening that assumes generic ventilation, not an OSHA compliance determination.
+ *
+ * Attributes:
+ *     fugitive_release_kg_per_year: TRI fugitive air release, kg/yr (year in
+ *         ``fugitive_reporting_year``).
+ *     operating_days_per_year: Days a year the plant runs, d/yr.
+ *     hours_per_day: Hours a day it runs, h/day.
+ *     oel_twa_mg_m3: The 8-hour occupational limit used, mg/m³, with ``oel_source``.
+ *     rfc: Reference concentration used, mg/m³.
+ *     iur: Inhalation unit risk used, (µg/m³)⁻¹.
+ *     vapor_pressure_mmhg: Context only; never enters an equation. Its source is in
+ *         ``vapor_pressure_source``.
+ *     baseline: The baseline manufacturing ventilation tier.
+ *     worst_case: The enclosed-zone tier.
+ *     risk_tier: The baseline tier.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "OccupationalExposure".
+ */
+export interface OccupationalExposure {
+  assumptions: string[];
+  baseline: VentilationTier;
+  fugitive_release_kg_per_year: number | null;
+  fugitive_reporting_year: number | null;
+  hours_per_day: number | null;
+  iur: number | null;
+  oel_source: string | null;
+  oel_twa_mg_m3: number | null;
+  operating_days_per_year: number | null;
+  rfc: number | null;
+  risk_tier: ("exceedance" | "elevated" | "acceptable") | null;
+  vapor_pressure_mmhg: number | null;
+  vapor_pressure_source: string | null;
+  warnings: string[];
+  worst_case: VentilationTier;
+}
+/**
+ * The worker screening for one ventilation tier of the box model; None = not computed.
+ *
+ * Attributes:
+ *     ventilation_m3_per_s: Room ventilation rate, m³/s.
+ *     mixing_factor: Mixing factor k, unitless.
+ *     workplace_concentration_mg_m3: Concentration while the plant runs, mg/m³.
+ *     twa_mg_m3: 8-hour time-weighted average, mg/m³.
+ *     oel_ratio: The average over the occupational limit (unitless); above 1 exceeds it.
+ *     hq: Worker hazard quotient (unitless).
+ *     cancer_risk: Worker lifetime excess cancer risk (unitless).
+ *     risk_tier: "exceedance", "elevated" or "acceptable"; None when nothing could be compared.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "VentilationTier".
+ */
+export interface VentilationTier {
+  cancer_risk: number | null;
+  hq: number | null;
+  label: string;
+  mixing_factor: number;
+  oel_ratio: number | null;
+  risk_tier: ("exceedance" | "elevated" | "acceptable") | null;
+  twa_mg_m3: number | null;
+  ventilation_m3_per_s: number;
+  workplace_concentration_mg_m3: number | null;
+}
+/**
+ * How a facility operates and where it sits in the TSCA framework.
+ *
+ * Attributes:
+ *     life_cycle_stage: TSCA stages of the activities the facility reported to TRI.
+ *     cou_category: TSCA condition-of-use categories of those activities.
+ *     cdr_sector: CDR industrial sector of its NAICS code; None when the table has none.
+ *     days_per_week: Derived from the Census QPC hours per week and a configured working day.
+ *     operating_days_per_year: Days a year, d/yr.
+ *     hours_per_day: Hours a day, h/day.
+ *     annual_operating_hours: Hours a year, h/yr (at most 8,760).
+ *     schedule_source: Where the hours come from.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "OperationalProfile".
+ */
+export interface OperationalProfile {
+  annual_operating_hours: number | null;
+  cdr_sector: CdrSector | null;
+  cou_category: string[];
+  days_per_week: number | null;
+  hours_per_day: number | null;
+  life_cycle_stage: string[];
+  naics_code: string | null;
+  operating_days_per_year: number | null;
+  schedule_source: string | null;
+  warnings: string[];
+}
+/**
+ * The TSCA CDR industrial sector of a NAICS code, with the table row that matched.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "CdrSector".
+ */
+export interface CdrSector {
+  code: string;
+  matched_naics_prefix: string;
+  naics_edition: string;
+  name: string;
+}
+/**
  * Residents within ``radius_km`` of a point; ``age_distribution`` is percent per band.
  *
  * This interface was referenced by `ApiContract`'s JSON-Schema
@@ -638,6 +873,90 @@ export interface Receptors {
   source: string;
   total_population: number;
   warnings: string[];
+}
+/**
+ * The combination of factors behind the high-end value of one quantity on one pathway.
+ *
+ * A screening result, never a regulatory finding: ``tier`` is the level the assessment gave.
+ *
+ * Attributes:
+ *     pathway_key: Which pathway produced it, e.g. ``community_inhalation``.
+ *     pathway: Medium, route and receptor class, in words.
+ *     quantity: ``hq``, ``cancer_risk`` or ``oel_ratio``.
+ *     value: The high-end value, unitless.
+ *     tier: The level the assessment gave the value; None when none was given.
+ *     benchmark: The level of concern the value was compared with, unitless.
+ *     receptors_note: Why there are no receptors, or what was left out.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "WorstCaseScenario".
+ */
+export interface WorstCaseScenario {
+  benchmark: number | null;
+  factors: ScenarioFactor[];
+  notes: string[];
+  pathway: string;
+  pathway_key: string;
+  quantity: string;
+  quantity_label: string;
+  receptors: ScenarioReceptor[];
+  receptors_note: string | null;
+  tier: string | null;
+  value: number;
+}
+/**
+ * One factor of a worst-case scenario: a value a tool returned, or why there is none.
+ *
+ * Attributes:
+ *     group: source, release, conditions or receptor_model.
+ *     value: A number or text a tool returned; None when none did (see ``reason``).
+ *     unit: Unit of ``value``; empty when unitless or text.
+ *     source: Where the value came from, when a tool said.
+ *     reason: Why there is no value.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ScenarioFactor".
+ */
+export interface ScenarioFactor {
+  group: "source" | "release" | "conditions" | "receptor_model";
+  key: string;
+  label: string;
+  reason: string | null;
+  source: string | null;
+  unit: string;
+  value: number | string | null;
+}
+/**
+ * A receptor of a worst-case scenario: a census tract, or the facility's workers.
+ *
+ * Attributes:
+ *     residents: Persons in the tract (the tract's ACS estimate); None for workers.
+ *     age_distribution: Age band -> percent of the tract; empty for workers.
+ *     distance_m: Meters from the facility to the tract's internal point.
+ *     bearing_deg: Degrees clockwise from north from the facility to that point.
+ *     latitude: Decimal degrees of that point (the census service's internal point), for drawing.
+ *     longitude: Decimal degrees of that point.
+ *     concentration: Annual-average ug/m^3 the scenario gives at the tract (workers: the
+ *         8-hour average, mg/m^3).
+ *     fraction_of_maximum: That concentration over the scenario's maximum, unitless.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ScenarioReceptor".
+ */
+export interface ScenarioReceptor {
+  age_distribution: {
+    [k: string]: number;
+  };
+  bearing_deg: number | null;
+  concentration: number | null;
+  distance_m: number | null;
+  fraction_of_maximum: number | null;
+  kind: "tract" | "workers";
+  label: string;
+  latitude: number | null;
+  longitude: number | null;
+  note: string | null;
+  residents: number | null;
 }
 /**
  * How the batch assessment screened a facility.
@@ -749,6 +1068,23 @@ export interface Extremum {
   value: number;
 }
 /**
+ * The assessed facility whose scenario has the highest value of a pathway's quantity.
+ *
+ * Attributes:
+ *     stack_number: The stack behind the value (community pathways); None otherwise.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "ScenarioDriver".
+ */
+export interface ScenarioDriver {
+  facility_name: string | null;
+  frs_id: string;
+  pathway_key: string;
+  quantity: string;
+  stack_number: number | null;
+  value: number;
+}
+/**
  * A result that could not be tied to exactly one facility, and why.
  *
  * This interface was referenced by `ApiContract`'s JSON-Schema
@@ -757,6 +1093,45 @@ export interface Extremum {
 export interface Unattributed {
   reason: string;
   tool: string;
+}
+/**
+ * The worker screening across facilities, for both ventilation tiers; ``reason`` if none.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "WorkerRiskSummary".
+ */
+export interface WorkerRiskSummary {
+  baseline: WorkerTierSummary;
+  /**
+   * Why no value yet, e.g. not computed.
+   */
+  reason: string | null;
+  worst_case: WorkerTierSummary;
+}
+/**
+ * Highest limit ratio, hazard quotient and cancer risk of the workers for one tier.
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "WorkerTierSummary".
+ */
+export interface WorkerTierSummary {
+  cancer_risk: WorkerExtremum | null;
+  hq: WorkerExtremum | null;
+  oel_ratio: WorkerExtremum | null;
+}
+/**
+ * The highest value of one worker quantity over the assessed facilities.
+ *
+ * ``risk_tier`` is the tier the tool gave that facility (baseline ventilation).
+ *
+ * This interface was referenced by `ApiContract`'s JSON-Schema
+ * via the `definition` "WorkerExtremum".
+ */
+export interface WorkerExtremum {
+  facility_name: string | null;
+  frs_id: string;
+  risk_tier: ("exceedance" | "elevated" | "acceptable") | null;
+  value: number;
 }
 /**
  * This interface was referenced by `ApiContract`'s JSON-Schema

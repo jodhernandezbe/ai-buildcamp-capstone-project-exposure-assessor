@@ -38,6 +38,7 @@ def test_first_unit_is_the_target_the_tools_return() -> None:
     targets = {p.key: p.target_unit for p in comptox.properties}
     targets.update({t.key: t.target_unit for t in comptox.toxicity_values})
     targets["molecular_weight"] = comptox.molecular_weight.target_unit
+    targets["oel_twa"] = "mg/m^3"  # not a CompTox value: the 8-hour occupational limit
     for quantity in USER_QUANTITIES:
         assert settings.units[quantity][0] == targets[quantity], quantity
 

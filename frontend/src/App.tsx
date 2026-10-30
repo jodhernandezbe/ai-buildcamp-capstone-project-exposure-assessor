@@ -4,6 +4,7 @@ import { LeftNavRail } from "./components/layout/LeftNavRail";
 import { SplitWorkspace } from "./components/layout/SplitWorkspace";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 import { ChatDock } from "./features/chat/ChatDock";
+import { ExposureChainTab, useFocusedFacility } from "./features/exposure-chain";
 import { MapPanel } from "./features/map/MapPanel";
 import { MonitoringView } from "./features/monitoring/MonitoringView";
 import { OverviewPanel } from "./features/overview/OverviewPanel";
@@ -35,6 +36,7 @@ export function App() {
   const report = useReportDownload();
   const key = useKeyStatus();
   const config = useClientConfig();
+  const focus = useFocusedFacility(store.workspace, store.epoch);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [view, setView] = useState<"workspace" | "monitoring">("workspace");
@@ -82,8 +84,16 @@ export function App() {
           />
         )}
         covering={view === "monitoring" ? <MonitoringView /> : undefined}
-        overview={<OverviewPanel workspace={store.workspace} digits={digits} thresholds={config?.thresholds} />}
-        map={<MapPanel workspace={store.workspace} viewEpoch={store.epoch} digits={digits} map={config?.map} />}
+        overview={
+          <OverviewPanel
+            workspace={store.workspace}
+            digits={digits}
+            thresholds={config?.thresholds}
+            workerThresholds={config?.worker_thresholds}
+            chain={<ExposureChainTab facility={focus.facility} workspace={store.workspace} digits={digits} onPick={focus.onPin} />}
+          />
+        }
+        map={<MapPanel workspace={store.workspace} viewEpoch={store.epoch} digits={digits} map={config?.map} onPin={focus.onPin} />}
         chat={({ collapse }) => (
           <ChatDock
             messages={chat.messages}

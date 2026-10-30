@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 
-import type { Facility, Status } from "../../types/workspace";
+import type { Facility, OccupationalTier, ScenarioDriver, Status } from "../../types/workspace";
 
 export const SECTOR_CAPTION = "schematic downwind sector, not a modelled plume footprint";
 
@@ -14,6 +14,12 @@ const ITEMS: { key: StatusKey; label: string; tone: string }[] = [
   { key: "none", label: "Not computed", tone: "bg-fg2" },
 ];
 
+const RINGS: { key: OccupationalTier; label: string; tone: string }[] = [
+  { key: "acceptable", label: "Acceptable", tone: "border-ok" },
+  { key: "elevated", label: "Elevated", tone: "border-warn" },
+  { key: "exceedance", label: "Exceedance", tone: "border-bad" },
+];
+
 export const statusKey = (facility: Facility): StatusKey => facility.status ?? "none";
 
 interface Props {
@@ -21,11 +27,37 @@ interface Props {
   /** Status keys whose markers are hidden; clicking a legend entry toggles one. */
   hidden: ReadonlySet<StatusKey>;
   onToggle: (key: StatusKey) => void;
+  /** The facilities that have the highest value of some result (they get an outer ring). */
+  drivers?: readonly ScenarioDriver[];
   ref?: Ref<HTMLElement>;
 }
 
+/** The ring around a marker is the worker screening tier (listed only when some facility has one). */
+function WorkerRings({ facilities }: { facilities: Facility[] }) {
+  const counts = new Map<OccupationalTier, number>();
+  for (const facility of facilities) {
+    const tier = facility.occupational_exposure?.risk_tier;
+    if (tier) counts.set(tier, (counts.get(tier) ?? 0) + 1);
+  }
+  if (counts.size === 0) return null;
+  return (
+    <div aria-label="Worker screening rings" role="group" className="mt-1.5 border-t border-hairline pt-1.5">
+      <p className="m-0 mb-0.5 text-fg2">Ring: worker screening</p>
+      <ul className="m-0 grid list-none gap-0.5 p-0">
+        {RINGS.map((ring) => (
+          <li key={ring.key} className="flex items-center gap-1.5 px-1">
+            <span aria-hidden className={`inline-block size-2.5 shrink-0 rounded-full border-2 ${ring.tone}`} />
+            <span>{ring.label}</span>
+            <span className="ml-auto pl-1.5 text-fg2">{counts.get(ring.key) ?? 0}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** What the marker colours and sizes mean; each entry shows or hides its markers. */
-export function MapLegend({ facilities, hidden, onToggle, ref }: Props) {
+export function MapLegend({ facilities, hidden, onToggle, drivers = [], ref }: Props) {
   const showsSector = facilities.some((f) => f.sector !== null);
   const counts = new Map<StatusKey, number>();
   for (const facility of facilities) {
@@ -59,8 +91,14 @@ export function MapLegend({ facilities, hidden, onToggle, ref }: Props) {
           );
         })}
       </ul>
+      <WorkerRings facilities={facilities} />
       <p className="m-0 mt-1.5 text-fg2">Marker size follows the emission rate (g/s).</p>
       <p className="m-0 mt-1 text-fg2">Click an entry to hide or show its markers.</p>
+      {drivers.length > 0 && (
+        <p className="m-0 mt-1 text-accent">
+          Outer ring: the facility that drives a worst case. Pin it to see the tracts it affects most.
+        </p>
+      )}
       {showsSector && <p className="m-0 mt-1 text-warn">Shaded wedge: {SECTOR_CAPTION}.</p>}
     </aside>
   );

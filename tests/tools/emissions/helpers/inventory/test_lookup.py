@@ -38,7 +38,10 @@ def _fetcher(transport: httpx.MockTransport, settings: TriSettings = SETTINGS) -
 
 def _serve(pages: Sequence[Sequence[Mapping[str, object]]]) -> httpx.MockTransport:
     queue = list(pages)
-    return httpx.MockTransport(lambda request: httpx.Response(200, json=queue.pop(0)))
+    # The fugitive medium is queried last; once the pages are served it has nothing to report.
+    return httpx.MockTransport(
+        lambda request: httpx.Response(200, json=queue.pop(0) if queue else [])
+    )
 
 
 def _lookup(
@@ -58,7 +61,7 @@ def test_nothing_reported_gives_empty_list() -> None:
 
 
 def test_each_configured_medium_is_queried() -> None:
-    settings = replace(SETTINGS, media=("AIR STACK", "AIR FUGITIVE"))
+    settings = replace(SETTINGS, media=("AIR STACK", "WATER"))
     urls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -66,9 +69,10 @@ def test_each_configured_medium_is_queried() -> None:
         return httpx.Response(200, json=[])
 
     _lookup(_fetcher(httpx.MockTransport(handler), settings), settings)
-    assert [("AIR%20STACK" in u, "AIR%20FUGITIVE" in u) for u in urls] == [
-        (True, False),
-        (False, True),
+    assert [("AIR%20STACK" in u, "WATER" in u, "AIR%20FUG" in u) for u in urls] == [
+        (True, False, False),
+        (False, True, False),
+        (False, False, True),
     ]
 
 

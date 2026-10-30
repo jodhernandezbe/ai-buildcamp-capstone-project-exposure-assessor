@@ -7,9 +7,16 @@ from evals.scenarios import CATALOGUE, FULL_ASSESSMENT, FULL_ASSESSMENT_CAS
 
 
 def test_full_assessment_also_records_the_batch_route() -> None:
-    assert [(e.tool, dict(e.args)) for e in FULL_ASSESSMENT.extra_calls] == [
-        (ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS})
-    ]
+    extras = [(e.tool, dict(e.args)) for e in FULL_ASSESSMENT.extra_calls]
+    assert extras[0] == (ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS})
+
+
+def test_full_assessment_also_records_the_variations_the_agent_takes() -> None:
+    extras = [(e.tool, dict(e.args)) for e in FULL_ASSESSMENT.extra_calls]
+    assert ("find_tri_read_across_surrogate", {"cas_number": FULL_ASSESSMENT_CAS}) in extras
+    weather = [args for tool, args in extras if tool == "get_meteorological_boundary"]
+    assert len(weather) == 4
+    assert sum("reporting_year" in args for args in weather) == 2  # each site, with and without
 
 
 def test_scenarios_without_extra_calls_record_none() -> None:

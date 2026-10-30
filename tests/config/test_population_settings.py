@@ -25,6 +25,7 @@ default_radius_km = 2.0
 min_radius_km = 0.5
 max_radius_km = 10.0
 max_counties = 4
+max_tracts_listed = 7
 delay_seconds = 0
 timeout_seconds = 5
 max_retries = 1
@@ -35,6 +36,8 @@ state = "S"
 county = "C"
 tract = "T"
 land_area = "A"
+latitude = "LAT"
+longitude = "LON"
 
 [population.variables]
 total = "V1"
@@ -66,9 +69,11 @@ def test_explicit_values(tmp_path: Path) -> None:
     assert (s.acs_year, s.api_key_env_var) == (2020, "MY_CENSUS_VAR")
     assert (s.min_radius_km, s.default_radius_km, s.max_radius_km) == (0.5, 2.0, 10.0)
     assert s.max_counties == 4
+    assert s.max_tracts_listed == 7
     assert (s.policy.delay_seconds, s.policy.timeout_seconds) == (0, 5)
     assert (s.policy.max_retries, s.policy.backoff_seconds) == (1, 0.5)
     assert s.fields["land_area"] == "A"
+    assert (s.fields["latitude"], s.fields["longitude"]) == ("LAT", "LON")
     assert s.variables["over_65"] == "V4"
     assert s.screening_default.residents_per_km2 == 100.0
     assert dict(s.screening_default.age_distribution) == {
@@ -121,12 +126,14 @@ def test_tables_are_read_only(tmp_path: Path) -> None:
         ("min_radius_km = 0.5", "min_radius_km = 0", "population.min_radius_km"),
         ("max_radius_km = 10.0", "max_radius_km = -1", "population.max_radius_km"),
         ("max_counties = 4", "max_counties = 0", "population.max_counties"),
+        ("max_tracts_listed = 7", "max_tracts_listed = 0", "population.max_tracts_listed"),
         ("delay_seconds = 0", "delay_seconds = -1", "population.delay_seconds"),
         ("timeout_seconds = 5", "timeout_seconds = 0", "population.timeout_seconds"),
         ("max_retries = 1", "max_retries = 1.5", "population.max_retries"),
         ("backoff_seconds = 0.5", 'backoff_seconds = "x"', "population.backoff_seconds"),
         ('state = "S"', "", "population.fields.state"),
         ('land_area = "A"', 'land_area = ""', "population.fields.land_area"),
+        ('latitude = "LAT"', 'latitude = ""', "population.fields.latitude"),
         ('tract = "T"', 'tracts = "T"', "unknown keys: tracts"),
         ('total = "V1"', "", "population.variables.total"),
         ('over_65 = "V4"', 'over_65 = ""', "population.variables.over_65"),

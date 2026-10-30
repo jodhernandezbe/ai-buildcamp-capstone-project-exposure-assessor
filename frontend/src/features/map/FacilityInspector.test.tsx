@@ -1,8 +1,9 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import { FakeMap } from "../../test/fakeMaplibre";
-import { facility, workspace } from "../../test/fixtures";
+import { facility, profile, scenario, workspace, worker } from "../../test/fixtures";
 import type { Facility, Stack } from "../../types/workspace";
 import { ExposureMapCanvas } from "./ExposureMapCanvas";
 
@@ -364,5 +365,160 @@ describe("card height", () => {
     const maxHeight = Number.parseFloat(card.style.maxHeight);
     expect(maxHeight).toBeGreaterThan(0);
     expect(maxHeight).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("community and worker badges", () => {
+  it("show the community hazard quotient beside the worker tier and ratio", async () => {
+    const user = userEvent.setup();
+    show(
+      facility({
+        status: "above",
+        exposure: {
+          stacks_given: 1,
+          stacks_evaluated: 1,
+          hq_worst: extreme(1, 3),
+          hq_representative: null,
+          cancer_risk_worst: null,
+          cancer_risk_representative: null,
+          concentration_worst: null,
+          concentration_representative: null,
+          dose: null,
+          warnings: [],
+        },
+        occupational_exposure: worker(),
+      }),
+    );
+    await user.hover(marker(/Plant F1/));
+    const badges = within(screen.getByRole("tooltip")).getByRole("group", {
+      name: "Community and worker risk",
+    });
+    expect(badges).toHaveTextContent("Community HQ 3");
+    expect(badges).toHaveTextContent("Worker Elevated");
+    expect(badges).toHaveTextContent("R_OEL 0.4");
+  });
+
+  it("say not reported for the worker when there is no result", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.hover(marker(/Plant F1/));
+    const badges = screen.getByRole("group", { name: "Community and worker risk" });
+    expect(badges).toHaveTextContent("Worker Not reported");
+    expect(badges).toHaveTextContent("Community HQ not reported");
+  });
+});
+
+describe("worker section and ring", () => {
+  it("lists the schedule, limit and both tiers once the card is pinned", async () => {
+    const user = userEvent.setup();
+    show(facility({ occupational_exposure: worker(), operational_profile: profile() }));
+    await user.click(marker(/Plant F1/));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: /Worker exposure/ })).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("250 days/yr • 16 hr/day • 4,240 hr/yr");
+    expect(dialog).toHaveTextContent("OSHA PEL-TWA (PubChem)");
+    expect(dialog).toHaveTextContent("Vapor pressure (context)");
+    expect(within(dialog).getByRole("region", { name: "Baseline manufacturing ventilation" })).toHaveTextContent("Elevated");
+    expect(within(dialog).getByRole("region", { name: "Worst case, enclosed zone" })).toHaveTextContent("Exceedance");
+  });
+
+  it("says not reported when there is no worker result", async () => {
+    const user = userEvent.setup();
+    show(facility());
+    await user.click(marker(/Plant F1/));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Worker exposure: not reported");
+  });
+
+  it("announces the worker tier on the marker and draws the ring in the legend", () => {
+    show(facility({ status: "above", occupational_exposure: worker() }));
+    expect(marker(/Plant F1, above, worker elevated/)).toBeInTheDocument();
+    const rings = screen.getByRole("group", { name: "Worker screening rings" });
+    expect(rings).toHaveTextContent("Elevated1");
+    expect(rings).toHaveTextContent("Acceptable0");
+  });
+
+  it("has no ring legend without any worker result", () => {
+    show(facility());
+    expect(screen.queryByRole("group", { name: "Worker screening rings" })).toBeNull();
+  });
+});
+
+describe("onPin", () => {
+  function showPinnable(onPin: (frsId: string) => void) {
+    FakeMap.reset();
+    render(
+      <ExposureMapCanvas
+        digits={2}
+        workspace={workspace({ framing_version: 1, facilities: [facility({ name: "Plant F1" })] })}
+        config={config}
+        onPin={onPin}
+      />,
+    );
+  }
+
+  it("reports a click but not a hover, and not the unpin", async () => {
+    const onPin = vi.fn();
+    showPinnable(onPin);
+    await userEvent.hover(marker(/Plant F1/));
+    expect(onPin).not.toHaveBeenCalled();
+    await userEvent.click(marker(/Plant F1/));
+    expect(onPin).toHaveBeenCalledExactlyOnceWith("F1");
+    await userEvent.click(marker(/Plant F1/));
+    expect(onPin).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("worst-case scenarios", () => {
+  const named = (number: number) => ({
+    key: "stack_number",
+    group: "source" as const,
+    label: "Stack",
+    value: number,
+    unit: "",
+    source: null,
+    reason: null,
+  });
+  const three = [
+    stack({ stack_number: 1, height_m: 5 }),
+    stack({ stack_number: 2, height_m: 10 }),
+    stack({ stack_number: 3, height_m: 15 }),
+  ];
+
+  it("come first, open, with the factors behind the value", async () => {
+    const user = userEvent.setup();
+    show(facility({ stacks: three, scenarios: [scenario({ value: 2, factors: [named(2)] })] }));
+    await user.tab();
+    const toggle = screen.getByRole("button", { name: "Worst-case scenarios" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const headings = screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+    expect(headings.indexOf("Worst-case scenarios")).toBeLessThan(headings.indexOf("Stacks"));
+    expect(screen.getByRole("article", { name: /Hazard quotient/ })).toBeInTheDocument();
+  });
+
+  it("mark the stack that drives them and fold the stack list", async () => {
+    const user = userEvent.setup();
+    show(facility({ stacks: three, scenarios: [scenario({ factors: [named(2)] })] }));
+    await user.tab();
+    expect(screen.getByText("Drives the worst case: Hazard quotient")).toBeInTheDocument();
+    expect(screen.getAllByText(/Drives the worst case/)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Stacks" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("switch between the results of the facility", async () => {
+    const user = userEvent.setup();
+    const risk = scenario({ quantity: "cancer_risk", quantity_label: "Lifetime cancer risk", value: 1e-6 });
+    show(facility({ name: "Plant F1", scenarios: [scenario({}), risk] }));
+    await user.click(marker(/Plant F1/));
+    await user.click(screen.getByRole("button", { name: "Lifetime cancer risk" }));
+    expect(screen.getByRole("article", { name: /Lifetime cancer risk/ })).toBeInTheDocument();
+  });
+
+  it("leave the section out when the facility has none", async () => {
+    const user = userEvent.setup();
+    show(facility({ scenarios: [] }));
+    await user.tab();
+    expect(screen.queryByRole("button", { name: "Worst-case scenarios" })).toBeNull();
+    expect(screen.queryByText(/Drives the worst case/)).toBeNull();
   });
 });

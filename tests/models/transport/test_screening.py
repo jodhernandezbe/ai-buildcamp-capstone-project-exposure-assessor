@@ -15,6 +15,7 @@ from models.transport.screening import (
     Atmosphere,
     Stack,
     centerline_concentrations,
+    concentration_at_distance,
     effective_release_height,
     screening_maximum,
 )
@@ -178,3 +179,21 @@ def test_class_letters_are_case_insensitive() -> None:
     lower = screening_maximum(Q, STACK, [("d", 5.0)], DISTANCES, ATMOSPHERE)
     upper = screening_maximum(Q, STACK, [("D", 5.0)], DISTANCES, ATMOSPHERE)
     assert lower == upper
+
+
+def test_concentration_at_a_distance_equals_the_maximum_at_its_distance_not_above_elsewhere() -> (
+    None
+):
+    top = screening_maximum(Q, STACK, COMBINATIONS, DISTANCES, ATMOSPHERE)
+    args = (Q, STACK, top.stability_class, top.wind_speed_10m_m_per_s)
+    at_top = concentration_at_distance(*args, top.distance_m, ATMOSPHERE)
+    assert at_top == pytest.approx(top.concentration_ug_per_m3)
+    for distance in (top.distance_m * 0.5, top.distance_m * 2.0):
+        if MIN_DISTANCE_M <= distance <= MAX_DISTANCE_M:
+            assert concentration_at_distance(*args, distance, ATMOSPHERE) <= at_top
+
+
+@pytest.mark.parametrize("distance", [0.0, 99.0, 10_001.0, math.nan, math.inf])
+def test_concentration_at_a_distance_outside_the_validity_range_raises(distance: float) -> None:
+    with pytest.raises(ValueError):
+        concentration_at_distance(Q, STACK, "D", 3.0, distance, ATMOSPHERE)

@@ -4,7 +4,7 @@ import { act } from "react";
 
 import { FakeMap } from "../../test/fakeMaplibre";
 import { resizeObservers } from "../../test/fakeResizeObserver";
-import { facility, workspace } from "../../test/fixtures";
+import { facility, scenario, workspace } from "../../test/fixtures";
 import type { WorkspaceState } from "../../types/workspace";
 import { BLANK_NOTICE, ExposureMapCanvas } from "./ExposureMapCanvas";
 import { SECTOR_CAPTION } from "./MapLegend";
@@ -115,9 +115,11 @@ describe("overlays", () => {
   it("adds the marker, circle and sector layers once the style loads", () => {
     render(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
     const map = load();
-    expect([...map.sources.keys()].sort()).toEqual(["buffers", "facilities", "sectors"]);
+    expect([...map.sources.keys()].sort()).toEqual(["buffers", "facilities", "receptors", "sectors"]);
     expect(map.layers).toContain("facility-markers");
     expect(map.layers).toContain("sector-fill");
+    expect(map.layers).toContain("facility-driver-rings");
+    expect(map.layers).toContain("scenario-receptors");
   });
 
   it("puts every facility on the map", () => {
@@ -396,5 +398,56 @@ describe("a container that has no size yet", () => {
     rerender(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
     const padding = map.fits.at(-1)?.options.padding as { left: number; right: number };
     expect(padding.left + padding.right).toBeLessThan(300);
+  });
+});
+
+
+describe("worst-case scenarios on the map", () => {
+  const tract = {
+    kind: "tract" as const,
+    label: "T1",
+    residents: 100,
+    age_distribution: {},
+    distance_m: 500,
+    bearing_deg: 90,
+    latitude: 10.1,
+    longitude: -20.1,
+    concentration: 1,
+    fraction_of_maximum: 1,
+    note: null,
+  };
+  const driving = () =>
+    placed(1, {
+      facilities: [facility({ name: "Plant F1", scenarios: [scenario({ receptors: [tract] })] })],
+      scenario_drivers: [
+        { pathway_key: "community_inhalation", quantity: "hq", frs_id: "F1", facility_name: "Plant F1", stack_number: 1, value: 2 },
+      ],
+    });
+  const receptors = (map: FakeMap) => (map.getSource("receptors")?.data as { features: unknown[] }).features;
+
+  it("rings the driving facility and explains the ring in the legend", () => {
+    render(<ExposureMapCanvas digits={2} workspace={driving()} config={config} />);
+    const map = load();
+    const marker = (map.getSource("facilities")?.data as { features: { properties: { driver: boolean } }[] }).features[0];
+    expect(marker?.properties.driver).toBe(true);
+    expect(screen.getByText(/Outer ring: the facility that drives a worst case/)).toBeInTheDocument();
+  });
+
+  it("draws the receptors of the pinned driving facility, and removes them when it is closed", async () => {
+    const user = userEvent.setup();
+    render(<ExposureMapCanvas digits={2} workspace={driving()} config={config} />);
+    const map = load();
+    expect(receptors(map)).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /Plant F1/ }));
+    expect(receptors(map)).toHaveLength(1);
+    await user.keyboard("{Escape}");
+    expect(receptors(map)).toHaveLength(0);
+  });
+
+  it("shows no ring note and no receptors without scenarios", () => {
+    render(<ExposureMapCanvas digits={2} workspace={placed(1)} config={config} />);
+    const map = load();
+    expect(receptors(map)).toHaveLength(0);
+    expect(screen.queryByText(/drives a worst case/)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, Point, Polygon } from "geojson";
 
-import type { Facility, Status } from "../../types/workspace";
+import type { Facility, OccupationalTier, ScenarioDriver, Status } from "../../types/workspace";
 
 export interface MarkerScale {
   minPx: number;
@@ -11,6 +11,10 @@ export interface MarkerProperties {
   frs_id: string;
   name: string;
   status: Status | "none";
+  /** Tier of the worker screening (drawn as a ring), or "none" while it is not computed. */
+  worker_tier: OccupationalTier | "none";
+  /** Whether the facility has the highest value of some result (drawn as an outer ring). */
+  driver: boolean;
   radius_px: number;
 }
 
@@ -24,11 +28,16 @@ export function markerRadius(rate: number, rates: number[], scale: MarkerScale):
   return scale.minPx + (scale.maxPx - scale.minPx) * share;
 }
 
-/** One point per facility: coloured by status (none while not computed), sized by emission rate. */
+/**
+ * One point per facility: filled by the community status (none while not computed), ringed by the
+ * worker tier, sized by emission rate.
+ */
 export function facilityCollection(
   facilities: Facility[],
   scale: MarkerScale,
+  drivers: readonly ScenarioDriver[] = [],
 ): FeatureCollection<Point, MarkerProperties> {
+  const driving = new Set(drivers.map((d) => d.frs_id));
   const rates = facilities.map((f) => f.emission_rate_g_s);
   return {
     type: "FeatureCollection",
@@ -39,6 +48,8 @@ export function facilityCollection(
         frs_id: f.frs_id,
         name: f.name ?? `FRS ${f.frs_id}`,
         status: f.status ?? "none",
+        worker_tier: f.occupational_exposure?.risk_tier ?? "none",
+        driver: driving.has(f.frs_id),
         radius_px: markerRadius(f.emission_rate_g_s, rates, scale),
       },
     })),
@@ -62,3 +73,41 @@ export const bufferCollection = (facilities: Facility[]) => polygons(facilities,
 
 /** The schematic downwind sectors of the facilities that have receptors and weather. */
 export const sectorCollection = (facilities: Facility[]) => polygons(facilities, (f) => f.sector);
+
+export interface ReceptorProperties {
+  label: string;
+  residents: number | null;
+  /** The receptor's concentration over the scenario's maximum, as the API sent it. */
+  fraction: number;
+}
+
+/**
+ * The most affected tracts of the scenarios a facility drives, drawn where the tool put them. Only
+ * the pinned facility's receptors are drawn, and only for results it drives; a tract several
+ * results name is drawn once, at its highest fraction of the maximum.
+ */
+export function receptorCollection(
+  facilities: Facility[],
+  drivers: readonly ScenarioDriver[],
+  pinnedId: string | null,
+): FeatureCollection<Point, ReceptorProperties> {
+  const facility = facilities.find((f) => f.frs_id === pinnedId);
+  const best = new Map<string, Feature<Point, ReceptorProperties>>();
+  for (const scenario of facility?.scenarios ?? []) {
+    const drives = drivers.some(
+      (d) => d.frs_id === pinnedId && d.pathway_key === scenario.pathway_key && d.quantity === scenario.quantity,
+    );
+    if (!drives) continue;
+    for (const r of scenario.receptors) {
+      if (r.kind !== "tract" || r.latitude === null || r.longitude === null) continue;
+      const fraction = r.fraction_of_maximum ?? 0;
+      if ((best.get(r.label)?.properties.fraction ?? -1) >= fraction) continue;
+      best.set(r.label, {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [r.longitude, r.latitude] },
+        properties: { label: r.label, residents: r.residents, fraction },
+      });
+    }
+  }
+  return { type: "FeatureCollection", features: [...best.values()] };
+}

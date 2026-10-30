@@ -16,9 +16,19 @@ interface ConfirmationCardProps {
   onConfirm: (answers: ConfirmationAnswers, summary: string) => void;
 }
 
-/** A value's label and what it is needed for, e.g. "iur for 71-43-2". */
+/** How each quantity is named to the person; an unlisted one is shown as the API names it. */
+const QUANTITY_NAMES: Record<string, string> = {
+  rfc: "inhalation RfC",
+  iur: "inhalation unit risk",
+  oel_twa: "occupational limit (8-hour average)",
+  molecular_weight: "molecular weight",
+  vapor_pressure: "vapor pressure",
+  density: "density",
+};
+
+/** A value's label, e.g. "inhalation unit risk for 71-43-2". */
 function heading(entry: MissingValue): string {
-  return `${entry.quantity} for ${entry.subject}`;
+  return `${QUANTITY_NAMES[entry.quantity] ?? entry.quantity} for ${entry.subject}`;
 }
 
 /** The value's plausible range, in its target unit (the first accepted unit). */

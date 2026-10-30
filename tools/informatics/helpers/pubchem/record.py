@@ -119,6 +119,17 @@ def statements(sections: Sequence[dict[str, object]]) -> list[Statement]:
     return found
 
 
+def named_statements(sections: Sequence[dict[str, object]]) -> list[tuple[str | None, Statement]]:
+    """Return every string of the sections' entries with the entry's ``Name`` (None if none)."""
+    found: list[tuple[str | None, Statement]] = []
+    for section in sections:
+        for entry in _dicts(section.get("Information")):
+            name = entry.get("Name")
+            label = name.strip() if isinstance(name, str) and name.strip() else None
+            found.extend((label, item) for item in _entry_statements(entry))
+    return found
+
+
 def confirms_cas(record: object, cas: str, heading: Sequence[str]) -> bool:
     """Whether the record lists ``cas`` among its own CAS registry numbers.
 

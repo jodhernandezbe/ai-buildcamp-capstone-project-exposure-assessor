@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -68,6 +70,43 @@ class FieldSpec:
 
 
 @dataclass(frozen=True)
+class LimitSpec:
+    """One occupational limit read from a record.
+
+    Attributes:
+        key: Name of the limit, e.g. ``"osha_pel"``.
+        programme: Name shown with the value, e.g. ``"OSHA PEL-TWA"``.
+        heading: PUG View headings leading to the entries, outermost first.
+        name_pattern: Entries whose ``Name`` matches hold the value as a plain number and unit;
+            None = no named entries are read.
+        text_patterns: Patterns (named groups ``value`` and ``unit``) for free-text entries.
+    """
+
+    key: str
+    programme: str
+    heading: tuple[str, ...]
+    name_pattern: re.Pattern[str] | None
+    text_patterns: tuple[re.Pattern[str], ...]
+
+
+@dataclass(frozen=True)
+class LimitsSettings:
+    """The occupational limits PubChem is asked for.
+
+    Attributes:
+        molar_volume_l_per_mol: Molar volume of a gas at 25 degC and 1 atm, L/mol.
+        twa_priority: Limit keys in the order the 8-hour TWA benchmark is chosen.
+        units: Unit spelling (lower case, no spaces) -> ``"ppm"`` or a Pint unit.
+        items: The limits.
+    """
+
+    molar_volume_l_per_mol: float
+    twa_priority: tuple[str, ...]
+    units: Mapping[str, str]
+    items: tuple[LimitSpec, ...]
+
+
+@dataclass(frozen=True)
 class PubchemSettings:
     """All PubChem settings.
 
@@ -84,6 +123,7 @@ class PubchemSettings:
         agreement_ratio: Largest allowed max/min ratio of several clear statements.
         cache: The response cache.
         fields: The result fields PubChem is asked for.
+        limits: The occupational limits PubChem is asked for.
     """
 
     cid_by_smiles_url: str
@@ -98,6 +138,7 @@ class PubchemSettings:
     agreement_ratio: float
     cache: CacheSettings
     fields: tuple[FieldSpec, ...]
+    limits: LimitsSettings
 
     def smiles_url(self, smiles: str) -> str:
         """Return the CID search URL for ``smiles`` (URL-encoded)."""
@@ -183,6 +224,63 @@ def _fields(table: dict[str, object]) -> tuple[FieldSpec, ...]:
     return fields
 
 
+def _pattern(raw: str, name: str) -> re.Pattern[str]:
+    try:
+        compiled = re.compile(raw)
+    except re.error as exc:
+        raise ValueError(f"{name} is not a valid pattern: {exc}") from exc
+    if not {"value", "unit"} <= set(compiled.groupindex):
+        raise ValueError(f"{name} must have the named groups value and unit")
+    return compiled
+
+
+def _limit(raw: object, index: int) -> LimitSpec:
+    name = f"{_NAME}.limits.items[{index}]"
+    table = as_table(raw, name)
+    named = table.get("name_pattern")
+    texts = (
+        names(table, "text_patterns", name, allow_empty=True) if "text_patterns" in table else ()
+    )
+    if named is None and not texts:
+        raise ValueError(f"{name} needs a name_pattern or text_patterns")
+    return LimitSpec(
+        key=require_str(table, "key", name).strip(),
+        programme=require_str(table, "programme", name).strip(),
+        heading=names(table, "heading", name, allow_empty=False),
+        name_pattern=re.compile(require_str(table, "name_pattern", name)) if named else None,
+        text_patterns=tuple(_pattern(t, f"{name}.text_patterns") for t in texts),
+    )
+
+
+def _units(table: dict[str, object]) -> Mapping[str, str]:
+    name = f"{_NAME}.limits.units"
+    block = subtable(table, "units", f"{_NAME}.limits")
+    if not block:
+        raise ValueError(f"{name} must not be empty")
+    return {k.lower().replace(" ", ""): require_str(block, k, name).strip() for k in block}
+
+
+def _limits(table: dict[str, object]) -> LimitsSettings:
+    name = f"{_NAME}.limits"
+    block = subtable(table, "limits", _NAME)
+    raw = block.get("items")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"{name}.items must be a non-empty list of tables")
+    items = tuple(_limit(item, i) for i, item in enumerate(cast(list[object], raw)))
+    keys = {spec.key for spec in items}
+    priority = names(block, "twa_priority", name, allow_empty=False)
+    if len(keys) != len(items) or not set(priority) <= keys:
+        raise ValueError(f"{name}: keys must be unique and twa_priority must name listed keys")
+    return LimitsSettings(
+        molar_volume_l_per_mol=require_number(
+            block, "molar_volume_l_per_mol", minimum=1e-9, name=name
+        ),
+        twa_priority=priority,
+        units=_units(block),
+        items=items,
+    )
+
+
 def _check_against_comptox(fields: tuple[FieldSpec, ...], path: Path | None) -> None:
     """Each field must be one CompTox fills, in the same unit (one unit per result field)."""
     comptox = load_comptox_settings(path)
@@ -225,6 +323,7 @@ def load_pubchem_settings(path: Path | None = None) -> PubchemSettings:
         agreement_ratio=_ratio(table),
         cache=_cache(subtable(table, "cache", _NAME)),
         fields=fields,
+        limits=_limits(table),
     )
 
 

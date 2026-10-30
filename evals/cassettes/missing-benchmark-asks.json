@@ -53,8 +53,104 @@
       "minimum": 1e-09,
       "maximum": 1000.0,
       "purpose": "the inhalation risk: the cancer risk for this chemical"
+     },
+     {
+      "entry_id": "oel_twa:107-02-8",
+      "quantity": "oel_twa",
+      "subject": "107-02-8",
+      "accepted_units": [
+       "mg/m^3",
+       "ug/m^3"
+      ],
+      "minimum": 1e-06,
+      "maximum": 100000.0,
+      "purpose": "the worker screening: comparing workplace air with an 8-hour occupational limit"
      }
-    ]
+    ],
+    "occupational_limits": {
+     "oel_twa_mg_m3": null,
+     "oel_source": null,
+     "limits": {
+      "acgih_tlv_stel": {
+       "value": 0.22930061349693256,
+       "programme": "ACGIH TLV-STEL",
+       "converted_from_ppm": true,
+       "statements": 1
+      },
+      "niosh_idlh": {
+       "value": 4.58601226993865,
+       "programme": "NIOSH IDLH",
+       "converted_from_ppm": true,
+       "statements": 4
+      },
+      "pac_1": {
+       "value": 0.06879018404907974,
+       "programme": "PAC-1",
+       "converted_from_ppm": true,
+       "statements": 1
+      },
+      "pac_2": {
+       "value": 0.22930061349693256,
+       "programme": "PAC-2",
+       "converted_from_ppm": true,
+       "statements": 1
+      },
+      "pac_3": {
+       "value": 3.2102085889570553,
+       "programme": "PAC-3",
+       "converted_from_ppm": true,
+       "statements": 1
+      }
+     },
+     "reasons": {
+      "osha_pel": "PubChem has no usable OSHA PEL-TWA statement",
+      "niosh_rel": "PubChem has no usable NIOSH REL-TWA statement",
+      "acgih_tlv": "PubChem has no usable ACGIH TLV-TWA statement"
+     },
+     "warnings": [
+      "PubChem lists no usable 8-hour TWA limit"
+     ]
+    }
+   }
+  }
+ ],
+ "find_tri_category": [
+  {
+   "args": {
+    "cas_number": "107-02-8"
+   },
+   "output": {
+    "query_cas": "107-02-8",
+    "categories": [],
+    "warnings": []
+   }
+  }
+ ],
+ "find_tri_read_across_surrogate": [
+  {
+   "args": {
+    "cas_number": "107-02-8",
+    "require_toxicity_benchmarks": "False",
+    "sector_naics_prefix": null
+   },
+   "output": {
+    "query_smiles": "C=CC=O",
+    "query_mw": 56.064,
+    "surrogate_tri_cas": "107-02-8",
+    "surrogate_name": "Acrolein",
+    "surrogate_smiles": "C=CC=O",
+    "surrogate_mw": 56.064,
+    "moldeberta_cosine_sim": 1.0,
+    "morgan_tanimoto_sim": 1.0,
+    "hybrid_read_across_score": 1.0,
+    "mw_scaling_factor": 1.0,
+    "surrogate_category": null,
+    "query_cas": "107-02-8",
+    "is_direct_tri_match": true,
+    "within_applicability_domain": true,
+    "resolution_method": "direct_tri_catalog_match",
+    "query_categories": [],
+    "warnings": []
    }
   }
  ]

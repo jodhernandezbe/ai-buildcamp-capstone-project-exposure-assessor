@@ -116,15 +116,15 @@ def test_same_year_with_other_unit_is_not_mixed_in() -> None:
 
 
 def test_each_medium_has_its_own_latest_year() -> None:
-    settings = replace(load_tri_settings(), media=("AIR STACK", "AIR FUGITIVE"))
+    settings = replace(load_tri_settings(), media=("AIR STACK", "AIR FUG"))
     rows = [
         _row(reporting_year="2020", total_release=1),
-        _row(reporting_year="2015", total_release=2, environmental_medium="AIR FUGITIVE"),
+        _row(reporting_year="2015", total_release=2, environmental_medium="AIR FUG"),
     ]
     records, _ = _run(rows, settings)
     assert {(r["environmental_medium"], r["reporting_year"]) for r in records} == {
         ("AIR STACK", 2020),
-        ("AIR FUGITIVE", 2015),
+        ("AIR FUG", 2015),
     }
 
 

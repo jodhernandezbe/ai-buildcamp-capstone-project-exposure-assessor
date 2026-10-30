@@ -51,6 +51,32 @@
       "title": "BoundingBox",
       "type": "object"
     },
+    "CdrSector": {
+      "additionalProperties": false,
+      "description": "The TSCA CDR industrial sector of a NAICS code, with the table row that matched.",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "matched_naics_prefix": {
+          "type": "string"
+        },
+        "naics_edition": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "matched_naics_prefix",
+        "naics_edition"
+      ],
+      "title": "CdrSector",
+      "type": "object"
+    },
     "ChatLayout": {
       "additionalProperties": false,
       "description": "Chat dock: default and maximum shares of the viewport width (0-1), minimum width in px.",
@@ -106,12 +132,23 @@
     },
     "Chemical": {
       "additionalProperties": false,
-      "description": "The chemical as queried, with its properties and read-across provenance.\n\nAttributes:\n    cas_number: CAS number as queried.\n    name: The name the properties result gave (CompTox's preferred name); None when it\n        gave none, and then the CAS number stands alone.\n    molecular_weight_g_mol: Molecular weight, g/mol.\n    rfc_mg_m3: Inhalation reference concentration, mg/m\u00b3.\n    iur_per_ug_m3: Inhalation unit risk, (\u00b5g/m\u00b3)\u207b\u00b9.\n    sources: Field name -> source the value came from.",
+      "description": "The chemical as queried, with its properties and read-across provenance.\n\nAttributes:\n    cas_number: CAS number as queried.\n    name: The name the properties result gave (CompTox's preferred name); None when it\n        gave none, and then the CAS number stands alone.\n    molecular_weight_g_mol: Molecular weight, g/mol.\n    vapor_pressure_mmhg: Vapor pressure, mmHg (its source is in ``sources``).\n    density_g_cm3: Density, g/cm\u00b3.\n    oel_twa_mg_m3: 8-hour occupational exposure limit, mg/m\u00b3 (source under ``oel_twa``).\n    rfc_mg_m3: Inhalation reference concentration, mg/m\u00b3.\n    iur_per_ug_m3: Inhalation unit risk, (\u00b5g/m\u00b3)\u207b\u00b9.\n    sources: Field name -> source the value came from.",
       "properties": {
         "cas_number": {
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "density_g_cm3": {
+          "anyOf": [
+            {
+              "type": "number"
             },
             {
               "type": "null"
@@ -152,6 +189,17 @@
           ],
           "default": null
         },
+        "oel_twa_mg_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "read_across": {
           "$ref": "#/$defs/ReadAcross"
         },
@@ -172,6 +220,17 @@
           },
           "type": "object"
         },
+        "vapor_pressure_mmhg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "warnings": {
           "items": {
             "type": "string"
@@ -183,6 +242,9 @@
         "cas_number",
         "name",
         "molecular_weight_g_mol",
+        "vapor_pressure_mmhg",
+        "density_g_cm3",
+        "oel_twa_mg_m3",
         "rfc_mg_m3",
         "iur_per_ug_m3",
         "sources",
@@ -220,11 +282,15 @@
         },
         "thresholds": {
           "$ref": "#/$defs/Thresholds"
+        },
+        "worker_thresholds": {
+          "$ref": "#/$defs/WorkerThresholds"
         }
       },
       "required": [
         "model",
         "thresholds",
+        "worker_thresholds",
         "map",
         "significant_digits",
         "narrow_breakpoint_px",
@@ -464,6 +530,37 @@
       "title": "ErrorEvent",
       "type": "object"
     },
+    "ExposureGraph": {
+      "additionalProperties": false,
+      "description": "The source facility, then each lane's steps, joined by labelled edges.",
+      "properties": {
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/GraphEdge"
+          },
+          "type": "array"
+        },
+        "lanes": {
+          "items": {
+            "$ref": "#/$defs/GraphLane"
+          },
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/GraphNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "lanes",
+        "nodes",
+        "edges"
+      ],
+      "title": "ExposureGraph",
+      "type": "object"
+    },
     "ExposureRanges": {
       "additionalProperties": false,
       "description": "Ranges over the evaluated stacks of one facility; None when no stack has the quantity.",
@@ -645,7 +742,7 @@
     },
     "Facility": {
       "additionalProperties": false,
-      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    naics_subsector: First three digits of the inventory's NAICS code (e.g. \"325\").\n    naics_subsector_title: That subsector's title from the Census lists; None if unknown.\n    conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.\n    lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.\n    conditions_note: Why ``conditions_of_use`` is empty; None when it is not.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
+      "description": "One facility of the emissions inventory with what the other tools reported about it.\n\nAttributes:\n    doc_ctrl_num: TRI document control number (the inventory has no TRI facility ID).\n    total_release: Annual quantity in ``release_unit``, as reported.\n    emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.\n    operating_hours_source: Where those hours came from (industry survey or default); None\n        when the record predates the field.\n    fugitive_release_kg_per_year: TRI fugitive air release, kg/yr; None when TRI has none.\n    exposure: The community (ambient fenceline) result.\n    occupational_exposure: The worker screening; None when no assessment produced it.\n    operational_profile: Schedule, life cycle stage, condition of use and CDR sector.\n    scenarios: The worst-case scenarios of the facility, one per pathway and quantity that\n        has a value.\n    exposure_graph: How the worst-case exposure arises, source to endpoint, per pathway.\n    naics_subsector: First three digits of the inventory's NAICS code (e.g. \"325\").\n    naics_subsector_title: That subsector's title from the Census lists; None if unknown.\n    conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.\n    lifecycle_stages: The distinct TSCA life cycle stages of ``conditions_of_use``.\n    conditions_note: Why ``conditions_of_use`` is empty; None when it is not.\n    stack_source: Where the NEI stack lookup came from, when one was made for the facility.\n    status: Worst-case risk status (from the screening value when screened out); None\n        while no risk is computed.\n    screening: How the batch assessment screened it; None when it did not.\n    buffer: The receptor radius drawn as a circle around the facility, when receptors exist.\n    sector: Schematic downwind sector (toward ``wind_toward_deg``, length the receptor radius);\n        never a modelled plume footprint. Present with both receptors and meteorology.",
       "properties": {
         "address": {
           "anyOf": [
@@ -744,8 +841,41 @@
           ],
           "default": null
         },
+        "exposure_graph": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExposureGraph"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "frs_id": {
           "type": "string"
+        },
+        "fugitive_release_kg_per_year": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fugitive_reporting_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "industry": {
           "anyOf": [
@@ -817,6 +947,17 @@
           ],
           "default": null
         },
+        "occupational_exposure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OccupationalExposure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "operating_hours_per_year": {
           "type": "number"
         },
@@ -824,6 +965,17 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operational_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OperationalProfile"
             },
             {
               "type": "null"
@@ -847,6 +999,12 @@
         },
         "reporting_year": {
           "type": "integer"
+        },
+        "scenarios": {
+          "items": {
+            "$ref": "#/$defs/WorstCaseScenario"
+          },
+          "type": "array"
         },
         "screening": {
           "anyOf": [
@@ -939,6 +1097,8 @@
         "emission_rate_g_s",
         "operating_hours_per_year",
         "operating_hours_source",
+        "fugitive_release_kg_per_year",
+        "fugitive_reporting_year",
         "conditions_of_use",
         "lifecycle_stages",
         "conditions_note",
@@ -947,12 +1107,323 @@
         "receptors",
         "meteorology",
         "exposure",
+        "occupational_exposure",
+        "operational_profile",
+        "scenarios",
+        "exposure_graph",
         "status",
         "screening",
         "buffer",
         "sector"
       ],
       "title": "Facility",
+      "type": "object"
+    },
+    "GraphEdge": {
+      "additionalProperties": false,
+      "description": "A connection from one node to the next, with the quantity it carries when there is one.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "lane": {
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraphQuantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target",
+        "lane",
+        "quantity"
+      ],
+      "title": "GraphEdge",
+      "type": "object"
+    },
+    "GraphFact": {
+      "additionalProperties": false,
+      "description": "A text value a tool reported (a source, a class, a list), or none and why.",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "text",
+        "reason"
+      ],
+      "title": "GraphFact",
+      "type": "object"
+    },
+    "GraphLane": {
+      "additionalProperties": false,
+      "description": "One pathway (community outdoor air, worker indoor air), its status and if it is drawn.",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "below",
+                "near",
+                "above"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "available",
+        "reason",
+        "status",
+        "status_label"
+      ],
+      "title": "GraphLane",
+      "type": "object"
+    },
+    "GraphNode": {
+      "additionalProperties": false,
+      "description": "One step of a lane, or the source facility shared by every lane.\n\nAttributes:\n    lane: Lane id; None for the source facility.\n    headline: Key of the quantity shown on the node, when it has one.\n    status_label: The status in the lane's own words (the worker tier); None to use the default.",
+      "properties": {
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/GraphFact"
+          },
+          "type": "array"
+        },
+        "headline": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "release",
+            "pathway",
+            "route",
+            "receptor",
+            "endpoint"
+          ],
+          "type": "string"
+        },
+        "lane": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "quantities": {
+          "items": {
+            "$ref": "#/$defs/GraphQuantity"
+          },
+          "type": "array"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "below",
+                "near",
+                "above"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "lane",
+        "title",
+        "headline",
+        "quantities",
+        "facts",
+        "status",
+        "status_label",
+        "warnings"
+      ],
+      "title": "GraphNode",
+      "type": "object"
+    },
+    "GraphQuantity": {
+      "additionalProperties": false,
+      "description": "A number a tool reported, with its label and unit, or no number and why.",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why ``value`` is absent."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unit": {
+          "default": "",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "value",
+        "unit",
+        "source",
+        "reason"
+      ],
+      "title": "GraphQuantity",
       "type": "object"
     },
     "GuardrailPivotResponse": {
@@ -1292,6 +1763,290 @@
         "purpose"
       ],
       "title": "MissingValue",
+      "type": "object"
+    },
+    "OccupationalExposure": {
+      "additionalProperties": false,
+      "description": "Worker screening of a facility: EPA ChemSTEER box model and RAGS Part F dosimetry.\n\nA screening that assumes generic ventilation, not an OSHA compliance determination.\n\nAttributes:\n    fugitive_release_kg_per_year: TRI fugitive air release, kg/yr (year in\n        ``fugitive_reporting_year``).\n    operating_days_per_year: Days a year the plant runs, d/yr.\n    hours_per_day: Hours a day it runs, h/day.\n    oel_twa_mg_m3: The 8-hour occupational limit used, mg/m\u00b3, with ``oel_source``.\n    rfc: Reference concentration used, mg/m\u00b3.\n    iur: Inhalation unit risk used, (\u00b5g/m\u00b3)\u207b\u00b9.\n    vapor_pressure_mmhg: Context only; never enters an equation. Its source is in\n        ``vapor_pressure_source``.\n    baseline: The baseline manufacturing ventilation tier.\n    worst_case: The enclosed-zone tier.\n    risk_tier: The baseline tier.",
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "baseline": {
+          "$ref": "#/$defs/VentilationTier"
+        },
+        "fugitive_release_kg_per_year": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fugitive_reporting_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hours_per_day": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "iur": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "oel_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "oel_twa_mg_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operating_days_per_year": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rfc": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "exceedance",
+                "elevated",
+                "acceptable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vapor_pressure_mmhg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vapor_pressure_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "worst_case": {
+          "$ref": "#/$defs/VentilationTier"
+        }
+      },
+      "required": [
+        "fugitive_release_kg_per_year",
+        "fugitive_reporting_year",
+        "operating_days_per_year",
+        "hours_per_day",
+        "oel_twa_mg_m3",
+        "oel_source",
+        "rfc",
+        "iur",
+        "vapor_pressure_mmhg",
+        "vapor_pressure_source",
+        "baseline",
+        "worst_case",
+        "risk_tier",
+        "assumptions",
+        "warnings"
+      ],
+      "title": "OccupationalExposure",
+      "type": "object"
+    },
+    "OperationalProfile": {
+      "additionalProperties": false,
+      "description": "How a facility operates and where it sits in the TSCA framework.\n\nAttributes:\n    life_cycle_stage: TSCA stages of the activities the facility reported to TRI.\n    cou_category: TSCA condition-of-use categories of those activities.\n    cdr_sector: CDR industrial sector of its NAICS code; None when the table has none.\n    days_per_week: Derived from the Census QPC hours per week and a configured working day.\n    operating_days_per_year: Days a year, d/yr.\n    hours_per_day: Hours a day, h/day.\n    annual_operating_hours: Hours a year, h/yr (at most 8,760).\n    schedule_source: Where the hours come from.",
+      "properties": {
+        "annual_operating_hours": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cdr_sector": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CdrSector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cou_category": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "days_per_week": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hours_per_day": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "life_cycle_stage": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "naics_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operating_days_per_year": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schedule_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "naics_code",
+        "life_cycle_stage",
+        "cou_category",
+        "cdr_sector",
+        "days_per_week",
+        "operating_days_per_year",
+        "hours_per_day",
+        "annual_operating_hours",
+        "schedule_source",
+        "warnings"
+      ],
+      "title": "OperationalProfile",
       "type": "object"
     },
     "OverviewLayout": {
@@ -1640,6 +2395,253 @@
         "cancer_risk"
       ],
       "title": "Scenario",
+      "type": "object"
+    },
+    "ScenarioDriver": {
+      "additionalProperties": false,
+      "description": "The assessed facility whose scenario has the highest value of a pathway's quantity.\n\nAttributes:\n    stack_number: The stack behind the value (community pathways); None otherwise.",
+      "properties": {
+        "facility_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frs_id": {
+          "type": "string"
+        },
+        "pathway_key": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "stack_number": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pathway_key",
+        "quantity",
+        "frs_id",
+        "facility_name",
+        "stack_number",
+        "value"
+      ],
+      "title": "ScenarioDriver",
+      "type": "object"
+    },
+    "ScenarioFactor": {
+      "additionalProperties": false,
+      "description": "One factor of a worst-case scenario: a value a tool returned, or why there is none.\n\nAttributes:\n    group: source, release, conditions or receptor_model.\n    value: A number or text a tool returned; None when none did (see ``reason``).\n    unit: Unit of ``value``; empty when unitless or text.\n    source: Where the value came from, when a tool said.\n    reason: Why there is no value.",
+      "properties": {
+        "group": {
+          "enum": [
+            "source",
+            "release",
+            "conditions",
+            "receptor_model"
+          ],
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "unit": {
+          "default": "",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "group",
+        "label",
+        "value",
+        "unit",
+        "source",
+        "reason"
+      ],
+      "title": "ScenarioFactor",
+      "type": "object"
+    },
+    "ScenarioReceptor": {
+      "additionalProperties": false,
+      "description": "A receptor of a worst-case scenario: a census tract, or the facility's workers.\n\nAttributes:\n    residents: Persons in the tract (the tract's ACS estimate); None for workers.\n    age_distribution: Age band -> percent of the tract; empty for workers.\n    distance_m: Meters from the facility to the tract's internal point.\n    bearing_deg: Degrees clockwise from north from the facility to that point.\n    latitude: Decimal degrees of that point (the census service's internal point), for drawing.\n    longitude: Decimal degrees of that point.\n    concentration: Annual-average ug/m^3 the scenario gives at the tract (workers: the\n        8-hour average, mg/m^3).\n    fraction_of_maximum: That concentration over the scenario's maximum, unitless.",
+      "properties": {
+        "age_distribution": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "bearing_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "concentration": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "distance_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fraction_of_maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "enum": [
+            "tract",
+            "workers"
+          ],
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "residents": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "residents",
+        "age_distribution",
+        "distance_m",
+        "bearing_deg",
+        "latitude",
+        "longitude",
+        "concentration",
+        "fraction_of_maximum",
+        "note"
+      ],
+      "title": "ScenarioReceptor",
       "type": "object"
     },
     "ScopeDecision": {
@@ -2702,9 +3704,266 @@
       "title": "UsageTotals",
       "type": "object"
     },
+    "VentilationTier": {
+      "additionalProperties": false,
+      "description": "The worker screening for one ventilation tier of the box model; None = not computed.\n\nAttributes:\n    ventilation_m3_per_s: Room ventilation rate, m\u00b3/s.\n    mixing_factor: Mixing factor k, unitless.\n    workplace_concentration_mg_m3: Concentration while the plant runs, mg/m\u00b3.\n    twa_mg_m3: 8-hour time-weighted average, mg/m\u00b3.\n    oel_ratio: The average over the occupational limit (unitless); above 1 exceeds it.\n    hq: Worker hazard quotient (unitless).\n    cancer_risk: Worker lifetime excess cancer risk (unitless).\n    risk_tier: \"exceedance\", \"elevated\" or \"acceptable\"; None when nothing could be compared.",
+      "properties": {
+        "cancer_risk": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "label": {
+          "type": "string"
+        },
+        "mixing_factor": {
+          "type": "number"
+        },
+        "oel_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "exceedance",
+                "elevated",
+                "acceptable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "twa_mg_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ventilation_m3_per_s": {
+          "type": "number"
+        },
+        "workplace_concentration_mg_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "label",
+        "ventilation_m3_per_s",
+        "mixing_factor",
+        "workplace_concentration_mg_m3",
+        "twa_mg_m3",
+        "oel_ratio",
+        "hq",
+        "cancer_risk",
+        "risk_tier"
+      ],
+      "title": "VentilationTier",
+      "type": "object"
+    },
+    "WorkerExtremum": {
+      "additionalProperties": false,
+      "description": "The highest value of one worker quantity over the assessed facilities.\n\n``risk_tier`` is the tier the tool gave that facility (baseline ventilation).",
+      "properties": {
+        "facility_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frs_id": {
+          "type": "string"
+        },
+        "risk_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "exceedance",
+                "elevated",
+                "acceptable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "frs_id",
+        "facility_name",
+        "risk_tier"
+      ],
+      "title": "WorkerExtremum",
+      "type": "object"
+    },
+    "WorkerRiskSummary": {
+      "additionalProperties": false,
+      "description": "The worker screening across facilities, for both ventilation tiers; ``reason`` if none.",
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/WorkerTierSummary"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why no value yet, e.g. not computed."
+        },
+        "worst_case": {
+          "$ref": "#/$defs/WorkerTierSummary"
+        }
+      },
+      "required": [
+        "baseline",
+        "worst_case",
+        "reason"
+      ],
+      "title": "WorkerRiskSummary",
+      "type": "object"
+    },
+    "WorkerThresholds": {
+      "additionalProperties": false,
+      "description": "Tier boundaries of the worker screening: above `*_exceedance` is \"exceedance\", above\n`*_elevated` is \"elevated\" (unitless; cancer risk is a probability).",
+      "properties": {
+        "cancer_elevated": {
+          "type": "number"
+        },
+        "cancer_exceedance": {
+          "type": "number"
+        },
+        "hq_elevated": {
+          "type": "number"
+        },
+        "hq_exceedance": {
+          "type": "number"
+        },
+        "ratio_elevated": {
+          "type": "number"
+        },
+        "ratio_exceedance": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ratio_exceedance",
+        "ratio_elevated",
+        "hq_exceedance",
+        "hq_elevated",
+        "cancer_exceedance",
+        "cancer_elevated"
+      ],
+      "title": "WorkerThresholds",
+      "type": "object"
+    },
+    "WorkerTierSummary": {
+      "additionalProperties": false,
+      "description": "Highest limit ratio, hazard quotient and cancer risk of the workers for one tier.",
+      "properties": {
+        "cancer_risk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkerExtremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hq": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkerExtremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "oel_ratio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkerExtremum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "oel_ratio",
+        "hq",
+        "cancer_risk"
+      ],
+      "title": "WorkerTierSummary",
+      "type": "object"
+    },
     "WorkspaceState": {
       "additionalProperties": false,
-      "description": "The current workspace of one thread.\n\nAttributes:\n    framing_version: Increases only when the set of placed facilities or buffers changes.\n    bounds: Extent of the placed facilities and buffers; None when none is placed.\n    facilities: One per FRS ID, in the order first reported.\n    selected_frs_id: Facility whose receptors the ribbon shows (the highest risk, or the\n        only one); None when no single facility stands out.\n    chemical: The queried chemical and its provenance.\n    risk: Highest risk values across the attributed facilities.\n    receptors: Receptors of the selected facility.\n    meteorology: Meteorology of the selected facility, else the latest result.\n    unattributed: Results not attached to any facility.\n    warnings: Results left out (malformed, unattributable) and why.",
+      "description": "The current workspace of one thread.\n\nAttributes:\n    framing_version: Increases only when the set of placed facilities or buffers changes.\n    bounds: Extent of the placed facilities and buffers; None when none is placed.\n    facilities: One per FRS ID, in the order first reported.\n    selected_frs_id: Facility whose receptors the ribbon shows (the highest risk, or the\n        only one); None when no single facility stands out.\n    chemical: The queried chemical and its provenance.\n    risk: Highest risk values across the attributed facilities.\n    worker_risk: Highest worker (occupational) values across the assessed facilities.\n    scenario_drivers: For each pathway and quantity, the facility with the highest value.\n    receptors: Receptors of the selected facility.\n    meteorology: Meteorology of the selected facility, else the latest result.\n    unattributed: Results not attached to any facility.\n    warnings: Results left out (malformed, unattributable) and why.",
       "properties": {
         "bounds": {
           "anyOf": [
@@ -2756,6 +4015,12 @@
         "risk": {
           "$ref": "#/$defs/RiskSummary"
         },
+        "scenario_drivers": {
+          "items": {
+            "$ref": "#/$defs/ScenarioDriver"
+          },
+          "type": "array"
+        },
         "selected_frs_id": {
           "anyOf": [
             {
@@ -2778,6 +4043,9 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "worker_risk": {
+          "$ref": "#/$defs/WorkerRiskSummary"
         }
       },
       "required": [
@@ -2787,6 +4055,8 @@
         "selected_frs_id",
         "chemical",
         "risk",
+        "worker_risk",
+        "scenario_drivers",
         "receptors",
         "meteorology",
         "unattributed",
@@ -2818,6 +4088,93 @@
         "state"
       ],
       "title": "WorkspaceUpdate",
+      "type": "object"
+    },
+    "WorstCaseScenario": {
+      "additionalProperties": false,
+      "description": "The combination of factors behind the high-end value of one quantity on one pathway.\n\nA screening result, never a regulatory finding: ``tier`` is the level the assessment gave.\n\nAttributes:\n    pathway_key: Which pathway produced it, e.g. ``community_inhalation``.\n    pathway: Medium, route and receptor class, in words.\n    quantity: ``hq``, ``cancer_risk`` or ``oel_ratio``.\n    value: The high-end value, unitless.\n    tier: The level the assessment gave the value; None when none was given.\n    benchmark: The level of concern the value was compared with, unitless.\n    receptors_note: Why there are no receptors, or what was left out.",
+      "properties": {
+        "benchmark": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "factors": {
+          "items": {
+            "$ref": "#/$defs/ScenarioFactor"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pathway": {
+          "type": "string"
+        },
+        "pathway_key": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "quantity_label": {
+          "type": "string"
+        },
+        "receptors": {
+          "items": {
+            "$ref": "#/$defs/ScenarioReceptor"
+          },
+          "type": "array"
+        },
+        "receptors_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "pathway_key",
+        "pathway",
+        "quantity",
+        "quantity_label",
+        "value",
+        "tier",
+        "benchmark",
+        "factors",
+        "receptors",
+        "receptors_note",
+        "notes"
+      ],
+      "title": "WorstCaseScenario",
       "type": "object"
     }
   },

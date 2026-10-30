@@ -14,6 +14,8 @@ from tools.http import HttpRequestError, RetryingClient
 _KEY_STATUSES = frozenset({302, 401, 403})
 _NO_CONTENT = 204
 _WIDTHS = {"state": 2, "county": 3, "tract": 6}
+_MAX_LATITUDE = 90.0
+_MAX_LONGITUDE = 180.0
 
 
 class CensusError(RuntimeError):
@@ -38,12 +40,16 @@ class Tract:
         county: Three-digit county FIPS code.
         tract: Six-digit tract code.
         land_area_m2: Land area, in square meters (m^2).
+        latitude: Internal point latitude, decimal degrees; None when the service gave none.
+        longitude: Internal point longitude, decimal degrees; None when the service gave none.
     """
 
     state: str
     county: str
     tract: str
     land_area_m2: float
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +87,17 @@ def _land_area(value: object) -> float:
     return float(value)  # type: ignore[arg-type]
 
 
+def _coordinate(value: object, limit: float) -> float | None:
+    """A signed decimal-degree coordinate given as text or number, or None when unusable."""
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) and abs(number) <= limit else None
+
+
 def _tract(feature: object, fields: Mapping[str, str]) -> Tract:
     record = cast(dict[str, object], feature) if isinstance(feature, dict) else {}
     attributes = record.get("attributes")
@@ -92,6 +109,8 @@ def _tract(feature: object, fields: Mapping[str, str]) -> Tract:
         county=_padded(row.get(fields["county"]), "county"),
         tract=_padded(row.get(fields["tract"]), "tract"),
         land_area_m2=_land_area(row.get(fields["land_area"])),
+        latitude=_coordinate(row.get(fields["latitude"]), _MAX_LATITUDE),
+        longitude=_coordinate(row.get(fields["longitude"]), _MAX_LONGITUDE),
     )
 
 

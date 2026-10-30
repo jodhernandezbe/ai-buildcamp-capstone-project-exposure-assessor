@@ -34,6 +34,8 @@ def requests_seen(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
             request.url
         ):
             return httpx.Response(200, json=[])  # FRS has no point, and no EIS registration
+        if "AIR%20FUG" in str(request.url):
+            return httpx.Response(200, json=[])  # no fugitive release; `seen` counts stack queries
         seen.append(request)
         return httpx.Response(200, json=ROWS)
 
@@ -84,6 +86,8 @@ def test_docstring_describes_every_returned_field() -> None:
         "unit",
         "operating_hours_per_year",
         "operating_hours_source",
+        "fugitive_release_kg_per_year",
+        "fugitive_reporting_year",
         "naics_subsector",
         "naics_subsector_title",
         "conditions_of_use",

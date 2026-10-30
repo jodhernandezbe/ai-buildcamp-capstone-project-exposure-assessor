@@ -18,7 +18,8 @@ from config.loader import (
 TRI = """
 [tri]
 release_path = "/r/{casrn}/{medium}/{after_year}/{start}:{end}"
-media = ["AIR STACK", " AIR FUGITIVE "]
+media = ["AIR STACK", " WATER "]
+fugitive_medium = " AIR FUG "
 page_size = 50
 recent_years = 7
 publication_lag_years = 1
@@ -62,7 +63,8 @@ def test_tri_explicit_values(tmp_path: Path) -> None:
     assert settings.recent_years == 7
     assert settings.max_listed == 5
     assert settings.fields["doc_ctrl_num"] == "dc"
-    assert settings.media == ("AIR STACK", "AIR FUGITIVE")
+    assert settings.media == ("AIR STACK", "WATER")
+    assert settings.fugitive_medium == "AIR FUG"
     assert (settings.page_size, settings.max_pages) == (50, 3)
     assert settings.east_longitude_states == ("GU",)
     assert settings.facility_id_fields == ("reg", "frs")
@@ -72,6 +74,7 @@ def test_tri_explicit_values(tmp_path: Path) -> None:
 def test_tri_default_file_loads() -> None:
     settings = load_tri_settings()
     assert settings.media == ("AIR STACK",)
+    assert settings.fugitive_medium == "AIR FUG"
     assert set(settings.fields) == set(TRI_FIELD_KEYS)
     assert settings.facility_id_fields[0] == "epa_registry_id"
     assert settings.page_size > 0
@@ -111,8 +114,11 @@ def test_tri_path_needs_each_placeholder(tmp_path: Path, slot: str) -> None:
         ("page_size = 50", "page_size = 1.5", "page_size"),
         ("page_size = 50", "page_size = true", "page_size"),
         ("max_pages = 3", "max_pages = 0", "max_pages"),
-        ('media = ["AIR STACK", " AIR FUGITIVE "]', "media = []", "media"),
-        ('media = ["AIR STACK", " AIR FUGITIVE "]', 'media = [""]', "media"),
+        ('media = ["AIR STACK", " WATER "]', "media = []", "media"),
+        ('media = ["AIR STACK", " WATER "]', 'media = [""]', "media"),
+        ('fugitive_medium = " AIR FUG "', "", "fugitive_medium"),
+        ('fugitive_medium = " AIR FUG "', 'fugitive_medium = ""', "fugitive_medium"),
+        ('fugitive_medium = " AIR FUG "', 'fugitive_medium = "WATER"', "fugitive_medium"),
         ('facility_id_fields = ["reg", "frs"]', "facility_id_fields = []", "facility_id_fields"),
         ('east_longitude_states = ["GU"]', "east_longitude_states = [1]", "east_longitude_states"),
     ],
@@ -172,6 +178,8 @@ def test_pounds_alias_converts_to_grams() -> None:
     aliases = get_unit_settings().aliases
     assert aliases["Pounds"] == "pound"
     assert convert(1.0, "Pounds", "g", aliases) == pytest.approx(453.59237)
+    assert aliases["Grams"] == "gram"
+    assert convert(10.0, "Grams", "kg", aliases) == pytest.approx(0.01)
 
 
 def test_the_window_ends_with_the_newest_year_that_can_be_published(tmp_path: Path) -> None:

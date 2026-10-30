@@ -97,14 +97,42 @@ def _entry(values: list[float]) -> dict[str, float | int]:
     }
 
 
+def _result(
+    number: int, params: StackParameters, hq: float, risk: float | None
+) -> dict[str, object]:
+    """One synthetic stack result with every key of the real one (values are placeholders)."""
+    return {
+        "max_concentration": hq,
+        "max_concentration_1h": hq,
+        "distance_m": 500.0,
+        "stability_class": "D",
+        "wind_speed": 3.0,
+        "effective_release_height": 20.0,
+        "hq": hq,
+        "cancer_risk": risk,
+        "stack_source": params["source"],
+        "add": None,
+        "add_band": None,
+        "add_by_band": {},
+        "representative": {"hq": hq / 2},
+        "warnings": [],
+        "stack_number": number,
+        "stack_height": params["stack_height"],
+        "stack_diameter": params["stack_diameter"],
+        "exit_velocity": params["exit_velocity"],
+        "exit_temperature": params["exit_temperature"],
+    }
+
+
 def exposure_of(
     rate: float, stacks: list[StackParameters], temperature: float, toxicity: Toxicity
 ) -> FacilityExposure:
     """Synthetic results: concentration = HQ, cancer risk = HQ x 1e-6 when there is an IUR."""
     hqs = [hq_of(rate, s["stack_height"] or 1.0, temperature) for s in stacks]
     has_rfc, has_iur = toxicity["rfc"] is not None, toxicity["iur"] is not None
-    results: list[dict[str, object]] = [
-        {"hq": hq, "warnings": [], "representative": {"hq": hq / 2}} for hq in hqs
+    results = [
+        _result(number, params, hq, hq * 1e-6 if has_iur else None)
+        for number, (params, hq) in enumerate(zip(stacks, hqs, strict=True), start=1)
     ]
     hq = _entry(hqs) if hqs and has_rfc else None
     risk = _entry([h * 1e-6 for h in hqs]) if hqs and has_iur else None

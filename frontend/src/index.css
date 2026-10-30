@@ -117,3 +117,23 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* React Flow on the design tokens (light and dark follow the variables above). */
+.chain-flow-canvas {
+  --xy-background-color: transparent;
+  --xy-node-background-color: transparent;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover: none;
+  --xy-minimap-background-color: var(--surface-solid);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--fg) 8%, transparent);
+  --xy-controls-button-background-color: var(--surface-solid);
+  --xy-controls-button-background-color-hover: var(--bg);
+  --xy-controls-button-color: var(--fg);
+  --xy-controls-button-border-color: var(--hairline);
+  --xy-attribution-background-color: transparent;
+}
+.chain-flow-canvas .react-flow__node {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}

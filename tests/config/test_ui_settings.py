@@ -8,9 +8,10 @@ from pathlib import Path
 import pytest
 
 from config.ui import get_ui_settings, load_ui_settings
+from tests.config.graph_text import GRAPH
 from tools.registry import get_all_tools
 
-UI = """
+_BASE = """
 [ui]
 host = "127.0.0.1"
 port = 9000
@@ -107,6 +108,7 @@ output_usd_per_mtok = 3.0
 priced_on = 2026-01-02
 source_url = "https://example.test/pricing"
 """
+UI = _BASE.replace('[ui.pricing."model-a"]', GRAPH + '\n[ui.pricing."model-a"]')
 
 
 def _write(tmp_path: Path, text: str) -> Path:

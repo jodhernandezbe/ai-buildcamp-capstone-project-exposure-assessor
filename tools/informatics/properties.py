@@ -23,7 +23,14 @@ from config.user_values import get_user_value_settings
 from tools.informatics.helpers.comptox import ComptoxLookup
 from tools.informatics.helpers.pubchem import PubchemFallback, PubchemLookup, build_client
 from tools.informatics.helpers.pubchem.extract import FieldValue
-from tools.schemas import ChemicalProperties, PropertyValue, ToxicityDetail, ToxicityValue
+from tools.informatics.helpers.pubchem.limits import empty_limits
+from tools.schemas import (
+    ChemicalProperties,
+    OccupationalLimits,
+    PropertyValue,
+    ToxicityDetail,
+    ToxicityValue,
+)
 from tools.user_values import (
     UserValueInputs,
     entry_id,
@@ -58,6 +65,7 @@ class _Collected:
     details: dict[str, ToxicityDetail]
     warnings: list[str]
     name: str | None = None
+    limits: OccupationalLimits | None = None
 
     @classmethod
     def empty(cls) -> _Collected:
@@ -87,6 +95,7 @@ class _Collected:
             "toxicity_details": self.details,
             "warnings": self.warnings,
             "missing": [],
+            "occupational_limits": self.limits or empty_limits("PubChem limits not looked up"),
         }
 
 
@@ -116,7 +125,9 @@ def _convert_checked(
 Reported = tuple[float, str, str]  # (value, unit as reported, source)
 
 
-def _reported(record: PropertyValue | ToxicityValue | None) -> Reported | None:
+def _reported(
+    record: PropertyValue | ToxicityValue | None,
+) -> Reported | None:
     return (record["value"], record["unit"], record["source"]) if record else None
 
 
@@ -236,6 +247,15 @@ def _complete_from_pubchem(
             out.warnings.append(f"{key}: PubChem could not help: {offered.reasons[key]}")
 
 
+def _add_limits(
+    out: _Collected,
+    cas: str,
+    pubchem: PubchemFallback,
+) -> None:
+    """Add PubChem's occupational limits (ppm needs the molecular weight found above)."""
+    out.limits = pubchem.limits(cas, out.values["molecular_weight"])
+
+
 def lookup_chemical_properties(
     cas_number: str,
     comptox: ComptoxLookup,
@@ -273,29 +293,62 @@ def lookup_chemical_properties(
         out.warnings.append(f"CAS number {cas_number!r} is not valid and could not be resolved")
         return out.to_properties()
     _collect_from_comptox(out, cas, comptox, settings, aliases)
+    answers = inputs or user_value_inputs(None, get_user_value_settings(), aliases)
     if pubchem is not None:
         _complete_from_pubchem(out, cas, pubchem, aliases)
-    answers = inputs or user_value_inputs(None, get_user_value_settings(), aliases)
+        _use_supplied_weight(out, cas, answers)  # before the limits: it converts ppm to mg/m^3
+        _add_limits(out, cas, pubchem)
     return _with_user_values(out.to_properties(), cas, answers)
 
 
-# Benchmarks the risk results use, with what each one is needed for; only these are asked for.
-_ASKED_BENCHMARKS = {
+def _use_supplied_weight(out: _Collected, cas: str, answers: UserValueInputs) -> None:
+    """A molecular weight the user entered, when no source gave one."""
+    if out.values["molecular_weight"] is not None:
+        return
+    key = "molecular_weight"
+    value = supplied_value(key, cas, answers.supplied, answers.settings, answers.aliases)
+    if value is not None:
+        out.values[key] = value
+        out.sources[key] = USER_PROVIDED
+        out.warnings[:] = [w for w in out.warnings if not w.startswith(f"{key}:")]
+
+
+# Values asked for when no source has them, with what each is for. A value the user enters is
+# theirs: used as given and labelled "user-provided". Only chemistry quantities are asked for.
+_ASKED = {
     "rfc": "the inhalation risk: the hazard quotient for this chemical",
     "iur": "the inhalation risk: the cancer risk for this chemical",
+    "oel_twa": "the worker screening: comparing workplace air with an 8-hour occupational limit",
+    "molecular_weight": "the worker screening: converting an occupational limit in ppm to mg/m3",
+    "vapor_pressure": "context for how plausible a fugitive release into workplace air is "
+    "(not used in an equation)",
+    "density": "the chemical's properties (not used in an equation)",
 }
+USER_PROVIDED = "user-provided"
+_OEL = "oel_twa"
 
 
-# `missing` lists the benchmarks that are None and that a result needs, with the accepted units and
+def _limit_is_missing(props: ChemicalProperties) -> bool:
+    return props["occupational_limits"]["oel_twa_mg_m3"] is None
+
+
+def _has(props: ChemicalProperties, quantity: str) -> bool:
+    """Whether the chemical already has this value from a source."""
+    if quantity == _OEL:
+        return not _limit_is_missing(props)
+    return props[quantity] is not None  # type: ignore[literal-required]
+
+
+# `missing` lists the values that are None and that the user may enter, with the accepted units and
 # plausible range of each. It is read by the confirmation node, not by the model, so it is not in
 # the tool description.
 def _with_user_values(
     props: ChemicalProperties, cas: str, answers: UserValueInputs
 ) -> ChemicalProperties:
-    """Fill a missing benchmark from the user's answer, or list it as asked for."""
+    """Fill a missing value from the user's answer, or list it as asked for."""
     missing = []
-    for quantity, purpose in _ASKED_BENCHMARKS.items():
-        if props[quantity] is not None:
+    for quantity, purpose in _ASKED.items():
+        if _has(props, quantity):
             continue
         value = supplied_value(quantity, cas, answers.supplied, answers.settings, answers.aliases)
         if value is not None:
@@ -308,8 +361,13 @@ def _with_user_values(
 
 def _use_supplied(props: ChemicalProperties, quantity: str, value: float) -> None:
     """Set a value the user supplied, labelled as such, and drop its now-false warning."""
-    props[quantity] = value  # type: ignore[literal-required]
-    props["sources"][quantity] = "user-provided"
+    if quantity == _OEL:
+        limits = props["occupational_limits"]
+        limits["oel_twa_mg_m3"], limits["oel_source"] = value, USER_PROVIDED
+        limits["warnings"] = []
+    else:
+        props[quantity] = value  # type: ignore[literal-required]
+    props["sources"][quantity] = USER_PROVIDED
     props["warnings"] = [w for w in props["warnings"] if not w.startswith(f"{quantity}:")]
 
 
@@ -374,6 +432,11 @@ def fetch_chemical_properties(cas_number: str, config: RunnableConfig) -> Chemic
           effect or cancer endpoint, e.g. "leukemia"; null if the source gave none) and
           assessment ("cancer" or "non-cancer")
         - warnings: one message per value that is None
+        - occupational_limits: workplace exposure limits PubChem lists, in mg/m^3:
+          `oel_twa_mg_m3` is the 8-hour time-weighted-average benchmark (OSHA PEL first, then
+          NIOSH REL, then ACGIH TLV) with `oel_source`; `limits` holds each limit found
+          (TWA, STEL, IDLH, PAC-1/2/3) and `reasons` says why another has no value. They
+          are context for worker exposure, never a guess: a null benchmark must be reported.
 
         When you report a toxicity value, say which exposure route it applies to, its
         source and its endpoint from `toxicity_details`.

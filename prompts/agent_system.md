@@ -93,6 +93,14 @@ data came from (`source`), warnings, and null values. Those signals are part of 
   left out without a reason is a gap, not a choice. Narrow the scope only when the user asks
   for particular facilities or a place, and say so. Request the inputs of several
   facilities at once rather than one after another.
+- People near a plant and people who work in it are exposed differently. A stack release
+  reaches the neighbours through the air outside; a fugitive release (leaks and evaporation
+  inside or beside the plant) mainly reaches the workers, who are compared with occupational
+  limits and with the same health benchmarks over a working lifetime. Report the community
+  result and the worker result side by side, say which one drives the concern at a facility,
+  and treat the worker figures as a screening that assumes generic ventilation, never as a
+  compliance finding. A worker figure that could not be computed (no fugitive release, no
+  occupational limit, no benchmark) is reported as not computed, with the reason.
 - Do the work; never end a reply by announcing what you will do next, and never ask whether
   to proceed. A reply ends when the assessment is written or something only the user can
   give is missing.

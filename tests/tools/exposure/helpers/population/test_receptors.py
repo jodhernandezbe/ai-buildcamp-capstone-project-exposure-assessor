@@ -47,16 +47,20 @@ class _Policy:
 
 
 def _tract(
-    county: str = "001", tract: str = "000100", area: float = CIRCLE_1KM_M2
+    county: str = "001",
+    tract: str = "000100",
+    area: float = CIRCLE_1KM_M2,
+    point: tuple[object, object] | None = ("+41.5000000", "-071.2000000"),
 ) -> dict[str, object]:
-    return {
-        "attributes": {
-            F["state"]: "99",
-            F["county"]: county,
-            F["tract"]: tract,
-            F["land_area"]: area,
-        }
+    attributes: dict[str, object] = {
+        F["state"]: "99",
+        F["county"]: county,
+        F["tract"]: tract,
+        F["land_area"]: area,
     }
+    if point is not None:
+        attributes[F["latitude"]], attributes[F["longitude"]] = point
+    return {"attributes": attributes}
 
 
 def _row(
@@ -322,3 +326,69 @@ def test_screening_default_is_labelled() -> None:
     result = screening_default(SETTINGS, 1.0, "why")
     assert result["source"] == DEFAULT_SOURCE
     assert result["warnings"] == ["why; using the screening default (generic, not site-specific)"]
+
+
+def _two_tracts(near: tuple[object, object], far: tuple[object, object]) -> Service:
+    return Service(
+        [_tract(tract="000100", point=far), _tract(tract="000200", point=near)],
+        {
+            "001": [
+                _row("1000", "100", "300", "200", tract="000100"),
+                _row("500", "50", "150", "100", tract="000200"),
+            ]
+        },
+    )
+
+
+def test_tracts_are_listed_nearest_first_with_distance_and_bearing() -> None:
+    result = _two_tracts(("+41.5000000", "-071.1900000"), ("+41.5500000", "-071.2000000")).at()
+    tracts = result.get("tracts", [])
+    assert [t["geoid"] for t in tracts] == ["99001000200", "99001000100"]
+    east, north = tracts
+    assert east["bearing_deg"] == pytest.approx(90.0, abs=0.1)
+    assert north["bearing_deg"] == pytest.approx(0.0, abs=0.1)
+    assert 0.0 < east["distance_m"] < north["distance_m"]
+    assert (east["residents"], north["residents"]) == (500, 1000)
+    assert east["age_distribution"] == {"0-4": 10.0, "5-17": 20.0, "18-64": 50.0, "65+": 20.0}
+    assert east["land_area_km2"] == pytest.approx(CIRCLE_1KM_M2 / 1e6)
+    assert (east["latitude"], east["longitude"]) == (41.5, -71.19)
+
+
+def test_the_pooled_result_does_not_change_when_tracts_are_listed() -> None:
+    result = _two_tracts(("+41.5", "-71.19"), ("+41.55", "-71.2")).at()
+    assert result["total_population"] == 750
+    assert result["warnings"] == []
+
+
+def test_a_tract_without_a_point_is_counted_but_not_listed() -> None:
+    result = _two_tracts(("+41.5", "-71.19"), ("not a number", "-71.2")).at()
+    assert result["total_population"] == 750
+    assert [t["geoid"] for t in result.get("tracts", [])] == ["99001000200"]
+    assert result["warnings"] == [
+        "1 tracts have no internal point and are not listed with a distance"
+    ]
+
+
+def test_a_point_outside_the_globe_is_not_used() -> None:
+    result = _two_tracts(("+41.5", "-71.19"), ("+95.0", "-71.2")).at()
+    assert [t["geoid"] for t in result.get("tracts", [])] == ["99001000200"]
+
+
+def test_the_listing_is_capped_and_says_how_many_were_not_listed() -> None:
+    capped = replace(SETTINGS, max_tracts_listed=1)
+    service = _two_tracts(("+41.5", "-71.19"), ("+41.55", "-71.2"))
+    result = service.at(settings=capped)
+    assert [t["geoid"] for t in result.get("tracts", [])] == ["99001000200"]
+    assert result.get("tracts_not_listed") == 1
+    assert result["total_population"] == 750
+
+
+def test_a_tract_without_residents_is_not_listed() -> None:
+    service = Service([_tract()], {"001": [_row("0", "0", "0", "0")]})
+    assert service.at().get("tracts") == []
+
+
+def test_the_screening_default_lists_no_tracts() -> None:
+    result = Service().at(key="")
+    assert _is_default(result)
+    assert (result.get("tracts", []), result.get("tracts_not_listed")) == ([], 0)

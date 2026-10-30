@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 from api.schemas.workspace import (
     Dose,
     ExposureRanges,
@@ -16,6 +18,7 @@ from api.schemas.workspace import (
     Status,
     Unattributed,
 )
+from api.services.exposure_graph import build_exposure_graph
 from api.services.geometry import circle, sector
 from api.services.projectors.attribution import (
     Finder,
@@ -203,6 +206,8 @@ def _release(record: EmissionPayload, cas: str | None) -> dict[str, object]:
         "emission_rate_g_s": record.emission_rate,
         "operating_hours_per_year": record.operating_hours_per_year,
         "operating_hours_source": record.operating_hours_source,
+        "fugitive_release_kg_per_year": record.fugitive_release_kg_per_year,
+        "fugitive_reporting_year": record.fugitive_reporting_year,
         "conditions_of_use": [c.model_dump() for c in record.conditions_of_use],
         "lifecycle_stages": list(record.lifecycle_stages),
         "conditions_note": record.conditions_note,
@@ -228,6 +233,11 @@ def _shapes(
     }
 
 
+def _model(payload: BaseModel | None) -> dict[str, object] | None:
+    """A payload as the plain fields the contract model validates (None stays None)."""
+    return payload.model_dump() if payload is not None else None
+
+
 def _attached(
     record: EmissionPayload, found: Attachments, ledger: Ledger, rules: WorkspaceRules
 ) -> dict[str, object]:
@@ -242,10 +252,20 @@ def _attached(
         "receptors": _receptors(receptor) if receptor else None,
         "meteorology": meteorology_view(weather, record) if weather else None,
         "exposure": ranges,
+        "occupational_exposure": _model(ledger.worker.get(frs_id)),
+        "operational_profile": _model(ledger.profiles.get(frs_id)),
+        "scenarios": [_model(p) for p in ledger.scenarios.get(frs_id, [])],
         "status": _status(ranges, rules) or _screened_status(screening, rules),
         "screening": screening,
         **_shapes(record, receptor, weather, rules),
     }
+
+
+def _with_graph(facility: Facility, rules: WorkspaceRules) -> Facility:
+    """The facility with its exposure graph, built from its own validated values."""
+    return facility.model_copy(
+        update={"exposure_graph": build_exposure_graph(facility, rules.graph)}
+    )
 
 
 def build_facilities(
@@ -255,12 +275,15 @@ def build_facilities(
     lost: list[Unattributed] = []
     found = _attach(ledger, rules, lost)
     facilities = [
-        Facility.model_validate(
-            {
-                **_identity(record),
-                **_release(record, ledger.facility_cas.get(frs_id)),
-                **_attached(record, found, ledger, rules),
-            }
+        _with_graph(
+            Facility.model_validate(
+                {
+                    **_identity(record),
+                    **_release(record, ledger.facility_cas.get(frs_id)),
+                    **_attached(record, found, ledger, rules),
+                }
+            ),
+            rules,
         )
         for frs_id, record in ledger.facilities.items()
     ]

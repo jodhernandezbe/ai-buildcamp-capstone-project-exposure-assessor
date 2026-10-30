@@ -164,3 +164,49 @@ empty list alone.
 #### Scenario: Emissions tool
 - **WHEN** the emissions inventory tool cannot read TRI
 - **THEN** the note says TRI could not be read and that this is not evidence of no releases
+
+### Requirement: Community, occupational and profile results per facility
+The system SHALL return for every fully assessed or worst-case-only facility its community result (the existing ambient result `exposure`, unchanged in name and value), its `occupational_exposure` and its `operational_profile`. Screening-out and tier selection SHALL remain driven by the community bound only: a facility is not screened out or kept because of its occupational result, and the occupational result SHALL be computed for every facility the assessment evaluates, including those kept at worst case only. The occupational fields SHALL appear in the program's complete result; the text the model reads SHALL carry each facility's tier and ratio in one line.
+
+#### Scenario: Chemical looked up once
+- **WHEN** the assessment is run
+- **THEN** the limits and vapor pressure come from one lookup of the chemical, made with the values the user entered in the thread, also when the benchmarks were given
+
+#### Scenario: Lookup cannot be made
+- **WHEN** benchmarks are given and the lookup cannot be made
+- **THEN** the assessment goes on, the worker result has no limit and the warnings say why
+
+#### Scenario: Three results
+- **WHEN** a facility is assessed
+- **THEN** it carries community, occupational and profile results
+
+#### Scenario: Screening unchanged
+- **WHEN** a facility's community bound would screen it out
+- **THEN** it is still screened out and the occupational result is not computed for it
+
+#### Scenario: Worst-case-only facility
+- **WHEN** a facility is kept at worst case only
+- **THEN** its occupational result is still computed and its community result is the worst case
+
+#### Scenario: One request
+- **WHEN** many facilities are assessed
+- **THEN** no request per facility is made for the occupational result beyond the single PubChem record of the chemical
+
+### Requirement: Worst-case scenarios per assessed facility
+The assessment SHALL return for every fully assessed facility its worst-case scenarios (one per registered pathway and quantity that has a value, today the community hazard quotient and cancer risk and the worker results) with the receptors of each, as defined by the worst-case scenario capability, and SHALL identify the driving facility of each. A scenario SHALL be built from the values the assessment already holds (the per-stack results, the facility's population tracts and the worker result) and SHALL NOT trigger another request. A worst-case-only facility SHALL carry the scenario its worst case supports, without receptors. The text the model reads SHALL name the driving facility and stack of each result in one line and SHALL NOT list the receptors.
+
+#### Scenario: Full facility
+- **WHEN** a facility is fully assessed
+- **THEN** it carries its scenarios, each with the stack, conditions and ranked receptors
+
+#### Scenario: Worst case only
+- **WHEN** a facility is kept at worst case only
+- **THEN** its scenario has the stack and conditions of the worst case and says receptors were not evaluated
+
+#### Scenario: No extra requests
+- **WHEN** the scenarios are built
+- **THEN** no population or exposure request is made beyond the ones the assessment makes
+
+#### Scenario: Driver in the text
+- **WHEN** several facilities are assessed
+- **THEN** the text the model reads names which facility and stack drive each result

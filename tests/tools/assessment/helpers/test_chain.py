@@ -102,3 +102,14 @@ def test_a_setup_error_is_raised() -> None:
 
     with pytest.raises(RuntimeError, match="misconfigured"):
         in_pool(boom, [1, 2], 2)
+
+
+def test_worst_case_only_facility_still_has_a_worker_result_and_profile() -> None:
+    refined = refine_one(
+        record("A"), None, TOXICITY, FakeSteps(nei_stacks={"A": [stack(10.0)]}).steps(), SETTINGS
+    )
+    item = worst_case_only(refined, None)
+    assert item["level"] == "worst case only"
+    assert item["occupational_exposure"]["risk_tier"] is None  # no workplace information given
+    assert "not given" in " ".join(item["occupational_exposure"]["warnings"])
+    assert item["operational_profile"]["annual_operating_hours"] == 8760.0

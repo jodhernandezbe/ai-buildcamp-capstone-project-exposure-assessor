@@ -51,14 +51,22 @@ describe("provenance card", () => {
         ...EMPTY_WORKSPACE.chemical,
         cas_number: "1-1-1",
         molecular_weight_g_mol: 50,
+        vapor_pressure_mmhg: 7.5,
+        density_g_cm3: 0.88,
+        oel_twa_mg_m3: 3.2,
         rfc_mg_m3: 0.5,
-        sources: { rfc: "IRIS" },
+        sources: { rfc: "IRIS", vapor_pressure: "CompTox (experimental)", oel_twa: "user-provided" },
       },
     });
     render(<EpaOverviewRibbon workspace={state} digits={2} />);
     const chem = within(card("Chemical & provenance"));
     expect(chem.getByText("50 g/mol")).toBeInTheDocument();
     expect(chem.getByText("0.5 mg/m³")).toBeInTheDocument();
+    expect(chem.getByText("7.5 mmHg")).toBeInTheDocument();
+    expect(chem.getByText("0.88 g/cm³")).toBeInTheDocument();
+    expect(chem.getByText("3.2 mg/m³")).toBeInTheDocument();
+    expect(chem.getByText(/Occupational limit \(8-hr\) · user-provided/)).toBeInTheDocument();
+    expect(chem.getByText(/Vapor pressure · CompTox \(experimental\)/)).toBeInTheDocument();
     expect(chem.getByText(/Inhalation RfC · IRIS/)).toBeInTheDocument();
     expect(chem.getByText("not reported")).toBeInTheDocument(); // the unit risk
   });

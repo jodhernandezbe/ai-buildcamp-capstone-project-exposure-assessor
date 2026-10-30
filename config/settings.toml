@@ -194,8 +194,12 @@ cache_seconds = 86400
 # indicator in the URL instead gives the same rows but was about 3 times slower.
 [tri]
 release_path = "/tri_reporting_form/tri_chem_info/tri_facility/tri_release_qty/tri_submission_naics/tri_chem_activity/cas_registry_number/{casrn}/environmental_medium/{medium}/reporting_year/>/{after_year}/rows/{start}:{end}/JSON"
-# Media to keep; one query per medium. Add e.g. "AIR FUGITIVE" here to return it as well.
+# Media to keep as facilities; one query per medium.
 media = ["AIR STACK"]
+# Fugitive air releases evaporate inside or beside the plant and mainly expose its workers. They are
+# read in one more query and folded into the stack record of the same facility (never listed as a
+# facility of their own); the worker screening uses them.
+fugitive_medium = "AIR FUG"
 # A request is ~11 s for 1000 rows (~5 MB); per-request overhead dominates, so pages are large.
 page_size = 1000
 max_pages = 40
@@ -448,6 +452,8 @@ default_radius_km = 1.609
 min_radius_km = 0.1
 max_radius_km = 50.0
 max_counties = 25
+# Tracts listed with their distance and bearing (the nearest first); the pooled count uses all.
+max_tracts_listed = 50
 delay_seconds = 0.2
 timeout_seconds = 60.0
 max_retries = 2
@@ -459,6 +465,9 @@ state = "STATE"
 county = "COUNTY"
 tract = "TRACT"
 land_area = "AREALAND"
+# Internal point of the tract (signed decimal degrees as text); distance and bearing are measured to it.
+latitude = "INTPTLAT"
+longitude = "INTPTLON"
 
 # Meaning -> ACS DP05 variable (labels checked for the 2023 vintage: total population, under 5
 # years, under 18 years, 65 years and over).
@@ -758,6 +767,80 @@ enabled = true
 path = ".cache/pubchem/responses.sqlite"
 ttl_days = 30
 
+# Occupational exposure limits, read from the same PUG View record (no extra request). A value
+# counts when the entry's `Name` matches `name_pattern`, or when one of the free-text
+# `text_patterns` matches its text; each pattern has the named groups `value` and `unit`. A
+# value in ppm becomes mg/m^3 as ppm x molecular weight / molar volume (24.45 L/mol at 25 degC
+# and 1 atm). `twa_priority` is the order in which the 8-hour TWA benchmark is chosen.
+[pubchem.limits]
+molar_volume_l_per_mol = 24.45
+twa_priority = ["osha_pel", "niosh_rel", "acgih_tlv"]
+# Unit spelling (case and spaces ignored) -> "ppm" or a unit Pint can read.
+[pubchem.limits.units]
+"ppm" = "ppm"
+"mg/m3" = "mg/m^3"
+"mg/m^3" = "mg/m^3"
+"mg/m\u00b3" = "mg/m^3"
+"mg/cum" = "mg/m^3"
+"mg/cu.m" = "mg/m^3"
+"ug/m3" = "ug/m^3"
+
+[[pubchem.limits.items]]
+key = "osha_pel"
+programme = "OSHA PEL-TWA"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Permissible Exposure Limit (PEL)"]
+name_pattern = "^PEL-TWA"
+
+[[pubchem.limits.items]]
+key = "niosh_rel"
+programme = "NIOSH REL-TWA"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Recommended Exposure Limit (REL)"]
+name_pattern = "^REL-TWA"
+
+[[pubchem.limits.items]]
+key = "acgih_tlv"
+programme = "ACGIH TLV-TWA"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Threshold Limit Values (TLV)"]
+text_patterns = [
+    "(?i)\\bTWA\\)?\\s*:?\\s*(?P<value>[0-9.]+)\\s*(?P<unit>ppm|mg/m3)\\b",
+    "(?i)^(?P<value>[0-9.]+)\\s*(?P<unit>ppm|mg/m3)\\s+as\\s+TWA\\b",
+]
+
+[[pubchem.limits.items]]
+key = "acgih_tlv_stel"
+programme = "ACGIH TLV-STEL"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Threshold Limit Values (TLV)"]
+text_patterns = [
+    "(?i)\\bSTEL\\)?\\s*:?\\s*(?P<value>[0-9.]+)\\s*(?P<unit>ppm|mg/m3)\\b",
+    "(?i)(?P<value>[0-9.]+)\\s*(?P<unit>ppm|mg/m3)\\s+as\\s+STEL\\b",
+]
+
+[[pubchem.limits.items]]
+key = "niosh_idlh"
+programme = "NIOSH IDLH"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Immediately Dangerous to Life or Health (IDLH)"]
+text_patterns = [
+    "(?i)^(?:Ca\\s*)?\\[?(?P<value>[0-9.]+)\\s*\\[?(?P<unit>ppm|mg/m3)\\]?\\]?\\s*(?:;.*)?$",
+]
+
+[[pubchem.limits.items]]
+key = "pac_1"
+programme = "PAC-1"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Protective Action Criteria (PAC)"]
+name_pattern = "^PAC-1$"
+
+[[pubchem.limits.items]]
+key = "pac_2"
+programme = "PAC-2"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Protective Action Criteria (PAC)"]
+name_pattern = "^PAC-2$"
+
+[[pubchem.limits.items]]
+key = "pac_3"
+programme = "PAC-3"
+heading = ["Safety and Hazards", "Exposure Control and Personal Protection", "Protective Action Criteria (PAC)"]
+name_pattern = "^PAC-3$"
+
 # Result fields PubChem is asked for. `key` is the field of the tool result (it must be one
 # CompTox also fills, and `target_unit` must match CompTox's); `heading` is the path of PUG
 # View headings holding the statements; a statement that names a temperature is used only
@@ -797,6 +880,7 @@ allow_missing_temperature = true
 "(mg/m3)-1" = "1/(mg/m^3)"
 "(mg/L)-1" = "1/(mg/L)"
 "Pounds" = "pound"
+"Grams" = "gram"  # TRI reports dioxin and dioxin-like compounds in grams
 # PubChem spellings.
 "mm Hg" = "mmHg"
 "g/cu cm" = "g/cm^3"
@@ -1014,6 +1098,92 @@ risk = "Risk characterization"
 uncertainties = "Uncertainties and limitations"
 assessor = "Assessor summary"
 
+# Fixed text and units of the exposure chain graph (api/services/exposure_graph/). Every value in the
+# graph comes from a tool result; this table only names and labels them.
+[ui.exposure_graph]
+source = "Source facility"
+
+[ui.exposure_graph.lanes]
+community = "Community, outdoor air"
+worker = "Worker, indoor air"
+
+[ui.exposure_graph.nodes]
+stack = "Stack {number}"
+stack_release = "Stack release"
+outdoor_air = "Outdoor ambient air"
+outdoor_inhalation = "Inhalation of outdoor air"
+age_band = "Residents aged {band}"
+residents = "Residents"
+community_endpoint = "Hazard quotient and cancer risk"
+fugitive_release = "Fugitive release"
+indoor_air = "Indoor workplace air"
+worker_inhalation = "Inhalation of breathing-zone air"
+shift_worker = "Shift worker, 8-hour average"
+worker_endpoint = "Ratio to the occupational limit"
+
+[ui.exposure_graph.facts]
+chemical = "Chemical"
+cas_number = "CAS number"
+location = "Location"
+industry = "Industry"
+condition_of_use = "Condition of use"
+life_cycle_stage = "Life cycle stage"
+stack_tier = "Stack parameters"
+process = "Process (SCC)"
+stability_class = "Atmospheric stability class"
+weather_source = "Weather"
+population_source = "Population"
+ventilation = "Ventilation scenario"
+benchmark = "Occupational limit source"
+schedule_source = "Operating schedule"
+assumptions = "Assumptions"
+tier = "Risk tier"
+
+[ui.exposure_graph.tiers]
+acceptable = "Acceptable"
+elevated = "Elevated"
+exceedance = "Exceedance"
+
+[ui.exposure_graph.variants]
+worst_case = "worst case"
+baseline = "baseline ventilation"
+
+[ui.exposure_graph.reasons]
+community = "no community result yet"
+worker = "no occupational result yet"
+missing = "not reported by the tool"
+
+# label and unit of each quantity; an empty unit means unitless, and the annual release takes its
+# unit from the inventory record.
+[ui.exposure_graph.quantities]
+total_release = { label = "Annual release", unit = "" }
+emission_rate = { label = "Emission rate", unit = "g/s" }
+operating_hours = { label = "Operating hours", unit = "h/yr" }
+stack_height = { label = "Stack height", unit = "m" }
+stack_diameter = { label = "Stack diameter", unit = "m" }
+exit_velocity = { label = "Exit velocity", unit = "m/s" }
+exit_temperature = { label = "Exit temperature", unit = "K" }
+stack_peak = { label = "Peak concentration", unit = "µg/m³" }
+peak_distance = { label = "Distance of the peak", unit = "m" }
+peak_concentration = { label = "Peak concentration", unit = "µg/m³" }
+wind_speed = { label = "Wind speed", unit = "m/s" }
+residents = { label = "Residents", unit = "" }
+radius = { label = "Radius", unit = "km" }
+band_share = { label = "Share of residents", unit = "%" }
+band_dose = { label = "Inhalation dose", unit = "mg/(kg·day)" }
+hq = { label = "Hazard quotient", unit = "" }
+cancer_risk = { label = "Lifetime cancer risk", unit = "" }
+fugitive_release = { label = "Fugitive release", unit = "kg/yr" }
+ventilation_rate = { label = "Ventilation rate", unit = "m³/s" }
+mixing_factor = { label = "Mixing factor", unit = "" }
+workplace_concentration = { label = "Workplace concentration", unit = "mg/m³" }
+twa = { label = "8-hour TWA", unit = "mg/m³" }
+oel = { label = "Occupational limit", unit = "mg/m³" }
+oel_ratio = { label = "Ratio to the limit", unit = "" }
+operating_days = { label = "Operating days", unit = "days/yr" }
+hours_per_day = { label = "Hours per day", unit = "h/day" }
+vapor_pressure = { label = "Vapor pressure", unit = "mmHg" }
+
 # Token prices per chat model, USD per million tokens, with the date and page they were taken
 # from. A model without an entry is shown as "unpriced"; never fill these from memory.
 [ui.pricing]
@@ -1078,6 +1248,9 @@ max_digits = 6
 days_per_year = 365
 # Rows above this many hours per week (hours in a week) are not plausible and are ignored.
 max_hours_per_week = 168
+# QPC gives hours per week, not days. A plant's days per week is derived as the hours per week over
+# this working-day length, rounded up and at most 7 (40 h -> 5 days of 8 h; 168 h -> 7 days of 24 h).
+shift_hours_per_day = 8
 
 # TSCA conditions of use and life cycle stages of a facility (tools/emissions/helpers/inventory/
 # conditions.py). The TRI release query joins `tri_chem_activity` (one row per submission with a
@@ -1125,6 +1298,8 @@ ancillary = "3.3c"
 molecular_weight = ["g/mol"]
 vapor_pressure = ["mmHg", "torr", "Pa", "kPa", "hPa", "atm"]
 density = ["g/cm^3", "kg/m^3"]
+# The 8-hour time-weighted-average occupational exposure limit (OSHA PEL, NIOSH REL or ACGIH TLV).
+oel_twa = ["mg/m^3", "ug/m^3"]
 rfd = ["mg/(kg*day)"]
 rfc = ["mg/m^3", "ug/m^3"]
 sf = ["1/(mg/(kg*day))"]
@@ -1136,7 +1311,181 @@ iur = ["1/(ug/m^3)", "1/(mg/m^3)"]
 molecular_weight = [1.0, 2000.0]
 vapor_pressure = [1e-9, 10000.0]
 density = [0.1, 25.0]
+oel_twa = [1e-6, 100000.0]
 rfd = [1e-8, 10.0]
 rfc = [1e-8, 1000.0]
 sf = [1e-6, 1000.0]
 iur = [1e-9, 1000.0]
+
+# Worker (occupational) screening: the EPA ChemSTEER mass-balance box model and RAGS Part F style
+# worker dosimetry (models/exposure/occupational.py). Ventilation is a screening default for a
+# manufacturing room, not the plant's; the worst case is an enclosed zone. A worker breathes
+# `shift_inhalation_m3` in a shift against `daily_inhalation_m3` in 24 h (the resident rate).
+[occupational]
+shift_inhalation_m3 = 10.0
+daily_inhalation_m3 = 20.0
+worker_days_per_year = 250.0
+tenure_years = 40.0
+lifetime_years = 78.0
+twa_hours = 8.0
+# Vapor pressure at or below which a large fugitive release into workplace air is less
+# plausible; used only for a warning, never in an equation.
+low_volatility_mmhg = 0.001
+
+# Risk tiers: "exceedance" above `exceedance_*`, otherwise "elevated" above `elevated_*`.
+[occupational.thresholds]
+exceedance_ratio = 1.0
+elevated_ratio = 0.1
+exceedance_hq = 1.0
+elevated_hq = 0.1
+exceedance_cancer_risk = 1e-4
+elevated_cancer_risk = 1e-6
+
+[occupational.ventilation.baseline]
+label = "Baseline manufacturing ventilation"
+rate_ft3_per_min = 3000.0
+mixing_factor = 0.5
+
+[occupational.ventilation.worst_case]
+label = "Worst case, enclosed zone"
+rate_ft3_per_min = 500.0
+mixing_factor = 0.1
+
+# CDR industrial sector (IS1 to IS48) of a facility, from its primary NAICS code
+# (tools/emissions/helpers/inventory/sector.py). The file is EPA's own crosswalk, Table 5 of the
+# IUR Technical Support Document "Replacement of 5-digit NAICS Codes with Industrial Sector (IS)
+# Codes" (2009; NAICS 2007), and holds only the rows that table states; a code is matched most
+# specific prefix first, and a code with no row has no sector (it is never inferred).
+[cdr_sector]
+crosswalk_path = "data/cdr_naics_industrial_sector.csv"
+prefix_column = "naics_prefix"
+code_column = "is_code"
+title_column = "is_title"
+edition_column = "naics_edition"
+min_digits = 2
+max_digits = 6
+
+# Worst-case scenarios: the combination of factors behind the high-end value of a result, in one
+# shape for every exposure pathway (tools/assessment/helpers/scenarios/). A pathway is one module
+# there; its name, its quantities and the labels and units of its factors are the text below.
+# A receptor is listed as most affected when its concentration under the scenario's own
+# configuration is at least `receptor_fraction` of the scenario's maximum, up to `max_receptors`.
+[scenario]
+receptor_fraction = 0.5
+max_receptors = 10
+
+[scenario.pathways]
+community_inhalation = "Outdoor Air → Inhalation → General Population"
+worker_inhalation = "Indoor Air → Inhalation → Worker"
+
+[scenario.quantities]
+hq = "Hazard quotient"
+cancer_risk = "Lifetime cancer risk"
+oel_ratio = "8-hour average over the occupational limit"
+
+# Factor key -> group (source, release, conditions, receptor_model), label and unit. A factor's
+# value and its source always come from a tool result; a factor with no value says why.
+[scenario.factors.stack_number]
+group = "source"
+label = "Stack"
+unit = ""
+[scenario.factors.stack_source]
+group = "source"
+label = "Stack parameters from"
+unit = ""
+[scenario.factors.stack_height]
+group = "source"
+label = "Stack height"
+unit = "m"
+[scenario.factors.stack_diameter]
+group = "source"
+label = "Stack diameter"
+unit = "m"
+[scenario.factors.exit_velocity]
+group = "source"
+label = "Exit velocity"
+unit = "m/s"
+[scenario.factors.exit_temperature]
+group = "source"
+label = "Exit temperature"
+unit = "K"
+[scenario.factors.annual_release]
+group = "release"
+label = "Reported release"
+unit = ""
+[scenario.factors.emission_rate]
+group = "release"
+label = "Emission rate"
+unit = "g/s"
+[scenario.factors.operating_hours]
+group = "release"
+label = "Operating hours"
+unit = "h/yr"
+[scenario.factors.stability_class]
+group = "conditions"
+label = "Stability class"
+unit = ""
+[scenario.factors.wind_speed]
+group = "conditions"
+label = "Wind speed at 10 m"
+unit = "m/s"
+[scenario.factors.distance]
+group = "conditions"
+label = "Downwind distance of the maximum"
+unit = "m"
+[scenario.factors.effective_release_height]
+group = "conditions"
+label = "Effective release height"
+unit = "m"
+[scenario.factors.exposure_hours_per_day]
+group = "receptor_model"
+label = "Exposure time"
+unit = "h/day"
+[scenario.factors.exposure_days_per_year]
+group = "receptor_model"
+label = "Exposure frequency"
+unit = "days/yr"
+[scenario.factors.exposure_years]
+group = "receptor_model"
+label = "Exposure duration"
+unit = "yr"
+[scenario.factors.fugitive_release]
+group = "release"
+label = "Fugitive air release"
+unit = "kg/yr"
+[scenario.factors.worker_operating_days]
+group = "release"
+label = "Operating days"
+unit = "days/yr"
+[scenario.factors.shift_hours]
+group = "release"
+label = "Hours per operating day"
+unit = "h/day"
+[scenario.factors.ventilation]
+group = "conditions"
+label = "Room ventilation"
+unit = "m^3/s"
+[scenario.factors.mixing_factor]
+group = "conditions"
+label = "Mixing factor"
+unit = ""
+[scenario.factors.workplace_concentration]
+group = "conditions"
+label = "Workplace concentration while operating"
+unit = "mg/m^3"
+[scenario.factors.twa_concentration]
+group = "conditions"
+label = "8-hour average"
+unit = "mg/m^3"
+[scenario.factors.occupational_limit]
+group = "receptor_model"
+label = "Occupational limit"
+unit = "mg/m^3"
+[scenario.factors.worker_days_per_year]
+group = "receptor_model"
+label = "Working days per year"
+unit = "days/yr"
+[scenario.factors.tenure_years]
+group = "receptor_model"
+label = "Years of work"
+unit = "yr"

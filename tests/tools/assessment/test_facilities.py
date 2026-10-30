@@ -41,7 +41,7 @@ def _offline(monkeypatch: pytest.MonkeyPatch) -> FakeSteps:
 
     class Properties:
         @staticmethod
-        def invoke(args: dict[str, str]) -> dict[str, object]:
+        def invoke(args: dict[str, str], config: object = None) -> dict[str, object]:
             PROPERTIES_CALLS.append(args["cas_number"])
             warnings = ["iur: not found in CompTox", "density: not found"]
             return {**BENCHMARKS, "warnings": warnings}
@@ -111,11 +111,28 @@ def test_the_chemicals_benchmarks_are_looked_up_and_only_their_warnings_kept() -
     assert PROPERTIES_CALLS == ["50-00-0"]
 
 
-def test_given_benchmarks_are_used_without_a_lookup() -> None:
+def test_given_benchmarks_are_used_and_the_chemical_is_still_looked_up_for_its_limits() -> None:
     given = Toxicity(rfc=2.0, iur=1e-6)
     view, _ = _run(toxicity=given)
     assert view["toxicity"] == given and view["toxicity_source"] == "given"
-    assert PROPERTIES_CALLS == []
+    assert PROPERTIES_CALLS == ["50-00-0"]  # for the worker screening, not for the benchmarks
+
+
+def test_a_lookup_that_cannot_be_made_does_not_stop_an_assessment_with_given_benchmarks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Down:
+        @staticmethod
+        def invoke(args: dict[str, str], config: object = None) -> dict[str, object]:
+            raise RuntimeError("the CompTox key is not set")
+
+    monkeypatch.setattr(facilities, "fetch_chemical_properties", Down)
+    given = Toxicity(rfc=2.0, iur=1e-6)
+    view, artifact = _run(toxicity=given)
+    assert view["assessed"] > 0 and artifact["assessed"]
+    assert any("could not be looked up" in w for w in view["warnings"])
+    worker = artifact["assessed"][0]["occupational_exposure"]
+    assert worker["oel_twa_mg_m3"] is None and worker["rfc"] == 2.0
 
 
 def test_without_any_benchmark_nothing_is_screened_out_and_every_warning_says_why() -> None:
@@ -197,7 +214,7 @@ def test_an_invalid_cas_number_assesses_nothing() -> None:
     view, artifact = run_assessment(
         "not-a-cas", None, (None, None), None, None, facilities.default_steps()
     )
-    assert artifact == {"assessed": [], "screened_out": [], "not_assessed": []}
+    assert artifact == {"assessed": [], "screened_out": [], "not_assessed": [], "drivers": []}
     assert view["assessed"] == 0 and "not a valid CAS" in view["warnings"][0]
     assert PROPERTIES_CALLS == []
 
@@ -347,7 +364,7 @@ def _hybrid(in_domain: bool) -> dict[str, object]:
 def _no_own_benchmark(monkeypatch: pytest.MonkeyPatch, read: _Read) -> None:
     class Properties:
         @staticmethod
-        def invoke(args: dict[str, str]) -> dict[str, object]:
+        def invoke(args: dict[str, str], config: object = None) -> dict[str, object]:
             if args["cas_number"] == ANALOGUE:
                 return {"rfc": 0.2, "iur": None, "warnings": []}
             return {"rfc": None, "iur": None, "warnings": ["rfc: not found"]}
@@ -433,3 +450,58 @@ def test_a_failed_category_read_is_not_completed_either(
     )
     assert "not completed" in " ".join(view["warnings"])
     assert view["assessed"] == 0 and artifact["screened_out"] == []
+
+
+def test_every_assessed_facility_carries_community_worker_and_profile_results() -> None:
+    view, artifact = _run()
+    assert artifact["assessed"]
+    for item in artifact["assessed"]:
+        assert item["exposure"]["results"] is not None  # the community result is unchanged
+        assert item["occupational_exposure"]["baseline"]["label"]
+        assert item["operational_profile"]["annual_operating_hours"] == 8760.0
+    assert all("worker_risk_tier" in f for f in view["facilities"])
+    assert all("worker_oel_ratio" in f for f in view["facilities"])
+
+
+def test_screened_out_facilities_get_no_worker_result() -> None:
+    _, artifact = _run()
+    assert {s["record"]["frs_id"] for s in artifact["screened_out"]}.isdisjoint(
+        {a["record"]["frs_id"] for a in artifact["assessed"]}
+    )
+
+
+def test_without_limits_the_worker_result_says_so() -> None:
+    _, artifact = _run(toxicity=Toxicity(rfc=2.0, iur=1e-6))
+    warnings = " ".join(artifact["assessed"][0]["occupational_exposure"]["warnings"])
+    assert "no 8-hour occupational limit" in warnings
+
+
+def test_the_chemicals_limits_and_vapor_pressure_reach_the_worker_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limits: dict[str, object] = {
+        "oel_twa_mg_m3": 3.0,
+        "oel_source": "OSHA PEL-TWA (PubChem)",
+        "limits": {},
+        "reasons": {},
+        "warnings": [],
+    }
+
+    class Properties:
+        @staticmethod
+        def invoke(args: dict[str, str], config: object = None) -> dict[str, object]:
+            return {
+                "rfc": 0.5,
+                "iur": None,
+                "warnings": [],
+                "vapor_pressure": 7.0,
+                "sources": {"vapor_pressure": "experimental"},
+                "occupational_limits": limits,
+            }
+
+    monkeypatch.setattr(facilities, "fetch_chemical_properties", Properties)
+    _, artifact = _run()
+    worker = artifact["assessed"][0]["occupational_exposure"]
+    assert worker["oel_twa_mg_m3"] == 3.0 and worker["oel_source"] == "OSHA PEL-TWA (PubChem)"
+    assert worker["vapor_pressure_mmhg"] == 7.0
+    assert worker["vapor_pressure_source"] == "CompTox (experimental)"

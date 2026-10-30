@@ -68,3 +68,13 @@ def test_coordinates_are_in_the_expected_hemisphere(records: list[EmissionRecord
             assert r["longitude"] > 0
         else:
             assert -180 < r["longitude"] < -60
+
+
+def test_fugitive_release_is_folded_into_facilities(records: list[EmissionRecord]) -> None:
+    folded = [
+        (r["fugitive_release_kg_per_year"], r["fugitive_reporting_year"])
+        for r in records
+        if r["fugitive_release_kg_per_year"] is not None
+    ]
+    assert len(folded) > 100
+    assert all(kilograms >= 0.0 and year is not None for kilograms, year in folded)

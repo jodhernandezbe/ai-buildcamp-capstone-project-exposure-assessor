@@ -25,6 +25,8 @@ def emission_record(
         "emission_rate": rate,
         "operating_hours_per_year": 8760.0,
         "operating_hours_source": "default 8760 h/yr (configured)",
+        "fugitive_release_kg_per_year": None,
+        "fugitive_reporting_year": None,
         "conditions_of_use": [],
         "lifecycle_stages": [],
         "conditions_note": None,

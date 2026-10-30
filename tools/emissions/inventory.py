@@ -166,6 +166,10 @@ def query_emissions_inventory(
             8760 (continuous operation, a conservative screening assumption)
           - operating_hours_source: says which of the two it is, and for a survey figure the
             release, the survey's NAICS code and its plant hours per week
+          - fugitive_release_kg_per_year: the facility's TRI fugitive air release (evaporation
+            and leaks inside or beside the plant, which mainly expose its workers rather than
+            the neighbours), kg per year, as `fugitive_reporting_year` reported it; null when
+            TRI has none. It is not part of `total_release` or `emission_rate`
           - conditions_of_use: the TSCA conditions of use implied by what the facility told TRI
             it does with the chemical (produces, imports, uses it as a reactant, in a
             formulation, in articles, as a processing aid, ...). A facility can have several; each

@@ -50,6 +50,15 @@ export function ReadAcrossCard({ chemical, digits }: { chemical: Chemical; digit
         <Metric label="Molecular weight">
           {formatWithUnit(chemical.molecular_weight_g_mol, "g/mol", digits)}
         </Metric>
+        <Metric label={`Vapor pressure${sources.vapor_pressure ? ` · ${sources.vapor_pressure}` : ""}`}>
+          {formatWithUnit(chemical.vapor_pressure_mmhg, "mmHg", digits)}
+        </Metric>
+        <Metric label={`Density${sources.density ? ` · ${sources.density}` : ""}`}>
+          {formatWithUnit(chemical.density_g_cm3, "g/cm³", digits)}
+        </Metric>
+        <Metric label={`Occupational limit (8-hr)${sources.oel_twa ? ` · ${sources.oel_twa}` : ""}`}>
+          {formatWithUnit(chemical.oel_twa_mg_m3, "mg/m³", digits)}
+        </Metric>
         <Metric label={`Inhalation RfC${sources.rfc ? ` · ${sources.rfc}` : ""}`}>
           {formatWithUnit(chemical.rfc_mg_m3, "mg/m³", digits)}
         </Metric>

@@ -3,6 +3,8 @@ import { DemographicsCard } from "./DemographicsCard";
 import { MeteorologyCard } from "./MeteorologyCard";
 import { ReadAcrossCard } from "./ReadAcrossCard";
 import { RiskMetricCard } from "./RiskMetricCard";
+import { WorkerRiskCard } from "./WorkerRiskCard";
+import { WorstCaseSection } from "./WorstCaseSection";
 
 /** The dose of the facility whose receptors the ribbon shows. */
 function selectedDose(workspace: WorkspaceState) {
@@ -20,7 +22,11 @@ export function EpaOverviewRibbon({ workspace, digits }: { workspace: WorkspaceS
       aria-label="Executive summary"
       role="group"
     >
+      <div className="@2xl:col-span-2">
+        <WorstCaseSection workspace={workspace} digits={digits} />
+      </div>
       <RiskMetricCard risk={workspace.risk} digits={digits} />
+      <WorkerRiskCard risk={workspace.worker_risk} digits={digits} />
       <ReadAcrossCard chemical={workspace.chemical} digits={digits} />
       <DemographicsCard receptors={workspace.receptors} dose={selectedDose(workspace)} digits={digits} />
       <MeteorologyCard weather={workspace.meteorology} digits={digits} />

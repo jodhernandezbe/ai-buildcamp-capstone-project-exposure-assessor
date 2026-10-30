@@ -6,8 +6,12 @@ export const SOURCES = {
   facilities: "facilities",
   buffers: "buffers",
   sectors: "sectors",
+  receptors: "receptors",
 } as const;
 export const MARKER_LAYER = "facility-markers";
+export const WORKER_RING_LAYER = "facility-worker-rings";
+export const DRIVER_RING_LAYER = "facility-driver-rings";
+export const RECEPTOR_LAYER = "scenario-receptors";
 
 export interface Palette {
   ok: string;
@@ -92,12 +96,72 @@ function addMarkerLayer(map: MapLibreMap, palette: Palette): void {
   });
 }
 
+/** A ring just outside each marker, coloured by the worker tier (no ring while it is not computed). */
+function addWorkerRingLayer(map: MapLibreMap, palette: Palette): void {
+  map.addLayer({
+    id: WORKER_RING_LAYER,
+    type: "circle",
+    source: SOURCES.facilities,
+    paint: {
+      "circle-radius": ["+", ["get", "radius_px"], 3],
+      "circle-opacity": 0,
+      "circle-stroke-width": ["match", ["get", "worker_tier"], "none", 0, 2.5],
+      "circle-stroke-color": [
+        "match",
+        ["get", "worker_tier"],
+        "acceptable",
+        palette.ok,
+        "elevated",
+        palette.warn,
+        "exceedance",
+        palette.bad,
+        palette.neutral,
+      ],
+    },
+  });
+}
+
+/** An outer ring on the facilities that have the highest value of some result. */
+function addDriverRingLayer(map: MapLibreMap, palette: Palette): void {
+  map.addLayer({
+    id: DRIVER_RING_LAYER,
+    type: "circle",
+    source: SOURCES.facilities,
+    filter: ["==", ["get", "driver"], true],
+    paint: {
+      "circle-radius": ["+", ["get", "radius_px"], 8],
+      "circle-opacity": 0,
+      "circle-stroke-width": 2,
+      "circle-stroke-color": palette.accent,
+    },
+  });
+}
+
+/** The most affected tracts of the pinned driving facility; stronger where more of the maximum. */
+function addReceptorLayer(map: MapLibreMap, palette: Palette): void {
+  map.addLayer({
+    id: RECEPTOR_LAYER,
+    type: "circle",
+    source: SOURCES.receptors,
+    paint: {
+      "circle-radius": 6,
+      "circle-color": palette.accent,
+      "circle-opacity": ["interpolate", ["linear"], ["get", "fraction"], 0, 0.35, 1, 1],
+      "circle-stroke-color": palette.halo,
+      "circle-stroke-width": 1.5,
+    },
+  });
+}
+
 /** Adds the overlay sources and layers (again after a style change, which drops them). */
 export function addOverlays(map: MapLibreMap, palette: Palette): void {
   addSources(map);
   if (map.getLayer(MARKER_LAYER)) return;
   addPlumeLayers(map, palette);
   addMarkerLayer(map, palette);
+  addWorkerRingLayer(map, palette);
+  addDriverRingLayer(map, palette);
+  addReceptorLayer(map, palette);
 }
 
 /** Replaces the data of an overlay source. */

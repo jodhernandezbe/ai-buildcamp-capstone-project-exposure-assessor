@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from api.schemas.workspace import Status
+from config.exposure_graph import GraphText
 from config.ui import RiskThresholds
 
 
@@ -18,6 +19,7 @@ class WorkspaceRules:
         default_radius_km: Receptor radius of a population call that gave none, km.
         sector_half_angle_deg: Half-angle of the schematic downwind sector, degrees.
         vertex_spacing_deg: Angular spacing of the vertices of the drawn shapes, degrees.
+        graph: Fixed text and units of the exposure graph.
     """
 
     thresholds: RiskThresholds
@@ -25,6 +27,7 @@ class WorkspaceRules:
     default_radius_km: float
     sector_half_angle_deg: float
     vertex_spacing_deg: float
+    graph: GraphText
 
 
 SEVERITY: tuple[Status, ...] = ("below", "near", "above")

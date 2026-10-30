@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { facility } from "../../test/fixtures";
+import { facility, worker } from "../../test/fixtures";
 import type { Facility } from "../../types/workspace";
 import { describeBar, groupFacilities, topGroups } from "./riskGroups";
 
@@ -40,8 +40,8 @@ describe("groupFacilities by subsector", () => {
   it("takes the highest value of each quantity from one facility, never a combination", () => {
     const chem = must(groupFacilities(facilities, "subsector").groups.find((g) => g.key === "325"));
     expect(chem.label).toBe("325 · Chemicals");
-    expect(chem.hq).toEqual({ value: 5, frsId: "B", name: "Plant B", concentration: 8 });
-    expect(chem.risk).toEqual({ value: 1e-6, frsId: "A", name: "Plant A", concentration: 4 });
+    expect(chem.hq).toEqual({ value: 5, frsId: "B", name: "Plant B", concentration: 8, twa: null, stack: 2 });
+    expect(chem.risk).toEqual({ value: 1e-6, frsId: "A", name: "Plant A", concentration: 4, twa: null, stack: 2 });
     expect([chem.facilities, chem.assessed]).toEqual([2, 2]);
   });
 
@@ -154,21 +154,69 @@ describe("describeBar", () => {
   it("tells the quantity's value, its facility and the counts", () => {
     expect(describeBar(must(group), "hq", 2)).toEqual({
       group: "325 · Chemicals",
-      lines: [{ label: "Highest hazard quotient", value: "5", detail: "Plant A · 12 µg/m³ worst case" }],
+      lines: [{ label: "Highest hazard quotient", value: "5", detail: "Plant A · stack 2 · 12 µg/m³ worst case" }],
       counts: "2 facilities in this group · 1 assessed, 1 screened out",
     });
     expect(describeBar(must(group), "risk", 2).lines).toEqual([
-      { label: "Highest lifetime cancer risk", value: "2 × 10⁻⁴", detail: "Plant A · 12 µg/m³ worst case" },
+      { label: "Highest lifetime cancer risk", value: "2 × 10⁻⁴", detail: "Plant A · stack 2 · 12 µg/m³ worst case" },
     ]);
   });
 
   it("says not reported for a missing quantity and when the concentration was not sent", () => {
     const [g] = groupFacilities([make("C", { ...sub("311"), exposure: exposure(3, null, null) })], "subsector").groups;
-    expect(describeBar(must(g), "hq", 2).lines[0]?.detail).toBe("Plant C · concentration not reported");
+    expect(describeBar(must(g), "hq", 2).lines[0]?.detail).toBe("Plant C · stack 2 · concentration not reported");
     expect(describeBar(must(g), "risk", 2).lines[0]).toEqual({
       label: "Highest lifetime cancer risk",
       value: "not reported",
       detail: null,
     });
+  });
+});
+
+describe("the indoor air pathway (workers)", () => {
+  const tier = (over: Record<string, number | null>) => ({ ...worker().baseline, ...over });
+  const withWorker = (id: string, code: string, baseline: ReturnType<typeof tier>, over: Partial<Facility> = {}) =>
+    make(id, {
+      ...sub(code, "Chemicals"),
+      exposure: exposure(9, 9e-3, 99), // the outdoor result must not leak into the indoor bars
+      occupational_exposure: worker({ baseline }),
+      ...over,
+    });
+  const facilities = [
+    withWorker("A", "325", tier({ hq: 0.2, cancer_risk: 3e-6, oel_ratio: 0.4, twa_mg_m3: 2 })),
+    withWorker("B", "325", tier({ hq: 0.9, cancer_risk: null, oel_ratio: 3, twa_mg_m3: 7 })),
+    make("C", { ...sub("324", "Petroleum"), exposure: exposure(1, 1e-5, 5) }),
+  ];
+
+  it("takes the worker values of each facility, never the outdoor ones", () => {
+    const chem = must(groupFacilities(facilities, "subsector", "indoor").groups.find((g) => g.key === "325"));
+    expect(chem.hq).toMatchObject({ value: 0.9, frsId: "B", twa: 7, concentration: null });
+    expect(chem.risk).toMatchObject({ value: 3e-6, frsId: "A" });
+    expect(chem.ratio).toMatchObject({ value: 3, frsId: "B" });
+  });
+
+  it("leaves a facility with no worker result out of the bars", () => {
+    const petro = must(groupFacilities(facilities, "subsector", "indoor").groups.find((g) => g.key === "324"));
+    expect(petro.hq).toBeNull();
+    expect(petro.ratio).toBeNull();
+  });
+
+  it("keeps the outdoor pathway as it was, and without a limit ratio", () => {
+    const chem = must(groupFacilities(facilities, "subsector").groups.find((g) => g.key === "325"));
+    expect(chem.hq).toMatchObject({ value: 9, concentration: 99, twa: null });
+    expect(chem.ratio).toBeNull();
+  });
+
+  it("describes a bar with the 8-hour average, and says when it was not sent", () => {
+    const grouping = groupFacilities(facilities, "subsector", "indoor");
+    const chem = must(grouping.groups.find((g) => g.key === "325"));
+    expect(describeBar(chem, "ratio", 2, "indoor").lines[0]).toMatchObject({
+      label: "Highest 8-hour average over the occupational limit",
+      detail: "Plant B · 7 mg/m³ 8-hour average",
+    });
+    const unsent = groupFacilities([withWorker("D", "999", tier({ hq: 1, twa_mg_m3: null }))], "subsector", "indoor");
+    expect(describeBar(must(unsent.groups[0]), "hq", 2, "indoor").lines[0]?.detail).toBe(
+      "Plant D · 8-hour average not reported",
+    );
   });
 });

@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from api.services.projectors.ledger import Ledger
-from api.services.projectors.payloads import PropertiesPayload
+from api.services.projectors.payloads import LimitsPayload, PropertiesPayload
 
 USER_PROVIDED = "user-provided"
-_BENCHMARKS = ("rfc", "iur")  # the PropertiesPayload fields a missing value can fill
+# The PropertiesPayload fields a missing value can fill, and the occupational limit (nested).
+_FIELDS = ("rfc", "iur", "molecular_weight", "vapor_pressure", "density")
+_LIMIT = "oel_twa"
 
 
 def apply_supplied(ledger: Ledger, supplied: Mapping[str, float]) -> None:
@@ -20,7 +22,7 @@ def apply_supplied(ledger: Ledger, supplied: Mapping[str, float]) -> None:
     """
     for entry_id, value in supplied.items():
         quantity, _, cas = entry_id.partition(":")
-        if quantity in _BENCHMARKS and cas and _may_fill(ledger, cas):
+        if quantity in (*_FIELDS, _LIMIT) and cas and _may_fill(ledger, cas):
             _set(ledger, cas, quantity, value)
 
 
@@ -31,16 +33,29 @@ def _may_fill(ledger: Ledger, cas: str) -> bool:
 def _set(ledger: Ledger, cas: str, quantity: str, value: float) -> None:
     ledger.cas = ledger.cas or cas
     _, props = ledger.properties or (cas, PropertiesPayload())
-    if getattr(props, quantity) is not None:
+    if _has(props, quantity):
         return
-    updated = props.model_copy(
-        update={
-            quantity: value,
-            "sources": {**props.sources, quantity: USER_PROVIDED},
-            "warnings": [w for w in props.warnings if quantity not in w.lower()],
-        }
-    )
-    ledger.properties = (cas, updated)
+    update = {
+        "sources": {**props.sources, quantity: USER_PROVIDED},
+        "warnings": [w for w in props.warnings if quantity not in w.lower()],
+        **_value_update(quantity, value),
+    }
+    ledger.properties = (cas, props.model_copy(update=update))
+
+
+def _has(props: PropertiesPayload, quantity: str) -> bool:
+    if quantity == _LIMIT:
+        return (
+            props.occupational_limits is not None
+            and props.occupational_limits.oel_twa_mg_m3 is not None
+        )
+    return getattr(props, quantity) is not None
+
+
+def _value_update(quantity: str, value: float) -> dict[str, object]:
+    if quantity == _LIMIT:
+        return {"occupational_limits": LimitsPayload(oel_twa_mg_m3=value, oel_source=USER_PROVIDED)}
+    return {quantity: value}
 
 
 def _digits(cas: str) -> str:

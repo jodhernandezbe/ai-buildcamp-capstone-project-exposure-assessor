@@ -187,6 +187,8 @@ class TriSettings:
         release_path: Path template appended to the Envirofacts base URL; contains ``{casrn}``,
             ``{medium}``, ``{after_year}``, ``{start}`` and ``{end}`` (inclusive row range).
         media: Environmental media to keep, e.g. ``("AIR STACK",)``; one query per medium.
+        fugitive_medium: The medium of fugitive air releases, read in one more query per chemical;
+            its release is folded into the records of ``media`` and never listed as a facility.
         page_size: Rows requested per page.
         max_pages: Most pages fetched per medium.
         recent_years: Reporting years that count, ending with the newest that can be published.
@@ -199,6 +201,7 @@ class TriSettings:
 
     release_path: str
     media: tuple[str, ...]
+    fugitive_medium: str
     page_size: int
     max_pages: int
     recent_years: int
@@ -440,6 +443,13 @@ def _tri_template(section: dict[str, object]) -> str:
     return template
 
 
+def _fugitive_medium(section: dict[str, object]) -> str:
+    medium = _require_str(section, "fugitive_medium", "tri").strip()
+    if medium in _names(section, "media", "tri", allow_empty=False):
+        raise ValueError("tri.fugitive_medium must not also be listed in tri.media")
+    return medium
+
+
 def load_tri_settings(path: Path | None = None) -> TriSettings:
     """Load and validate TRI release-query settings.
 
@@ -457,6 +467,7 @@ def load_tri_settings(path: Path | None = None) -> TriSettings:
     return TriSettings(
         release_path=_tri_template(section),
         media=_names(section, "media", "tri", allow_empty=False),
+        fugitive_medium=_fugitive_medium(section),
         page_size=_require_int(section, "page_size", minimum=1, name="tri"),
         max_pages=_require_int(section, "max_pages", minimum=1, name="tri"),
         recent_years=_require_int(section, "recent_years", minimum=1, name="tri"),

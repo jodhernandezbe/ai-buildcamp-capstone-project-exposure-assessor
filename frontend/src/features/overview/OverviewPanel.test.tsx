@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { cloneElement, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { facility, workspace } from "../../test/fixtures";
+import { facility, profile, workspace, worker } from "../../test/fixtures";
 import type { Facility } from "../../types/workspace";
 import { OverviewPanel } from "./OverviewPanel";
 
@@ -16,6 +16,14 @@ vi.mock("recharts", async (importOriginal) => {
   };
 });
 
+const workerLimits = {
+  ratio_exceedance: 1,
+  ratio_elevated: 0.1,
+  hq_exceedance: 1,
+  hq_elevated: 0.1,
+  cancer_exceedance: 1e-4,
+  cancer_elevated: 1e-6,
+};
 const thresholds = { hq_concern: 1, hq_near_lower: 0.1, cancer_lower: 1e-6, cancer_upper: 1e-4 };
 const extreme = (high: number) => ({ low: high / 2, high, low_stack: 1, high_stack: 2 });
 const exposure = (hq: number, risk: number | null) => ({
@@ -48,7 +56,14 @@ const plant = (id: string, code: string, hq: number, risk: number | null, over: 
 const facilities = ["1", "2", "3", "4", "5", "6"].map((n, i) => plant(`F${n}`, `30${n}`, i + 1, 10 - i));
 /** The panel on its risk view (the summary is the default; the sections are hidden until chosen). */
 const show = (fs: Facility[] = facilities) => {
-  const view = render(<OverviewPanel workspace={workspace({ facilities: fs })} digits={2} thresholds={thresholds} />);
+  const view = render(
+    <OverviewPanel
+      workspace={workspace({ facilities: fs })}
+      digits={2}
+      thresholds={thresholds}
+      workerThresholds={workerLimits}
+    />,
+  );
   if (fs.length > 0) fireEvent.click(screen.getByRole("button", { name: "Risk by group" }));
   return view;
 };
@@ -187,5 +202,76 @@ describe("expanding a section", () => {
     await userEvent.keyboard("{Escape}");
     expect(reached.mock.calls.filter(([e]) => e.key === "Escape")).toHaveLength(1); // nothing expanded: not ours
     window.removeEventListener("keydown", reached);
+  });
+});
+
+describe("exposure pathway dropdown", () => {
+  const indoor = (id: string, code: string, ratio: number | null, hq: number | null) =>
+    plant(id, code, 1, null, {
+      occupational_exposure: worker({
+        baseline: { ...worker().baseline, oel_ratio: ratio, hq, cancer_risk: null },
+      }),
+      operational_profile: profile(),
+    });
+  const mixed = [indoor("W1", "301", 3, 0.2), indoor("W2", "302", 0.5, 0.9), indoor("W3", "303", null, null)];
+  const picker = () => screen.getByRole("combobox", { name: /Exposure pathway/ });
+
+  it("offers one dropdown for the whole view, outdoor air to the general population first", () => {
+    show(mixed);
+    expect(screen.getAllByRole("combobox", { name: /Exposure pathway/ })).toHaveLength(1);
+    const options = within(picker()).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Outdoor Air → Inhalation → General Population", "Indoor Air → Inhalation → Worker"]);
+    expect(picker()).toHaveValue("outdoor");
+  });
+
+  it("ranks the workers on the indoor pathway, with their quantities and boundaries", () => {
+    show(mixed);
+    const industry = /Risk by industry/;
+    fireEvent.change(picker(), { target: { value: "indoor" } });
+    expect(within(section(industry)).getByRole("heading", { name: /Worker hazard quotient/ })).toBeInTheDocument();
+    expect(rowsOf(industry)[0]).toHaveTextContent("0.9");
+    expect(within(section(industry)).getByRole("button", { name: "Limit ratio" })).toBeInTheDocument();
+    fireEvent.click(within(section(industry)).getByRole("button", { name: "Limit ratio" }));
+    expect(within(section(industry)).getByRole("heading", { name: /occupational limit/ })).toBeInTheDocument();
+    expect(rowsOf(industry)[0]).toHaveTextContent("301 · Industry 301");
+    expect(within(section(industry)).getByText(/Dashed lines: elevated 0\.1, exceedance 1/)).toBeInTheDocument();
+  });
+
+  it("changes all three sections together", () => {
+    show(mixed);
+    fireEvent.change(picker(), { target: { value: "indoor" } });
+    for (const name of [/Risk by industry/, /condition of use/, /life cycle stage/]) {
+      expect(within(section(name)).getByRole("button", { name: "Limit ratio" })).toBeInTheDocument();
+    }
+  });
+
+  it("offers no limit ratio outdoors, and falls back to the hazard quotient when leaving workers", () => {
+    show(mixed);
+    const industry = /Risk by industry/;
+    expect(within(section(industry)).queryByRole("button", { name: "Limit ratio" })).toBeNull();
+    fireEvent.change(picker(), { target: { value: "indoor" } });
+    fireEvent.click(within(section(industry)).getByRole("button", { name: "Limit ratio" }));
+    fireEvent.change(picker(), { target: { value: "outdoor" } });
+    expect(within(section(industry)).queryByRole("button", { name: "Limit ratio" })).toBeNull();
+    expect(within(section(industry)).getByRole("button", { name: "Hazard quotient" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("says why nothing is ranked when no facility has a worker value", () => {
+    show([plant("P1", "301", 1, null)]);
+    fireEvent.change(picker(), { target: { value: "indoor" } });
+    expect(within(section(/Risk by industry/)).getByText(/No group has a worker hazard quotient to rank/)).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPanel exposure chain tab", () => {
+  it("offers a third tab and keeps the slot mounted across tabs", async () => {
+    render(<OverviewPanel workspace={workspace()} digits={2} chain={<p>chain slot</p>} />);
+    expect(screen.getByRole("button", { name: "Exposure chain" })).toBeInTheDocument();
+    expect(screen.getByText("chain slot")).not.toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Exposure chain" }));
+    expect(screen.getByText("chain slot")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Summary" }));
+    expect(screen.getByText("chain slot")).not.toBeVisible();
+    expect(screen.getByRole("group", { name: "Executive summary" })).toBeVisible();
   });
 });

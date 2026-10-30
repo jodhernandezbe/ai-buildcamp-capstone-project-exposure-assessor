@@ -16,7 +16,13 @@ from api.services.projectors.facilities import build_facilities, meteorology_vie
 from api.services.projectors.framing import bounds, framing_key, next_version
 from api.services.projectors.ledger import Ledger, ToolExchange
 from api.services.projectors.rules import WorkspaceRules
-from api.services.projectors.summary import chemical, risk_summary, select
+from api.services.projectors.summary import (
+    chemical,
+    risk_summary,
+    scenario_drivers,
+    select,
+    worker_summary,
+)
 from api.services.projectors.supplied import apply_supplied
 
 
@@ -95,6 +101,8 @@ def build_workspace(
         {
             **_ribbon(select(facilities, summary), summary, ledger),
             **_framing(facilities, previous),
+            "worker_risk": worker_summary(facilities),
+            "scenario_drivers": scenario_drivers(facilities),
             "facilities": facilities,
             "unattributed": lost,
             "warnings": ledger.warnings,

@@ -60,3 +60,11 @@ def test_fallback_reads_butane_weight_and_pressure_and_refuses_its_density(
 def test_fallback_reads_hexane_density(settings: PubchemSettings) -> None:
     offered = _lookup(settings).candidates("110-54-3", ["density"])
     assert 0.6 < offered.values["density"].value < 0.7  # g/cm^3
+
+
+def test_benzene_limits_are_read_from_the_live_record(settings: PubchemSettings) -> None:
+    lookup = PubchemLookup(build_client(settings), settings, get_unit_settings().aliases)
+    limits = lookup.limits("71-43-2", 78.11)
+    assert limits["oel_source"] is not None and limits["oel_twa_mg_m3"] is not None
+    assert 0.1 < limits["oel_twa_mg_m3"] < 50  # mg/m^3; a changed PUG View layout breaks this
+    assert "niosh_idlh" in limits["limits"]

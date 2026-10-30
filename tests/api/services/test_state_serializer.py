@@ -429,9 +429,10 @@ def properties(cas: str = "1-1-1") -> list[BaseMessage]:
     body: dict[str, object] = {
         "preferred_name": "Testane",
         "molecular_weight": 50.0,
+        "vapor_pressure": 7.5,
         "rfc": 0.5,
         "iur": 1e-6,
-        "sources": {"rfc": "IRIS"},
+        "sources": {"rfc": "IRIS", "vapor_pressure": "CompTox (experimental)"},
         "warnings": [],
     }
     return exchange("fetch_chemical_properties", {"cas_number": cas}, body)
@@ -463,7 +464,9 @@ def test_the_chemical_shows_the_properties_with_their_sources() -> None:
         0.5,
         1e-6,
     )
-    assert chemical.sources == {"rfc": "IRIS"} and chemical.name == "Testane"
+    assert chemical.vapor_pressure_mmhg == 7.5
+    assert chemical.sources == {"rfc": "IRIS", "vapor_pressure": "CompTox (experimental)"}
+    assert chemical.name == "Testane"
 
 
 def test_a_chemical_without_a_name_has_none() -> None:
@@ -705,7 +708,7 @@ def test_a_supplied_value_fills_the_empty_benchmark_as_the_users() -> None:
 
 def test_a_supplied_value_never_replaces_a_tool_value() -> None:
     chemical = build_workspace(properties(), RULES, supplied={"rfc:1-1-1": 9.0}).chemical
-    assert chemical.rfc_mg_m3 == 0.5 and chemical.sources == {"rfc": "IRIS"}
+    assert chemical.rfc_mg_m3 == 0.5 and chemical.sources["rfc"] == "IRIS"
 
 
 def test_a_supplied_value_for_another_cas_is_not_shown() -> None:
@@ -717,3 +720,50 @@ def test_a_supplied_value_shows_even_before_any_tool_ran() -> None:
     chemical = build_workspace([], RULES, supplied={"iur:3-3-3": 2e-6}).chemical
     assert chemical.cas_number == "3-3-3" and chemical.iur_per_ug_m3 == 2e-6
     assert chemical.sources == {"iur": "user-provided"}
+
+
+def _props(**over: object) -> list[BaseMessage]:
+    body: dict[str, object] = {
+        "preferred_name": "Testane",
+        "molecular_weight": None,
+        "vapor_pressure": None,
+        "density": None,
+        "rfc": 0.5,
+        "iur": 1e-6,
+        "sources": {},
+        "warnings": [],
+        "occupational_limits": {"oel_twa_mg_m3": None, "oel_source": None},
+        **over,
+    }
+    return exchange("fetch_chemical_properties", {"cas_number": "1-1-1"}, body)
+
+
+def test_the_chemical_shows_its_density_and_occupational_limit_with_the_limit_source() -> None:
+    limits = {"oel_twa_mg_m3": 3.2, "oel_source": "OSHA PEL-TWA (PubChem)"}
+    chemical = build(_props(density=0.88, occupational_limits=limits)).chemical
+    assert chemical.density_g_cm3 == 0.88 and chemical.oel_twa_mg_m3 == 3.2
+    assert chemical.sources["oel_twa"] == "OSHA PEL-TWA (PubChem)"
+
+
+def test_values_the_user_entered_fill_every_missing_property_and_are_labelled() -> None:
+    supplied = {
+        "molecular_weight:1-1-1": 78.0,
+        "vapor_pressure:1-1-1": 95.0,
+        "density:1-1-1": 0.88,
+        "oel_twa:1-1-1": 3.2,
+    }
+    chemical = build_workspace(_props(), RULES, supplied=supplied).chemical
+    assert chemical.molecular_weight_g_mol == 78.0 and chemical.vapor_pressure_mmhg == 95.0
+    assert chemical.density_g_cm3 == 0.88 and chemical.oel_twa_mg_m3 == 3.2
+    for key in ("molecular_weight", "vapor_pressure", "density", "oel_twa"):
+        assert chemical.sources[key] == "user-provided"
+
+
+def test_a_value_a_source_has_is_never_replaced_by_one_the_user_entered() -> None:
+    limits = {"oel_twa_mg_m3": 3.2, "oel_source": "OSHA PEL-TWA (PubChem)"}
+    supplied = {"oel_twa:1-1-1": 9.0, "density:1-1-1": 5.0}
+    chemical = build_workspace(
+        _props(density=0.88, occupational_limits=limits), RULES, supplied=supplied
+    ).chemical
+    assert chemical.oel_twa_mg_m3 == 3.2 and chemical.density_g_cm3 == 0.88
+    assert chemical.sources["oel_twa"] == "OSHA PEL-TWA (PubChem)"

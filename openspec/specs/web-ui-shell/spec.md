@@ -468,3 +468,132 @@ why it is disabled.
 #### Scenario: Open Monitoring
 - **WHEN** the user activates "Monitoring"
 - **THEN** the Monitoring view is shown, "Monitoring" is announced as the current page, and returning to "Workspace" shows the panels and chat as they were left
+
+### Requirement: Worker results sit with the community results
+The interface SHALL show the worker (occupational) screening wherever it shows the community result, never in a separate view: the Overview summary ribbon, the facility inspector and the map. It SHALL show only values the API sent, and an absent value SHALL read "not reported", never zero.
+
+#### Scenario: No separate view
+- **WHEN** the Overview panel is open
+- **THEN** it offers the same views as before (Summary and Risk by group) and no view or facility picker for the workers alone
+
+#### Scenario: Not reported
+- **WHEN** a facility has no worker result
+- **THEN** every worker value of it reads "not reported" and no zero is shown
+
+### Requirement: Worker card in the summary ribbon
+The Overview summary ribbon SHALL include a "Worker exposure" card with the highest 8-hour TWA to limit ratio, worker hazard quotient and worker lifetime cancer risk over the assessed facilities, each for the baseline ventilation and the enclosed-zone worst case, with the facility each comes from and its tier in words, in the way the hazard quotient and cancer risk card names its facility. Where nothing is available it SHALL say why.
+
+#### Scenario: Highest values
+- **WHEN** several facilities have worker results
+- **THEN** each figure is the highest among them and names its facility
+
+#### Scenario: Nothing yet
+- **WHEN** no facility has a worker result
+- **THEN** the card shows "not reported" for each figure and the reason
+
+### Requirement: Worker section in the facility inspector
+The facility inspector (hover and pinned card) SHALL show a compact badge with the community hazard quotient and the worker tier with its limit ratio, so a user can see whether the concern comes from the stack plume or from indoor fugitive release, and a "Worker exposure" section with the facility's operating schedule (days per year, hours per day, hours per year), life cycle stage and condition of use, CDR industrial sector, fugitive release, occupational limit and its source, and for both ventilation tiers the 8-hour TWA, limit ratio, worker hazard quotient and worker cancer risk and the tier, with the warnings. The tier SHALL be written as text as well as coloured.
+
+#### Scenario: Both results
+- **WHEN** a facility has a community and a worker result
+- **THEN** the badge shows both and the section lists both tiers
+
+#### Scenario: Tier not by colour alone
+- **WHEN** a tier is shown
+- **THEN** it is written in words
+
+### Requirement: Worker tier on the map
+The map SHALL draw a ring around each facility marker coloured by the worker tier (none while it is not computed), keeping the marker fill for the community status and its size for the emission rate; the legend SHALL explain the ring and count the facilities of each tier, and the marker's accessible name SHALL include the worker tier.
+
+#### Scenario: Ring and fill
+- **WHEN** a facility is above concern in the community result and elevated for workers
+- **THEN** its marker is filled for the community status and ringed for the elevated tier
+
+#### Scenario: No worker result
+- **WHEN** no facility has a worker result
+- **THEN** no ring is drawn and the legend has no ring entry
+
+#### Scenario: Accessible name
+- **WHEN** a marker has a worker tier
+- **THEN** its accessible name includes it
+
+### Requirement: Risk by group has an exposure pathway dropdown
+The Risk by group view SHALL have one dropdown, above its three sections, that chooses the exposure pathway as medium, route and receptor: "Outdoor Air → Inhalation → General Population" (the default, the community result) or "Indoor Air → Inhalation → Worker" (the worker result). The choice SHALL apply to the three sections and be kept while the user goes to the summary and back. On the indoor pathway the quantity switch SHALL offer the worker hazard quotient, the worker lifetime cancer risk and the 8-hour average over the occupational limit, each bar being the highest value among the group's assessed facilities at the baseline ventilation, and the dashed lines SHALL be the worker tier boundaries from the client settings; the tooltip SHALL give the facility and its 8-hour average. A bar's tooltip SHALL name the facility and stack that drive it. A facility with no worker value SHALL not be ranked, and a chart with nothing to rank SHALL say why. Leaving the indoor pathway while the limit ratio is shown SHALL return to the hazard quotient.
+
+#### Scenario: Default
+- **WHEN** the Risk by group view opens
+- **THEN** it has one pathway dropdown, on the outdoor air pathway, and every section shows what it showed before
+
+#### Scenario: Indoor air
+- **WHEN** the user chooses the indoor air pathway
+- **THEN** all three sections rank the worker values, with the worker boundaries drawn
+
+#### Scenario: Limit ratio only for workers
+- **WHEN** the outdoor air pathway is chosen
+- **THEN** the limit ratio is not offered
+
+#### Scenario: Nothing to rank
+- **WHEN** no facility has a worker value
+- **THEN** the chart says why, with no zero bars
+
+#### Scenario: Bar names its driver
+- **WHEN** the user hovers a bar
+- **THEN** the tooltip names the facility and the stack that give its value
+
+### Requirement: Overview has an Exposure chain tab
+The Overview SHALL offer a third tab, "Exposure chain", beside Summary and Risk by group, showing the
+exposure diagram of the focused facility. Summary and Risk by group SHALL be unchanged, and the diagram
+SHALL keep its selection while the user switches tabs.
+
+#### Scenario: Third tab
+- **WHEN** the user opens the Overview
+- **THEN** the switch offers Summary, Risk by group and Exposure chain
+
+#### Scenario: State kept
+- **WHEN** the user opens a node's detail, switches to Summary and back
+- **THEN** the same node's detail is still open
+
+### Requirement: Pinning a facility focuses it
+Pinning a facility on the map (a click on its marker) SHALL report that facility to the application so the
+Exposure chain tab can show it. Hovering and unpinning SHALL NOT change the focus.
+
+#### Scenario: Pin
+- **WHEN** a marker is clicked
+- **THEN** the Exposure chain tab shows that facility
+
+#### Scenario: Hover only
+- **WHEN** a marker is only hovered
+- **THEN** the diagram does not change
+
+### Requirement: The summary ribbon shows the driving scenario
+For each pathway and quantity that has a scenario the ribbon SHALL show the driving scenario by rendering its generic shape: the value and tier, the facility, its factors grouped as source, release, conditions and receptor model, and its most affected receptors (or the reason there are none), instead of listing every facility, stack or population. A pathway added later SHALL be shown without display code of its own. Other facilities SHALL be reachable through an explicit control that is closed by default. An absent factor SHALL read "not reported" with its reason.
+
+#### Scenario: Driver shown
+- **WHEN** a run has assessed facilities
+- **THEN** each result shows only its driving scenario and a closed control for the others
+
+#### Scenario: Nobody at the maximum
+- **WHEN** a community scenario has no receptors
+- **THEN** the reason it gives is shown in place of the receptors
+
+#### Scenario: Others on request
+- **WHEN** the user opens the control for the others
+- **THEN** the other facilities are listed by value, each selectable
+
+### Requirement: The facility inspector shows the worst-case scenario first
+The inspector SHALL show a facility's worst-case scenarios before any list of stacks, with the stack that drives each marked in that list, and SHALL show the receptors of the community scenario with their age bands, distance and bearing. The other stacks SHALL stay in a section that is closed when the scenario names one.
+
+#### Scenario: Driving stack marked
+- **WHEN** a facility has three stacks and stack 2 drives the hazard quotient
+- **THEN** the scenario names stack 2 and the stack list marks it
+
+### Requirement: The map marks the driving facility and its receptors
+The map SHALL mark the driving facility of the selected result, and when that facility is selected SHALL draw its listed receptors at their bearing and distance, without drawing the receptors of other facilities. Receptors SHALL be drawn at the coordinates the tool returned, never at a position computed in the browser, only for the results the pinned facility drives, and a tract several results name SHALL be drawn once.
+
+#### Scenario: Receptors drawn
+- **WHEN** the driving facility is pinned
+- **THEN** its listed receptors are drawn at the coordinates the tool gave
+
+#### Scenario: Receptors removed
+- **WHEN** the facility is unpinned or closed
+- **THEN** no receptor is drawn

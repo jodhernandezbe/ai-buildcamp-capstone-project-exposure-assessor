@@ -140,12 +140,16 @@ def test_pubchem_down_gives_the_comptox_result_and_a_warning() -> None:
     comptox = StubComptox(weight=50.0, name="x")
     without = _run(comptox, None)
     result = _run(comptox, down)
-    assert {k: v for k, v in result.items() if k != "warnings"} == {
-        k: v for k, v in without.items() if k != "warnings"
+    ignored = {"warnings", "occupational_limits"}
+    assert {k: v for k, v in result.items() if k not in ignored} == {
+        k: v for k, v in without.items() if k not in ignored
     }
     assert any(
         "PubChem could not help" in w and "could not be reached" in w for w in result["warnings"]
     )
+    limits = result["occupational_limits"]
+    assert limits["oel_twa_mg_m3"] is None and limits["oel_source"] is None
+    assert any("PubChem limits unavailable" in w for w in limits["warnings"])
 
 
 def test_unconfirmed_match_is_not_used() -> None:
@@ -206,3 +210,34 @@ def test_median_of_several_statements_is_reported_in_the_warning() -> None:
     result = _run(StubComptox(weight=50.0, name="x"), _real(body))
     assert result["vapor_pressure"] == 7.0
     assert any("median of 2 statements" in w for w in result["warnings"])
+
+
+def test_a_supplied_molecular_weight_reaches_the_limits_before_they_are_read() -> None:
+    from tests.tools.informatics.test_properties import _answers  # pyright: ignore[reportPrivateUsage]
+
+    fake = FakePubchem()
+    answers = _answers(supplied={"molecular_weight:71-43-2": 78.0})
+    lookup_chemical_properties(
+        "71-43-2",
+        StubComptox(weight=None, name="x"),
+        get_comptox_settings(),
+        get_unit_settings().aliases,
+        fake,
+        inputs=answers,
+    )
+    assert fake.limit_calls == [("71-43-2", 78.0)]
+
+
+def test_a_found_molecular_weight_is_not_replaced_by_a_supplied_one() -> None:
+    from tests.tools.informatics.test_properties import _answers  # pyright: ignore[reportPrivateUsage]
+
+    fake = FakePubchem()
+    lookup_chemical_properties(
+        "71-43-2",
+        StubComptox(weight=50.0, name="x"),
+        get_comptox_settings(),
+        get_unit_settings().aliases,
+        fake,
+        inputs=_answers(supplied={"molecular_weight:71-43-2": 78.0}),
+    )
+    assert fake.limit_calls == [("71-43-2", 50.0)]

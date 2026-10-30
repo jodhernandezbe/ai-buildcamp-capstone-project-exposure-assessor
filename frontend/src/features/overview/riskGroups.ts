@@ -4,16 +4,33 @@ import { isAssessed, isScreenedOut } from "./assessment";
 
 /** What facilities are grouped by: NAICS subsector, TSCA condition of use, TSCA life cycle stage. */
 export type GroupBy = "subsector" | "condition" | "stage";
-/** The two quantities, each with a chart of its own: hazard quotient and lifetime cancer risk. */
-export type Quantity = "hq" | "risk";
+/**
+ * The exposure pathway: the medium, the route and the receptors. Outdoor air reaches the general
+ * population by inhalation (the stack result); indoor air reaches the workers by inhalation (the
+ * fugitive release in the plant).
+ */
+export type Pathway = "outdoor" | "indoor";
+export const PATHWAYS: { key: Pathway; label: string }[] = [
+  { key: "outdoor", label: "Outdoor Air → Inhalation → General Population" },
+  { key: "indoor", label: "Indoor Air → Inhalation → Worker" },
+];
+/**
+ * The quantities, each with a chart of its own: hazard quotient, lifetime cancer risk and, for
+ * workers only, the 8-hour average over the occupational limit.
+ */
+export type Quantity = "hq" | "risk" | "ratio";
 
 /** The facility a value comes from: one of the values the API sent, never a combination of them. */
 export interface Best {
   value: number;
   frsId: string;
   name: string | null;
-  /** That facility's worst-case concentration (µg/m³), when the API sent it. */
+  /** That facility's worst-case concentration (µg/m³), when the API sent it (outdoor air). */
   concentration: number | null;
+  /** That facility's 8-hour average in the workplace (mg/m³), when the API sent it (indoor air). */
+  twa: number | null;
+  /** The stack that gives the value (outdoor air), when the API named it. */
+  stack: number | null;
 }
 
 export interface Group {
@@ -29,6 +46,8 @@ export interface Group {
   hq: Best | null;
   /** Highest worst-case lifetime cancer risk (unitless). */
   risk: Best | null;
+  /** Highest 8-hour average over the occupational limit (unitless); workers only. */
+  ratio: Best | null;
 }
 
 export interface Grouping {
@@ -42,14 +61,26 @@ export const TOP_N = 5;
 const finite = (value: number | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-function bestOf(current: Best | null, facility: Facility, value: number | null | undefined): Best | null {
+interface Measured {
+  concentration: number | null | undefined;
+  twa: number | null | undefined;
+  stack?: number | null;
+}
+
+function bestOf(
+  current: Best | null,
+  facility: Facility,
+  value: number | null | undefined,
+  measured: Measured,
+): Best | null {
   if (!finite(value) || (current !== null && value <= current.value)) return current;
-  const concentration = facility.exposure?.concentration_worst?.high;
   return {
     value,
     frsId: facility.frs_id,
     name: facility.name,
-    concentration: finite(concentration) ? concentration : null,
+    concentration: finite(measured.concentration) ? measured.concentration : null,
+    twa: finite(measured.twa) ? measured.twa : null,
+    stack: finite(measured.stack) ? measured.stack : null,
   };
 }
 
@@ -71,25 +102,51 @@ function membership(facility: Facility, by: GroupBy): Map<string, string> {
 }
 
 function emptyGroup(key: string, label: string): Group {
-  return { key, label, facilities: 0, assessed: 0, screenedOut: 0, hq: null, risk: null };
+  return { key, label, facilities: 0, assessed: 0, screenedOut: 0, hq: null, risk: null, ratio: null };
 }
 
-function addTo(group: Group, facility: Facility): void {
+function addOutdoor(group: Group, facility: Facility): void {
+  const exposure = facility.exposure;
+  const measured = (stack: number | undefined) => ({
+    concentration: exposure?.concentration_worst?.high,
+    twa: null,
+    stack,
+  });
+  group.hq = bestOf(group.hq, facility, exposure?.hq_worst?.high, measured(exposure?.hq_worst?.high_stack));
+  group.risk = bestOf(
+    group.risk,
+    facility,
+    exposure?.cancer_risk_worst?.high,
+    measured(exposure?.cancer_risk_worst?.high_stack),
+  );
+}
+
+/** The worker result at the baseline ventilation, the tier the API calls the facility's own. */
+function addIndoor(group: Group, facility: Facility): void {
+  const tier = facility.occupational_exposure?.baseline;
+  const measured = { concentration: null, twa: tier?.twa_mg_m3 };
+  group.hq = bestOf(group.hq, facility, tier?.hq, measured);
+  group.risk = bestOf(group.risk, facility, tier?.cancer_risk, measured);
+  group.ratio = bestOf(group.ratio, facility, tier?.oel_ratio, measured);
+}
+
+function addTo(group: Group, facility: Facility, pathway: Pathway): void {
   group.facilities += 1;
   if (isScreenedOut(facility)) group.screenedOut += 1;
   if (!isAssessed(facility)) return;
   group.assessed += 1;
-  group.hq = bestOf(group.hq, facility, facility.exposure?.hq_worst?.high);
-  group.risk = bestOf(group.risk, facility, facility.exposure?.cancer_risk_worst?.high);
+  if (pathway === "indoor") addIndoor(group, facility);
+  else addOutdoor(group, facility);
 }
 
 /**
- * Group the facilities. A group's bars are the highest worst-case hazard quotient and the highest
- * worst-case cancer risk among its assessed facilities, selected from what the API sent; nothing is
- * added, averaged or converted. A facility is counted once per group it belongs to (several
+ * Group the facilities. For the outdoor pathway a group's bars are the highest worst-case hazard
+ * quotient and cancer risk among its assessed facilities; for the indoor pathway they are the
+ * highest worker hazard quotient, cancer risk and limit ratio. All are selected from what the API
+ * sent; nothing is added, averaged or converted. A facility is counted once per group it belongs to (several
  * conditions of use are possible).
  */
-export function groupFacilities(facilities: Facility[], by: GroupBy): Grouping {
+export function groupFacilities(facilities: Facility[], by: GroupBy, pathway: Pathway = "outdoor"): Grouping {
   const groups = new Map<string, Group>();
   let ungrouped = 0;
   for (const facility of facilities) {
@@ -98,7 +155,7 @@ export function groupFacilities(facilities: Facility[], by: GroupBy): Grouping {
     for (const [key, label] of member) {
       const group = groups.get(key) ?? emptyGroup(key, label);
       groups.set(key, group);
-      addTo(group, facility);
+      addTo(group, facility, pathway);
     }
   }
   return { groups: [...groups.values()], ungrouped };
@@ -119,6 +176,7 @@ export function topGroups(
 export const QUANTITY_NAME: Record<Quantity, string> = {
   hq: "hazard quotient",
   risk: "lifetime cancer risk",
+  ratio: "8-hour average over the occupational limit",
 };
 
 /** One line of a bar's tooltip. */
@@ -135,16 +193,27 @@ export interface BarDetail {
   counts: string;
 }
 
-function facilityText(best: Best, digits: number): string {
+function facilityText(best: Best, pathway: Pathway, digits: number): string {
+  const name = best.name ?? `FRS ${best.frsId}`;
+  if (pathway === "indoor") {
+    const twa = best.twa === null ? "8-hour average not reported" : `${formatNumber(best.twa, digits)} mg/m³ 8-hour average`;
+    return `${name} · ${twa}`;
+  }
   const concentration =
     best.concentration === null
       ? "concentration not reported"
       : `${formatNumber(best.concentration, digits)} µg/m³ worst case`;
-  return `${best.name ?? `FRS ${best.frsId}`} · ${concentration}`;
+  const stack = best.stack === null ? "" : ` · stack ${best.stack}`;
+  return `${name}${stack} · ${concentration}`;
 }
 
 /** What a group's bar stands for: the highest value of `quantity`, the facility behind it, the counts. */
-export function describeBar(group: Group, quantity: Quantity, digits: number): BarDetail {
+export function describeBar(
+  group: Group,
+  quantity: Quantity,
+  digits: number,
+  pathway: Pathway = "outdoor",
+): BarDetail {
   const facilities = `${group.facilities} ${group.facilities === 1 ? "facility" : "facilities"}`;
   const screened = group.screenedOut > 0 ? `, ${group.screenedOut} screened out` : "";
   const best = group[quantity];
@@ -153,7 +222,7 @@ export function describeBar(group: Group, quantity: Quantity, digits: number): B
     group: group.label,
     lines: [
       best
-        ? { label, value: formatNumber(best.value, digits), detail: facilityText(best, digits) }
+        ? { label, value: formatNumber(best.value, digits), detail: facilityText(best, pathway, digits) }
         : { label, value: NOT_REPORTED, detail: null },
     ],
     counts: `${facilities} in this group · ${group.assessed} assessed${screened}`,

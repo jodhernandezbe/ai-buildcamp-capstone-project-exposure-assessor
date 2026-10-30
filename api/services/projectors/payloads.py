@@ -48,6 +48,8 @@ class EmissionPayload(Payload):
     emission_rate: Num
     operating_hours_per_year: Num
     operating_hours_source: str | None = None
+    fugitive_release_kg_per_year: Num | None = None
+    fugitive_reporting_year: int | None = None
     conditions_of_use: list[ConditionPayload] = []
     lifecycle_stages: list[str] = []
     conditions_note: str | None = None
@@ -58,6 +60,63 @@ class EmissionPayload(Payload):
     county: str | None = None
     state: str | None = None
     zip_code: str | None = None
+
+
+Tier = Literal["exceedance", "elevated", "acceptable"]
+
+
+class VentilationTierPayload(Payload):
+    label: str
+    ventilation_m3_per_s: Num
+    mixing_factor: Num
+    workplace_concentration_mg_m3: Num | None = None
+    twa_mg_m3: Num | None = None
+    oel_ratio: Num | None = None
+    hq: Num | None = None
+    cancer_risk: Num | None = None
+    risk_tier: Tier | None = None
+
+
+class OccupationalPayload(Payload):
+    """The worker screening of one facility, as the assessment tool returned it."""
+
+    fugitive_release_kg_per_year: Num | None = None
+    fugitive_reporting_year: int | None = None
+    operating_days_per_year: Num | None = None
+    hours_per_day: Num | None = None
+    oel_twa_mg_m3: Num | None = None
+    oel_source: str | None = None
+    rfc: Num | None = None
+    iur: Num | None = None
+    vapor_pressure_mmhg: Num | None = None
+    vapor_pressure_source: str | None = None
+    baseline: VentilationTierPayload
+    worst_case: VentilationTierPayload
+    risk_tier: Tier | None = None
+    assumptions: list[str] = Field(default_factory=list[str])
+    warnings: list[str] = Field(default_factory=list[str])
+
+
+class CdrSectorPayload(Payload):
+    code: str
+    name: str
+    matched_naics_prefix: str
+    naics_edition: str
+
+
+class ProfilePayload(Payload):
+    """The operational profile of one facility, as the assessment tool returned it."""
+
+    naics_code: str | None = None
+    life_cycle_stage: list[str] = Field(default_factory=list[str])
+    cou_category: list[str] = Field(default_factory=list[str])
+    cdr_sector: CdrSectorPayload | None = None
+    days_per_week: int | None = None
+    operating_days_per_year: Num | None = None
+    hours_per_day: Num | None = None
+    annual_operating_hours: Num | None = None
+    schedule_source: str | None = None
+    warnings: list[str] = Field(default_factory=list[str])
 
 
 class IndustryPayload(Payload):
@@ -92,9 +151,17 @@ class SccLookupPayload(Payload):
     matches: list[SccMatchPayload]
 
 
+class LimitsPayload(Payload):
+    oel_twa_mg_m3: Num | None = None
+    oel_source: str | None = None
+
+
 class PropertiesPayload(Payload):
     preferred_name: str | None = None
     molecular_weight: Num | None = None
+    vapor_pressure: Num | None = None
+    density: Num | None = None
+    occupational_limits: LimitsPayload | None = None
     rfc: Num | None = None
     iur: Num | None = None
     sources: dict[str, str] = Field(default_factory=dict[str, str])
@@ -184,6 +251,46 @@ class BoundPayload(Payload):
     cancer_risk: Num | None = None
 
 
+class ScenarioFactorPayload(Payload):
+    key: str
+    group: Literal["source", "release", "conditions", "receptor_model"]
+    label: str
+    value: Num | str | None = None
+    unit: str = ""
+    source: str | None = None
+    reason: str | None = None
+
+
+class ScenarioReceptorPayload(Payload):
+    kind: Literal["tract", "workers"]
+    label: str
+    residents: int | None = None
+    age_distribution: dict[str, Num] = Field(default_factory=dict[str, Num])
+    distance_m: Num | None = None
+    bearing_deg: Num | None = None
+    latitude: Num | None = None
+    longitude: Num | None = None
+    concentration: Num | None = None
+    fraction_of_maximum: Num | None = None
+    note: str | None = None
+
+
+class WorstCaseScenarioPayload(Payload):
+    """One worst-case scenario of a facility, as the assessment tool returned it."""
+
+    pathway_key: str
+    pathway: str
+    quantity: str
+    quantity_label: str
+    value: Num
+    tier: str | None = None
+    benchmark: Num | None = None
+    factors: list[ScenarioFactorPayload] = Field(default_factory=list[ScenarioFactorPayload])
+    receptors: list[ScenarioReceptorPayload] = Field(default_factory=list[ScenarioReceptorPayload])
+    receptors_note: str | None = None
+    notes: list[str] = Field(default_factory=list[str])
+
+
 class AssessedPayload(Payload):
     """One facility of the batch assessment: its record and every result of its chain.
 
@@ -200,6 +307,10 @@ class AssessedPayload(Payload):
     population: PopulationPayload | None = None
     radius_km: Num | None = None
     exposure: ExposurePayload
+    # Validated on their own, so an invalid one leaves out only itself, with a warning.
+    occupational_exposure: object = None
+    operational_profile: object = None
+    scenarios: list[object] = Field(default_factory=list[object])
 
 
 class ScreenedOutPayload(Payload):

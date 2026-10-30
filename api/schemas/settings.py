@@ -36,6 +36,18 @@ class Thresholds(ContractModel):
     cancer_upper: float
 
 
+class WorkerThresholds(ContractModel):
+    """Tier boundaries of the worker screening: above `*_exceedance` is "exceedance", above
+    `*_elevated` is "elevated" (unitless; cancer risk is a probability)."""
+
+    ratio_exceedance: float
+    ratio_elevated: float
+    hq_exceedance: float
+    hq_elevated: float
+    cancer_exceedance: float
+    cancer_elevated: float
+
+
 class InitialView(ContractModel):
     """A box on the map, decimal degrees (WGS84, west negative)."""
 
@@ -93,6 +105,7 @@ class ClientConfig(ContractModel):
 
     model: str = Field(description="Chat model that drives the agent.")
     thresholds: Thresholds
+    worker_thresholds: WorkerThresholds
     map: MapConfig
     significant_digits: int
     narrow_breakpoint_px: int

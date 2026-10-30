@@ -57,6 +57,13 @@ def get_population_receptors(
         - source: the data source and vintage, or "screening default" when no census data
           could be used (invalid input, no Census API key, service unreachable, no census
           tract such as open water or a point outside the United States)
+        - tracts: the census tracts around the point that have residents, nearest first, each
+          with geoid, residents (the tract's ACS estimate, not scaled to the circle),
+          age_distribution (percent), distance_m and bearing_deg (degrees clockwise from north)
+          from the point to the tract's internal point, and land_area_km2; empty for the
+          screening default. A tract's distance is to one point, so it is approximate for a
+          large tract.
+        - tracts_not_listed: tracts with residents left out of that list by the listing limit
         - warnings: tracts left out, or why the screening default was used; if `source` is
           "screening default", say so to the user because the numbers are generic, not
           site-specific

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 from api.services.projectors.rules import WorkspaceRules
-from config.ui import RiskThresholds
+from config.ui import RiskThresholds, get_ui_settings
 
 RULES = WorkspaceRules(
     thresholds=RiskThresholds(
@@ -19,6 +19,7 @@ RULES = WorkspaceRules(
     default_radius_km=2.0,
     sector_half_angle_deg=20.0,
     vertex_spacing_deg=10.0,
+    graph=get_ui_settings().exposure_graph,
 )
 _ids = itertools.count(1)
 

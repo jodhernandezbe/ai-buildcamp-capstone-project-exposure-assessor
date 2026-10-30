@@ -11,8 +11,9 @@ from typing import Literal
 from pydantic import Field
 
 from api.schemas.base import ContractModel
+from api.schemas.exposure_graph import ExposureGraph, GraphStatus
 
-Status = Literal["below", "near", "above"]
+Status = GraphStatus
 Tier = Literal[1, 2, 3]
 ProvenanceKind = Literal[
     "not_evaluated", "direct_tri_match", "tri_category_member", "read_across", "unresolved"
@@ -184,6 +185,197 @@ class ConditionOfUse(ContractModel):
     mapping_strength: str
 
 
+OccupationalTier = Literal["exceedance", "elevated", "acceptable"]
+
+
+class VentilationTier(ContractModel):
+    """The worker screening for one ventilation tier of the box model; None = not computed.
+
+    Attributes:
+        ventilation_m3_per_s: Room ventilation rate, m³/s.
+        mixing_factor: Mixing factor k, unitless.
+        workplace_concentration_mg_m3: Concentration while the plant runs, mg/m³.
+        twa_mg_m3: 8-hour time-weighted average, mg/m³.
+        oel_ratio: The average over the occupational limit (unitless); above 1 exceeds it.
+        hq: Worker hazard quotient (unitless).
+        cancer_risk: Worker lifetime excess cancer risk (unitless).
+        risk_tier: "exceedance", "elevated" or "acceptable"; None when nothing could be compared.
+    """
+
+    label: str
+    ventilation_m3_per_s: float
+    mixing_factor: float
+    workplace_concentration_mg_m3: float | None = None
+    twa_mg_m3: float | None = None
+    oel_ratio: float | None = None
+    hq: float | None = None
+    cancer_risk: float | None = None
+    risk_tier: OccupationalTier | None = None
+
+
+class OccupationalExposure(ContractModel):
+    """Worker screening of a facility: EPA ChemSTEER box model and RAGS Part F dosimetry.
+
+    A screening that assumes generic ventilation, not an OSHA compliance determination.
+
+    Attributes:
+        fugitive_release_kg_per_year: TRI fugitive air release, kg/yr (year in
+            ``fugitive_reporting_year``).
+        operating_days_per_year: Days a year the plant runs, d/yr.
+        hours_per_day: Hours a day it runs, h/day.
+        oel_twa_mg_m3: The 8-hour occupational limit used, mg/m³, with ``oel_source``.
+        rfc: Reference concentration used, mg/m³.
+        iur: Inhalation unit risk used, (µg/m³)⁻¹.
+        vapor_pressure_mmhg: Context only; never enters an equation. Its source is in
+            ``vapor_pressure_source``.
+        baseline: The baseline manufacturing ventilation tier.
+        worst_case: The enclosed-zone tier.
+        risk_tier: The baseline tier.
+    """
+
+    fugitive_release_kg_per_year: float | None = None
+    fugitive_reporting_year: int | None = None
+    operating_days_per_year: float | None = None
+    hours_per_day: float | None = None
+    oel_twa_mg_m3: float | None = None
+    oel_source: str | None = None
+    rfc: float | None = None
+    iur: float | None = None
+    vapor_pressure_mmhg: float | None = None
+    vapor_pressure_source: str | None = None
+    baseline: VentilationTier
+    worst_case: VentilationTier
+    risk_tier: OccupationalTier | None = None
+    assumptions: list[str] = Field(default_factory=list[str])
+    warnings: list[str] = Field(default_factory=list[str])
+
+
+class CdrSector(ContractModel):
+    """The TSCA CDR industrial sector of a NAICS code, with the table row that matched."""
+
+    code: str
+    name: str
+    matched_naics_prefix: str
+    naics_edition: str
+
+
+class OperationalProfile(ContractModel):
+    """How a facility operates and where it sits in the TSCA framework.
+
+    Attributes:
+        life_cycle_stage: TSCA stages of the activities the facility reported to TRI.
+        cou_category: TSCA condition-of-use categories of those activities.
+        cdr_sector: CDR industrial sector of its NAICS code; None when the table has none.
+        days_per_week: Derived from the Census QPC hours per week and a configured working day.
+        operating_days_per_year: Days a year, d/yr.
+        hours_per_day: Hours a day, h/day.
+        annual_operating_hours: Hours a year, h/yr (at most 8,760).
+        schedule_source: Where the hours come from.
+    """
+
+    naics_code: str | None = None
+    life_cycle_stage: list[str] = Field(default_factory=list[str])
+    cou_category: list[str] = Field(default_factory=list[str])
+    cdr_sector: CdrSector | None = None
+    days_per_week: int | None = None
+    operating_days_per_year: float | None = None
+    hours_per_day: float | None = None
+    annual_operating_hours: float | None = None
+    schedule_source: str | None = None
+    warnings: list[str] = Field(default_factory=list[str])
+
+
+class ScenarioFactor(ContractModel):
+    """One factor of a worst-case scenario: a value a tool returned, or why there is none.
+
+    Attributes:
+        group: source, release, conditions or receptor_model.
+        value: A number or text a tool returned; None when none did (see ``reason``).
+        unit: Unit of ``value``; empty when unitless or text.
+        source: Where the value came from, when a tool said.
+        reason: Why there is no value.
+    """
+
+    key: str
+    group: Literal["source", "release", "conditions", "receptor_model"]
+    label: str
+    value: float | str | None = None
+    unit: str = ""
+    source: str | None = None
+    reason: str | None = None
+
+
+class ScenarioReceptor(ContractModel):
+    """A receptor of a worst-case scenario: a census tract, or the facility's workers.
+
+    Attributes:
+        residents: Persons in the tract (the tract's ACS estimate); None for workers.
+        age_distribution: Age band -> percent of the tract; empty for workers.
+        distance_m: Meters from the facility to the tract's internal point.
+        bearing_deg: Degrees clockwise from north from the facility to that point.
+        latitude: Decimal degrees of that point (the census service's internal point), for drawing.
+        longitude: Decimal degrees of that point.
+        concentration: Annual-average ug/m^3 the scenario gives at the tract (workers: the
+            8-hour average, mg/m^3).
+        fraction_of_maximum: That concentration over the scenario's maximum, unitless.
+    """
+
+    kind: Literal["tract", "workers"]
+    label: str
+    residents: int | None = None
+    age_distribution: dict[str, float] = Field(default_factory=dict[str, float])
+    distance_m: float | None = None
+    bearing_deg: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    concentration: float | None = None
+    fraction_of_maximum: float | None = None
+    note: str | None = None
+
+
+class WorstCaseScenario(ContractModel):
+    """The combination of factors behind the high-end value of one quantity on one pathway.
+
+    A screening result, never a regulatory finding: ``tier`` is the level the assessment gave.
+
+    Attributes:
+        pathway_key: Which pathway produced it, e.g. ``community_inhalation``.
+        pathway: Medium, route and receptor class, in words.
+        quantity: ``hq``, ``cancer_risk`` or ``oel_ratio``.
+        value: The high-end value, unitless.
+        tier: The level the assessment gave the value; None when none was given.
+        benchmark: The level of concern the value was compared with, unitless.
+        receptors_note: Why there are no receptors, or what was left out.
+    """
+
+    pathway_key: str
+    pathway: str
+    quantity: str
+    quantity_label: str
+    value: float
+    tier: str | None = None
+    benchmark: float | None = None
+    factors: list[ScenarioFactor] = Field(default_factory=list[ScenarioFactor])
+    receptors: list[ScenarioReceptor] = Field(default_factory=list[ScenarioReceptor])
+    receptors_note: str | None = None
+    notes: list[str] = Field(default_factory=list[str])
+
+
+class ScenarioDriver(ContractModel):
+    """The assessed facility whose scenario has the highest value of a pathway's quantity.
+
+    Attributes:
+        stack_number: The stack behind the value (community pathways); None otherwise.
+    """
+
+    pathway_key: str
+    quantity: str
+    frs_id: str
+    facility_name: str | None = None
+    stack_number: int | None = None
+    value: float
+
+
 class Facility(ContractModel):
     """One facility of the emissions inventory with what the other tools reported about it.
 
@@ -193,6 +385,13 @@ class Facility(ContractModel):
         emission_rate_g_s: Total release averaged over ``operating_hours_per_year``.
         operating_hours_source: Where those hours came from (industry survey or default); None
             when the record predates the field.
+        fugitive_release_kg_per_year: TRI fugitive air release, kg/yr; None when TRI has none.
+        exposure: The community (ambient fenceline) result.
+        occupational_exposure: The worker screening; None when no assessment produced it.
+        operational_profile: Schedule, life cycle stage, condition of use and CDR sector.
+        scenarios: The worst-case scenarios of the facility, one per pathway and quantity that
+            has a value.
+        exposure_graph: How the worst-case exposure arises, source to endpoint, per pathway.
         naics_subsector: First three digits of the inventory's NAICS code (e.g. "325").
         naics_subsector_title: That subsector's title from the Census lists; None if unknown.
         conditions_of_use: TSCA conditions of use of the activities the facility reported to TRI.
@@ -227,6 +426,8 @@ class Facility(ContractModel):
     emission_rate_g_s: float
     operating_hours_per_year: float
     operating_hours_source: str | None = None
+    fugitive_release_kg_per_year: float | None = None
+    fugitive_reporting_year: int | None = None
     conditions_of_use: list[ConditionOfUse] = Field(default_factory=list[ConditionOfUse])
     lifecycle_stages: list[str] = Field(default_factory=list[str])
     conditions_note: str | None = None
@@ -235,6 +436,10 @@ class Facility(ContractModel):
     receptors: Receptors | None = None
     meteorology: Meteorology | None = None
     exposure: ExposureRanges | None = None
+    occupational_exposure: OccupationalExposure | None = None
+    operational_profile: OperationalProfile | None = None
+    scenarios: list[WorstCaseScenario] = Field(default_factory=list[WorstCaseScenario])
+    exposure_graph: ExposureGraph | None = None
     status: Status | None = None
     screening: Screening | None = None
     buffer: Polygon | None = None
@@ -269,6 +474,34 @@ class RiskSummary(ContractModel):
     reason: str | None = Field(default=None, description="Why no value yet, e.g. not computed.")
 
 
+class WorkerExtremum(ContractModel):
+    """The highest value of one worker quantity over the assessed facilities.
+
+    ``risk_tier`` is the tier the tool gave that facility (baseline ventilation).
+    """
+
+    value: float
+    frs_id: str
+    facility_name: str | None = None
+    risk_tier: OccupationalTier | None = None
+
+
+class WorkerTierSummary(ContractModel):
+    """Highest limit ratio, hazard quotient and cancer risk of the workers for one tier."""
+
+    oel_ratio: WorkerExtremum | None = None
+    hq: WorkerExtremum | None = None
+    cancer_risk: WorkerExtremum | None = None
+
+
+class WorkerRiskSummary(ContractModel):
+    """The worker screening across facilities, for both ventilation tiers; ``reason`` if none."""
+
+    baseline: WorkerTierSummary = Field(default_factory=WorkerTierSummary)
+    worst_case: WorkerTierSummary = Field(default_factory=WorkerTierSummary)
+    reason: str | None = Field(default=None, description="Why no value yet, e.g. not computed.")
+
+
 class ReadAcross(ContractModel):
     """The read-across outcome for the queried chemical (surrogate values are scores 0-1)."""
 
@@ -290,6 +523,9 @@ class Chemical(ContractModel):
         name: The name the properties result gave (CompTox's preferred name); None when it
             gave none, and then the CAS number stands alone.
         molecular_weight_g_mol: Molecular weight, g/mol.
+        vapor_pressure_mmhg: Vapor pressure, mmHg (its source is in ``sources``).
+        density_g_cm3: Density, g/cm³.
+        oel_twa_mg_m3: 8-hour occupational exposure limit, mg/m³ (source under ``oel_twa``).
         rfc_mg_m3: Inhalation reference concentration, mg/m³.
         iur_per_ug_m3: Inhalation unit risk, (µg/m³)⁻¹.
         sources: Field name -> source the value came from.
@@ -298,6 +534,9 @@ class Chemical(ContractModel):
     cas_number: str | None = None
     name: str | None = None
     molecular_weight_g_mol: float | None = None
+    vapor_pressure_mmhg: float | None = None
+    density_g_cm3: float | None = None
+    oel_twa_mg_m3: float | None = None
     rfc_mg_m3: float | None = None
     iur_per_ug_m3: float | None = None
     sources: dict[str, str] = Field(default_factory=dict[str, str])
@@ -332,6 +571,8 @@ class WorkspaceState(ContractModel):
             only one); None when no single facility stands out.
         chemical: The queried chemical and its provenance.
         risk: Highest risk values across the attributed facilities.
+        worker_risk: Highest worker (occupational) values across the assessed facilities.
+        scenario_drivers: For each pathway and quantity, the facility with the highest value.
         receptors: Receptors of the selected facility.
         meteorology: Meteorology of the selected facility, else the latest result.
         unattributed: Results not attached to any facility.
@@ -344,6 +585,8 @@ class WorkspaceState(ContractModel):
     selected_frs_id: str | None = None
     chemical: Chemical = Field(default_factory=Chemical)
     risk: RiskSummary = Field(default_factory=RiskSummary)
+    worker_risk: WorkerRiskSummary = Field(default_factory=WorkerRiskSummary)
+    scenario_drivers: list[ScenarioDriver] = Field(default_factory=list[ScenarioDriver])
     receptors: Receptors | None = None
     meteorology: Meteorology | None = None
     unattributed: list[Unattributed] = Field(default_factory=list[Unattributed])

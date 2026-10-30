@@ -17,9 +17,11 @@ from api.schemas.settings import (
     LayoutConfig,
     MapConfig,
     Thresholds,
+    WorkerThresholds,
 )
 from app.key_vault import KeyStatus, ServiceKeys
 from config.agent import get_agent_settings
+from config.occupational import get_occupational_settings
 from config.ui import KeyName, UiSettings
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
@@ -113,6 +115,18 @@ def _layout_config(settings: UiSettings) -> LayoutConfig:
     )
 
 
+def _worker_thresholds() -> WorkerThresholds:
+    t = get_occupational_settings().thresholds
+    return WorkerThresholds(
+        ratio_exceedance=t.exceedance_ratio,
+        ratio_elevated=t.elevated_ratio,
+        hq_exceedance=t.exceedance_hq,
+        hq_elevated=t.elevated_hq,
+        cancer_exceedance=t.exceedance_cancer_risk,
+        cancer_elevated=t.elevated_cancer_risk,
+    )
+
+
 @router.get("/client")
 def client_config(settings: Settings) -> ClientConfig:
     """Display settings the frontend needs."""
@@ -125,6 +139,7 @@ def client_config(settings: Settings) -> ClientConfig:
             cancer_lower=limits.cancer_lower,
             cancer_upper=limits.cancer_upper,
         ),
+        worker_thresholds=_worker_thresholds(),
         map=_map_config(settings),
         significant_digits=display.significant_digits,
         narrow_breakpoint_px=display.narrow_breakpoint_px,

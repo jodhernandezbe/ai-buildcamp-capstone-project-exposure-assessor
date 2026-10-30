@@ -8,9 +8,11 @@ from typing import Protocol
 
 from config.pubchem import PubchemSettings
 from tools.informatics.helpers.pubchem.extract import FieldValue, extract_field
+from tools.informatics.helpers.pubchem.limits import empty_limits, read_limits
 from tools.informatics.helpers.pubchem.record import PugViewRecord
 from tools.informatics.helpers.pubchem.resolve import resolve_compound_data
 from tools.informatics.helpers.pubchem.transport import JsonGetter
+from tools.schemas import OccupationalLimits
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,10 @@ class PubchemFallback(Protocol):
 
     def candidates(self, cas: str, keys: Sequence[str]) -> PubchemCandidates:
         """Return what PubChem offers for ``keys`` (a subset of ``fields``) of ``cas``."""
+        ...
+
+    def limits(self, cas: str, molecular_weight: float | None) -> OccupationalLimits:
+        """Return the occupational limits of ``cas`` (mg/m^3); ``molecular_weight`` is g/mol."""
         ...
 
 
@@ -77,6 +83,24 @@ class PubchemLookup:
         if compound.record is None:
             return PubchemCandidates(problem="; ".join(compound.warnings))
         return self._read_fields(compound.record, keys)
+
+    def limits(self, cas: str, molecular_weight: float | None) -> OccupationalLimits:
+        """Return the occupational limits of the chemical with CAS number ``cas``.
+
+        Uses the same cached PUG View response as ``candidates``; never raises on data.
+
+        Args:
+            cas: Validated, hyphenated CAS number.
+            molecular_weight: Molecular weight, g/mol, for limits given in ppm; None if unknown.
+        """
+        compound = resolve_compound_data(
+            cas, client=self._client, settings=self._settings, kind="cas"
+        )
+        if compound.record is None:
+            return empty_limits("PubChem limits unavailable: " + "; ".join(compound.warnings))
+        return read_limits(
+            compound.record, molecular_weight, self._settings.limits, self._settings.agreement_ratio
+        )
 
     def _read_fields(self, record: PugViewRecord, keys: Sequence[str]) -> PubchemCandidates:
         values: dict[str, FieldValue] = {}

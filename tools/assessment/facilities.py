@@ -8,12 +8,16 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from commons.cas import format_cas
 from config.assessment import AssessmentSettings, get_assessment_settings
+from config.occupational import get_occupational_settings
 from config.read_across import get_read_across_settings
 from tools.assessment.helpers.chain import assess_all, refine_all, worst_case_only
+from tools.assessment.helpers.occupational import Workplace, no_limits
+from tools.assessment.helpers.scenarios import drivers_of
 from tools.assessment.helpers.screening import can_screen, unit_bound
 from tools.assessment.helpers.steps import Steps
 from tools.assessment.helpers.tiers import Screen, Split, screen, split
@@ -31,6 +35,7 @@ from tools.informatics.read_across import find_tri_read_across_surrogate
 from tools.schemas import (
     AssessmentArtifact,
     AssessmentResult,
+    ChemicalProperties,
     EmissionRecord,
     FacilityExposure,
     Meteorology,
@@ -101,19 +106,58 @@ def default_steps() -> Steps:
     )
 
 
-def _toxicity(cas: str, given: Toxicity | None) -> tuple[Toxicity, str, list[str]]:
-    """The benchmarks passed in, else the chemical's own from CompTox.
+def _given(
+    cas: str, given: Toxicity, config: RunnableConfig | None
+) -> tuple[Toxicity, str, list[str], ChemicalProperties | None]:
+    """The benchmarks passed in; the chemical is still looked up for its workplace information.
+
+    A lookup that cannot be made (no CompTox key) leaves the worker screening without limits and
+    says so; it never stops an assessment whose benchmarks were given.
+    """
+    values = Toxicity(rfc=given.get("rfc"), iur=given.get("iur"))
+    try:
+        found = fetch_chemical_properties.invoke({"cas_number": cas}, config)
+    except RuntimeError as error:
+        return values, "given", [f"the chemical's limits could not be looked up: {error}"], None
+    return values, "given", [], found
+
+
+def _toxicity(
+    cas: str, given: Toxicity | None, config: RunnableConfig | None = None
+) -> tuple[Toxicity, str, list[str], ChemicalProperties | None]:
+    """The benchmarks passed in, else the chemical's own from CompTox, with the properties read.
 
     Only the benchmark warnings are kept, unless both benchmarks are missing: then every
-    warning is kept, since one of them may say why (CompTox unreachable, CAS not found).
+    warning is kept, since one of them may say why (CompTox unreachable, CAS not found). The
+    run's configuration carries the values the user entered, so they reach the lookup.
     """
     if given is not None:
-        return Toxicity(rfc=given.get("rfc"), iur=given.get("iur")), "given", []
-    found = fetch_chemical_properties.invoke({"cas_number": cas})
+        return _given(cas, given, config)
+    found = fetch_chemical_properties.invoke({"cas_number": cas}, config)
     warnings = list(found["warnings"])
     if found["rfc"] is not None or found["iur"] is not None:  # else every warning may say why
         warnings = [w for w in warnings if "rfc" in w.lower() or "iur" in w.lower()]
-    return Toxicity(rfc=found["rfc"], iur=found["iur"]), "CompTox", warnings
+    return Toxicity(rfc=found["rfc"], iur=found["iur"]), "CompTox", warnings, found
+
+
+_COMPTOX_PRESSURE = ("experimental", "predicted")
+
+
+def _pressure_source(found: ChemicalProperties) -> str | None:
+    source = (found.get("sources") or {}).get("vapor_pressure")
+    if source is None:
+        return None
+    return f"CompTox ({source})" if source in _COMPTOX_PRESSURE else source
+
+
+def _workplace(found: ChemicalProperties | None) -> Workplace:
+    """What the worker screening needs about the chemical (limits, vapor pressure)."""
+    settings = get_occupational_settings()
+    if found is None:
+        limits = no_limits("benchmarks were given, so the chemical's limits were not looked up")
+        return Workplace(settings, limits, None, None)
+    limits = found.get("occupational_limits") or no_limits("no limits were read")
+    return Workplace(settings, limits, found.get("vapor_pressure"), _pressure_source(found))
 
 
 def _once_per_title(scc: Callable[[str], SccLookupResult]) -> Callable[[str], SccLookupResult]:
@@ -165,6 +209,7 @@ class _Call:
     radius_km: float | None
     steps: Steps
     settings: AssessmentSettings
+    workplace: Workplace
 
 
 def _by_id(call: _Call, frs_ids: list[str]) -> Findings:
@@ -173,8 +218,11 @@ def _by_id(call: _Call, frs_ids: list[str]) -> Findings:
     candidates = [(r, None) for r in _resolved(chosen)]
     refined = refine_all(candidates, call.toxicity, call.steps, call.settings)
     cap = call.settings.max_facilities
-    full = assess_all(refined[:cap], call.toxicity, call.radius_km, call.steps, call.settings)
-    worst = [worst_case_only(item, call.radius_km) for item in refined[cap:]]
+    args = (call.toxicity, call.radius_km, call.steps, call.settings)
+    full = assess_all(refined[:cap], *args, call.workplace)
+    worst = [
+        worst_case_only(i, call.radius_km, call.workplace, call.toxicity) for i in refined[cap:]
+    ]
     tox = (call.toxicity, call.source)
     return Findings(
         call.cas, tox, len(call.records), full, worst, [], None, True, skipped, call.warnings
@@ -198,13 +246,16 @@ def _bound_warning(over: list[NotAssessed], bound: int) -> list[str]:
 def _found(call: _Call, possible: bool, first: Screen, tiers: Split) -> Findings:
     """Tier 3 and the record of it all: the full chain for the riskiest, the rest kept."""
     s = call.settings
-    full = assess_all(tiers.full, call.toxicity, call.radius_km, call.steps, s)
+    full = assess_all(tiers.full, call.toxicity, call.radius_km, call.steps, s, call.workplace)
+    worst = [
+        worst_case_only(i, call.radius_km, call.workplace, call.toxicity) for i in tiers.worst_only
+    ]
     return Findings(
         cas=call.cas,
         toxicity=(call.toxicity, call.source),
         found=len(call.records),
         full=full,
-        worst_only=[worst_case_only(item, call.radius_km) for item in tiers.worst_only],
+        worst_only=worst,
         screened_out=[*first.screened_out, *tiers.screened_out],
         thresholds=s.screening,
         possible=possible,
@@ -223,10 +274,12 @@ def _screened(call: _Call) -> Findings:
 
 
 def _artifact(f: Findings) -> AssessmentArtifact:
+    assessed = [*f.full, *f.worst_only]
     return AssessmentArtifact(
-        assessed=[*f.full, *f.worst_only],
+        assessed=assessed,
         screened_out=list(f.screened_out),
         not_assessed=list(f.skipped),
+        drivers=drivers_of(assessed),
     )
 
 
@@ -346,6 +399,7 @@ def run_assessment(
     radius_km: float | None,
     toxicity: Toxicity | None,
     steps: Steps,
+    config: RunnableConfig | None = None,
 ) -> Outcome:
     """Screen (or select) the facilities, get the benchmarks, run the tiers, build both views.
 
@@ -353,7 +407,7 @@ def run_assessment(
     completed: a failed read is never taken for "no releases", so no category is substituted.
     """
     try:
-        return _assess(cas_number, frs_ids, place, radius_km, toxicity, steps)
+        return _assess(cas_number, frs_ids, place, radius_km, toxicity, steps, config)
     except TriReadError as exc:
         return _not_completed(cas_number, str(exc))
 
@@ -378,6 +432,7 @@ def _assess(
     radius_km: float | None,
     toxicity: Toxicity | None,
     steps: Steps,
+    config: RunnableConfig | None = None,
 ) -> Outcome:
     settings = get_assessment_settings()
     cas = format_cas(cas_number)
@@ -388,11 +443,12 @@ def _assess(
         view = assessment_view(f, settings.max_worst_case_listed, settings.max_screened_out_listed)
         return view, _artifact(f)
     records, notes = _inventory(cas, place)
-    tox, source, warnings = _toxicity(cas, toxicity)
+    tox, source, warnings, found = _toxicity(cas, toxicity, config)
     tox, source, warnings = _analogue_toxicity(cas, tox, source, warnings)
     steps.prefetch(sorted({r["naics_title"] for r in records if r["naics_title"]}))
     steps = replace(steps, scc=_once_per_title(steps.scc))
-    call = _Call(cas, records, tox, source, [*warnings, *notes], radius_km, steps, settings)
+    work = _workplace(found)
+    call = _Call(cas, records, tox, source, [*warnings, *notes], radius_km, steps, settings, work)
     findings = _by_id(call, frs_ids) if frs_ids else _screened(call)
     listed = (settings.max_worst_case_listed, settings.max_screened_out_listed)
     return assessment_view(findings, *listed), _artifact(findings)
@@ -406,6 +462,8 @@ def assess_facilities(
     city: str | None = None,
     radius_km: float | None = None,
     toxicity: Toxicity | None = None,
+    *,
+    config: RunnableConfig,
 ) -> Outcome:
     """Screen every facility of a chemical and assess those that may matter, in one call.
 
@@ -473,7 +531,22 @@ def assess_facilities(
           (annual average, ug/m3), hq and cancer_risk, each for the worst case and the
           representative weather (null when not computable: no benchmark, or no stack could be
           evaluated), and notes (why a better stack source could not be used, defaults, and
-          the method's limits)
+          the method's limits). These are the community (neighbourhood) result. Each facility
+          also has worker_risk_tier ("exceedance", "elevated" or "acceptable") and
+          worker_oel_ratio (the worker's 8-hour average over the occupational limit, unitless;
+          above 1 exceeds the limit): a separate screening of the workers from the facility's
+          fugitive air release with generic baseline ventilation. They are context to report
+          beside the community result, say which of the two drives the concern, and a null
+          means it could not be computed (no fugitive release, no occupational limit and no
+          benchmark): report it as not computed, never as zero or acceptable. The fuller worker
+          result and the facility's schedule, life cycle stage and condition of use go to the
+          program's dashboard.
+        - drivers: for each pathway (outdoor air to the general population, indoor air to
+          workers) and quantity (hazard quotient, cancer risk, worker limit ratio), the facility
+          with the highest value (frs_id, facility_name, value) and, for the community
+          pathway, the stack behind it (stack_number). Name the driver of each result in the
+          report; the combination of factors behind each value (stack configuration, weather,
+          distance, the residents most affected) goes to the program's dashboard.
         - worst_case_only_count and worst_case_only: facilities still above a threshold with
           their own stacks but beyond the full-assessment cap, highest worst-case HQ first,
           each with frs_id, facility_name, city, state, emission_rate (g/s), stack_tier,
@@ -484,4 +557,5 @@ def assess_facilities(
         The worst case is the screening maximum between 100 m and 10 km, which may fall where
         no one lives. These are screening estimates, not regulatory determinations.
     """
-    return run_assessment(cas_number, frs_ids, (state, city), radius_km, toxicity, default_steps())
+    steps = default_steps()
+    return run_assessment(cas_number, frs_ids, (state, city), radius_km, toxicity, steps, config)

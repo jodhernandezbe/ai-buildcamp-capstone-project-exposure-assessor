@@ -78,3 +78,18 @@ export function formatRange(
   const last = formatNumber(high, digits);
   return first === last ? first : `${first} – ${last}`;
 }
+
+/** "250 days/yr • 16 hr/day • 4,240 hr/yr", each part as the API gave it; absent parts are left out. */
+export function formatSchedule(schedule: {
+  operating_days_per_year: number | null;
+  hours_per_day: number | null;
+  annual_operating_hours: number | null;
+} | null): string {
+  if (!schedule) return NOT_REPORTED;
+  const parts = [
+    schedule.operating_days_per_year === null ? null : `${formatReported(schedule.operating_days_per_year)} days/yr`,
+    schedule.hours_per_day === null ? null : `${formatReported(schedule.hours_per_day)} hr/day`,
+    schedule.annual_operating_hours === null ? null : `${formatCount(schedule.annual_operating_hours)} hr/yr`,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(" • ") : NOT_REPORTED;
+}

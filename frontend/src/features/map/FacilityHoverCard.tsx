@@ -2,6 +2,7 @@ import { ChevronRight, X } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
 import { StatusPill } from "../../components/ui/StatusPill";
+import { TierPill } from "../../components/ui/TierPill";
 import {
   formatCount,
   formatNumber,
@@ -10,8 +11,11 @@ import {
   formatWithUnit,
   orNotReported,
 } from "../../lib/format";
+import { stackNumber } from "../../lib/scenarios";
 import type { Extreme, Facility, Screening, Stack } from "../../types/workspace";
 import { Metric } from "../overview/Metric";
+import { ScenarioSection } from "./ScenarioSection";
+import { WorkerSection } from "./WorkerSection";
 
 // More stacks than this start folded: the card stays readable and the risk stays in view.
 const STACKS_SHOWN_OPEN = 2;
@@ -19,7 +23,7 @@ const STACKS_SHOWN_OPEN = 2;
 const range = (extreme: Extreme | null | undefined, digits: number): string =>
   extreme ? formatRange(extreme.low, extreme.high, digits) : formatNumber(null, digits);
 
-function StackRow({ stack, digits }: { stack: Stack; digits: number }) {
+function StackRow({ stack, digits, drives }: { stack: Stack; digits: number; drives: string[] }) {
   return (
     <li className="rounded-lg bg-fg2/5 p-2">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -28,6 +32,9 @@ function StackRow({ stack, digits }: { stack: Stack; digits: number }) {
         </span>
         {stack.stack_number !== null && <span className="text-xs text-fg2">stack {stack.stack_number}</span>}
       </div>
+      {drives.length > 0 && (
+        <p className="m-0 mb-1 text-xs font-medium text-accent">Drives the worst case: {drives.join(", ")}</p>
+      )}
       <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1">
         <Metric label="Height">{formatWithUnit(stack.height_m, "m", digits)}</Metric>
         <Metric label="Diameter">{formatWithUnit(stack.diameter_m, "m", digits)}</Metric>
@@ -43,6 +50,16 @@ function StackRow({ stack, digits }: { stack: Stack; digits: number }) {
       )}
     </li>
   );
+}
+
+/** The results each stack drives: stack number -> names of the results whose scenario names it. */
+function drivingStacks(facility: Facility): Map<number, string[]> {
+  const found = new Map<number, string[]>();
+  for (const scenario of facility.scenarios) {
+    const number = stackNumber(scenario);
+    if (number !== null) found.set(number, [...(found.get(number) ?? []), scenario.quantity_label]);
+  }
+  return found;
 }
 
 const CONDITIONS_SHOWN_OPEN = 3;
@@ -121,6 +138,30 @@ function ScreeningNote({ screening, digits }: { screening: Screening | null; dig
   );
 }
 
+/** Community and worker risk side by side: is it the stack plume or indoor fugitive release? */
+function RiskBadges({ facility, digits }: { facility: Facility; digits: number }) {
+  const { exposure, occupational_exposure: worker } = facility;
+  const ratio = worker?.baseline.oel_ratio ?? null;
+  return (
+    <div
+      role="group"
+      aria-label="Community and worker risk"
+      className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-fg2/5 p-2 text-xs"
+    >
+      <span className="flex items-center gap-1.5">
+        Community HQ{" "}
+        <span className="font-medium tabular-nums">
+          {exposure?.hq_worst ? formatNumber(exposure.hq_worst.high, digits) : formatNumber(null, digits)}
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        Worker <TierPill tier={worker?.risk_tier ?? null} />{" "}
+        {ratio !== null && <span className="tabular-nums text-fg2">R_OEL {formatNumber(ratio, digits)}</span>}
+      </span>
+    </div>
+  );
+}
+
 interface SectionProps {
   title: string;
   /** Shown beside the title: a count, or the status pill. */
@@ -175,6 +216,7 @@ interface CardProps {
 /** The inspector of one facility: identifiers, release, stacks with their tier, and risk. */
 export function FacilityHoverCard({ facility, digits, id, pinned, onClose, maxHeight }: CardProps) {
   const { industry, exposure, receptors, stacks, screening } = facility;
+  const drivers = drivingStacks(facility);
   return (
     <div
       id={id}
@@ -209,6 +251,7 @@ export function FacilityHoverCard({ facility, digits, id, pinned, onClose, maxHe
         )}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3.5 pt-2">
+        <RiskBadges facility={facility} digits={digits} />
         <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1">
           <Metric label="Reported release">
             {formatReported(facility.total_release)} {facility.release_unit}/yr
@@ -226,20 +269,37 @@ export function FacilityHoverCard({ facility, digits, id, pinned, onClose, maxHe
         >
           <Conditions facility={facility} />
         </Section>
+        {facility.scenarios.length > 0 && (
+          <Section title="Worst-case scenarios" aside={null} initiallyOpen>
+            <ScenarioSection facility={facility} digits={digits} />
+          </Section>
+        )}
         <Section
           title="Stacks"
           aside={<span className="text-xs text-fg2">{stacks.length}</span>}
-          initiallyOpen={stacks.length <= STACKS_SHOWN_OPEN}
+          initiallyOpen={stacks.length <= STACKS_SHOWN_OPEN && drivers.size === 0}
         >
           {stacks.length === 0 ? (
             <p className="m-0 text-xs text-fg2">{noStacks(screening)}</p>
           ) : (
             <ul className="m-0 grid list-none gap-1.5 p-0">
               {stacks.map((stack, index) => (
-                <StackRow key={index} stack={stack} digits={digits} />
+                <StackRow
+                  key={index}
+                  stack={stack}
+                  digits={digits}
+                  drives={stack.stack_number === null ? [] : (drivers.get(stack.stack_number) ?? [])}
+                />
               ))}
             </ul>
           )}
+        </Section>
+        <Section
+          title="Worker exposure"
+          aside={<TierPill tier={facility.occupational_exposure?.risk_tier ?? null} />}
+          initiallyOpen={facility.occupational_exposure !== null}
+        >
+          <WorkerSection facility={facility} digits={digits} />
         </Section>
         <Section title="Receptor risk" aside={<StatusPill status={facility.status} />} initiallyOpen>
           <ScreeningNote screening={screening} digits={digits} />

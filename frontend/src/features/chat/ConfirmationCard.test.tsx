@@ -41,7 +41,7 @@ function setup(onConfirm = vi.fn()) {
 describe("ConfirmationCard", () => {
   it("shows each value with its purpose, range and the units it accepts", () => {
     setup();
-    expect(screen.getByText("iur for 71-43-2")).toBeInTheDocument();
+    expect(screen.getByText("inhalation unit risk for 71-43-2")).toBeInTheDocument();
     expect(screen.getByText(/the cancer risk/)).toBeInTheDocument();
     expect(screen.getAllByRole("combobox")[0]).toHaveDisplayValue("1/(ug/m^3)");
     expect(screen.getAllByRole("option", { name: "1/(mg/m^3)" })).toHaveLength(1);
@@ -50,7 +50,7 @@ describe("ConfirmationCard", () => {
   it("lets the user type a value straight into an unanswered field", async () => {
     const user = userEvent.setup();
     setup();
-    const field = screen.getByRole("spinbutton", { name: /Value for iur for 71-43-2/ });
+    const field = screen.getByRole("spinbutton", { name: /Value for inhalation unit risk for 71-43-2/ });
     await user.type(field, "0.5");
     expect(field).toHaveValue(0.5);
   });
@@ -67,10 +67,10 @@ describe("ConfirmationCard", () => {
 
   it("sends a supplied value in the chosen unit and a declined one as declined", () => {
     const onConfirm = setup();
-    fireEvent.change(screen.getByLabelText("Value for iur for 71-43-2"), {
+    fireEvent.change(screen.getByLabelText("Value for inhalation unit risk for 71-43-2"), {
       target: { value: "0.002" },
     });
-    fireEvent.change(screen.getByLabelText("Unit for iur for 71-43-2"), {
+    fireEvent.change(screen.getByLabelText("Unit for inhalation unit risk for 71-43-2"), {
       target: { value: "1/(mg/m^3)" },
     });
     fireEvent.click(declineButton(1));
@@ -89,7 +89,7 @@ describe("ConfirmationCard", () => {
 
   it("does not accept text that is not a number", () => {
     setup();
-    fireEvent.change(screen.getByLabelText("Value for iur for 71-43-2"), {
+    fireEvent.change(screen.getByLabelText("Value for inhalation unit risk for 71-43-2"), {
       target: { value: "" },
     });
     fireEvent.click(declineButton(1));

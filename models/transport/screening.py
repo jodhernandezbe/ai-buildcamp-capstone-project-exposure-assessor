@@ -183,6 +183,45 @@ def centerline_concentrations(
     )
 
 
+def concentration_at_distance(
+    emission_rate_g_per_s: float,
+    stack: Stack,
+    stability_class: str,
+    wind_speed_10m_m_per_s: float,
+    distance_m: float,
+    atmosphere: Atmosphere,
+) -> float:
+    """Ground-level centerline 1-hour concentration at one distance for a fixed weather.
+
+    The same equations as the worst-case search, evaluated at a stated distance, so at the
+    distance of the worst case it equals the maximum and elsewhere it is not larger.
+
+    Args:
+        emission_rate_g_per_s: Emission rate, in grams per second (g/s); >= 0.
+        stack: The stack, in SI units.
+        stability_class: Pasquill-Gifford class A to F.
+        wind_speed_10m_m_per_s: Wind speed at 10 m, in meters per second (m/s).
+        distance_m: Downwind distance, in meters (m), within 100 to 10,000.
+        atmosphere: Per-class exponents and gradients, ambient temperature, receptor height.
+
+    Returns:
+        Concentration in micrograms per cubic meter (ug/m^3).
+
+    Raises:
+        ValueError: If the emission rate, the distance or a stack or atmosphere value is
+            impossible.
+    """
+    values, _, _ = centerline_concentrations(
+        emission_rate_g_per_s,
+        stack,
+        stability_class,
+        wind_speed_10m_m_per_s,
+        [distance_m],
+        atmosphere,
+    )
+    return float(values[0])
+
+
 def screening_maximum(
     emission_rate_g_per_s: float,
     stack: Stack,

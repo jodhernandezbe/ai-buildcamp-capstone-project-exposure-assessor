@@ -53,7 +53,8 @@
     "worst_case_only": [],
     "not_assessed": [],
     "note": "All 2 facilities were screened: 2 cannot reach HQ 0.1 or cancer risk 1e-06 even in the worst case (emission rate from TRI; EPA AirToxScreen global default stack; EPA SCREEN3 worst-case weather over its 54 stability and wind combinations; a person at the maximum) and were left out; 0 were fully assessed and 0 kept at the worst case with their own stacks.",
-    "warnings": []
+    "warnings": [],
+    "drivers": []
    }
   }
  ],
@@ -76,24 +77,24 @@
      "molecular_weight": "CompTox",
      "vapor_pressure": "experimental",
      "density": "experimental",
-     "rfd": "EPA RSL: RSL",
-     "rfc": "EPA IRIS: IRIS",
+     "rfd": "PA DEP: Pennsylvania DEP ToxValues",
+     "rfc": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 1991-10-01)",
      "sf": "Cal OEHHA: Cal OEHHA",
      "iur": "Cal OEHHA: Cal OEHHA"
     },
     "toxicity_details": {
      "rfd": {
-      "source": "EPA RSL: RSL",
+      "source": "PA DEP: Pennsylvania DEP ToxValues",
       "exposure_route": "oral",
       "route_reported": "oral",
       "endpoint": null,
       "assessment": "non-cancer"
      },
      "rfc": {
-      "source": "EPA IRIS: IRIS",
+      "source": "EPA IRIS: IRIS (CompTox IRIS endpoint, last significant revision 1991-10-01)",
       "exposure_route": "inhalation",
       "route_reported": "inhalation",
-      "endpoint": "Testicular effects in male rabbits",
+      "endpoint": "Reproductive",
       "assessment": "non-cancer"
      },
      "sf": {
@@ -111,7 +112,45 @@
       "assessment": "cancer"
      }
     },
-    "warnings": []
+    "warnings": [],
+    "missing": [],
+    "occupational_limits": {
+     "oel_twa_mg_m3": 0.009665848670756648,
+     "oel_source": "OSHA PEL-TWA (PubChem)",
+     "limits": {
+      "osha_pel": {
+       "value": 0.009665848670756648,
+       "programme": "OSHA PEL-TWA",
+       "converted_from_ppm": true,
+       "statements": 1
+      },
+      "pac_1": {
+       "value": 0.03,
+       "programme": "PAC-1",
+       "converted_from_ppm": false,
+       "statements": 1
+      },
+      "pac_2": {
+       "value": 0.72,
+       "programme": "PAC-2",
+       "converted_from_ppm": false,
+       "statements": 1
+      },
+      "pac_3": {
+       "value": 4.3,
+       "programme": "PAC-3",
+       "converted_from_ppm": false,
+       "statements": 1
+      }
+     },
+     "reasons": {
+      "niosh_rel": "PubChem has no usable NIOSH REL-TWA statement",
+      "acgih_tlv": "PubChem has no usable ACGIH TLV-TWA statement",
+      "acgih_tlv_stel": "PubChem has no usable ACGIH TLV-STEL statement",
+      "niosh_idlh": "PubChem has no usable NIOSH IDLH statement"
+     },
+     "warnings": []
+    }
    }
   }
  ],
@@ -288,19 +327,74 @@
    }
   }
  ],
+ "find_tri_category": [
+  {
+   "args": {
+    "cas_number": "96-12-8"
+   },
+   "output": {
+    "query_cas": "96-12-8",
+    "categories": [],
+    "warnings": []
+   }
+  }
+ ],
+ "find_tri_read_across_surrogate": [
+  {
+   "args": {
+    "cas_number": "96-12-8",
+    "require_toxicity_benchmarks": "False",
+    "sector_naics_prefix": null
+   },
+   "output": {
+    "query_smiles": "ClCC(Br)CBr",
+    "query_mw": 236.334,
+    "surrogate_tri_cas": "96-12-8",
+    "surrogate_name": "1,2-Dibromo-3-chloropropane",
+    "surrogate_smiles": "ClCC(Br)CBr",
+    "surrogate_mw": 236.334,
+    "moldeberta_cosine_sim": 1.0,
+    "morgan_tanimoto_sim": 1.0,
+    "hybrid_read_across_score": 1.0,
+    "mw_scaling_factor": 1.0,
+    "surrogate_category": null,
+    "query_cas": "96-12-8",
+    "is_direct_tri_match": true,
+    "within_applicability_domain": true,
+    "resolution_method": "direct_tri_catalog_match",
+    "query_categories": [],
+    "warnings": []
+   }
+  }
+ ],
  "get_meteorological_boundary": [
+  {
+   "args": {
+    "latitude": "33.2044",
+    "longitude": "-92.6308",
+    "reporting_year": null
+   },
+   "output": {
+    "wind_speed": 2.78,
+    "wind_direction": 180.0,
+    "stability_class": "D",
+    "ambient_temperature": 291.85,
+    "source": "Open-Meteo era5 reanalysis 2022",
+    "warnings": []
+   }
+  },
   {
    "args": {
     "latitude": "40.631622",
     "longitude": "-80.54632",
-    "reporting_year": "2024"
+    "reporting_year": null
    },
    "output": {
-    "wind_speed": 2.93,
-    "wind_direction": 260.0,
+    "wind_speed": 3.11,
+    "wind_direction": 200.0,
     "stability_class": "D",
-    "ambient_temperature": 286.39,
-    "source": "Open-Meteo era5 reanalysis 2024",
+    "ambient_temperature": 285.01,
+    "source": "Open-Meteo era5 reanalysis 2022",
     "warnings": []
    }
   },
@@ -315,6 +409,21 @@
     "wind_direction": 180.0,
     "stability_class": "D",
     "ambient_temperature": 292.48,
+    "source": "Open-Meteo era5 reanalysis 2024",
+    "warnings": []
+   }
+  },
+  {
+   "args": {
+    "latitude": "40.631622",
+    "longitude": "-80.54632",
+    "reporting_year": "2024"
+   },
+   "output": {
+    "wind_speed": 2.93,
+    "wind_direction": 260.0,
+    "stability_class": "D",
+    "ambient_temperature": 286.39,
     "source": "Open-Meteo era5 reanalysis 2024",
     "warnings": []
    }
@@ -336,7 +445,70 @@
      "65+": 17.25
     },
     "source": "Census ACS 2023 5-year (DP05), 4 tracts",
-    "warnings": []
+    "warnings": [],
+    "tracts": [
+     {
+      "geoid": "05139951000",
+      "residents": 4215,
+      "age_distribution": {
+       "0-4": 7.0,
+       "5-17": 14.64,
+       "18-64": 64.08,
+       "65+": 14.28
+      },
+      "distance_m": 741.3322857388305,
+      "bearing_deg": 232.56976581761614,
+      "latitude": 33.2003477,
+      "longitude": -92.637127,
+      "land_area_km2": 12.203516
+     },
+     {
+      "geoid": "05139950600",
+      "residents": 3427,
+      "age_distribution": {
+       "0-4": 9.4,
+       "5-17": 12.28,
+       "18-64": 62.71,
+       "65+": 15.61
+      },
+      "distance_m": 3220.8937797395297,
+      "bearing_deg": 342.11044619486927,
+      "latitude": 33.2319652,
+      "longitude": -92.6414376,
+      "land_area_km2": 20.093389
+     },
+     {
+      "geoid": "05139950200",
+      "residents": 3489,
+      "age_distribution": {
+       "0-4": 5.04,
+       "5-17": 15.22,
+       "18-64": 58.7,
+       "65+": 21.04
+      },
+      "distance_m": 10292.66319756106,
+      "bearing_deg": 26.228814903203975,
+      "latitude": 33.2874237,
+      "longitude": -92.5818612,
+      "land_area_km2": 278.249476
+     },
+     {
+      "geoid": "05139950502",
+      "residents": 2614,
+      "age_distribution": {
+       "0-4": 6.92,
+       "5-17": 16.99,
+       "18-64": 56.96,
+       "65+": 19.13
+      },
+      "distance_m": 14781.953500054819,
+      "bearing_deg": 135.8152925280671,
+      "latitude": 33.1090223,
+      "longitude": -92.5201863,
+      "land_area_km2": 381.013061
+     }
+    ],
+    "tracts_not_listed": 0
    }
   },
   {
@@ -354,7 +526,70 @@
      "65+": 24.07
     },
     "source": "Census ACS 2023 5-year (DP05), 4 tracts",
-    "warnings": []
+    "warnings": [],
+    "tracts": [
+     {
+      "geoid": "39029952200",
+      "residents": 1587,
+      "age_distribution": {
+       "0-4": 1.7,
+       "5-17": 21.3,
+       "18-64": 62.13,
+       "65+": 14.87
+      },
+      "distance_m": 1151.1911129530763,
+      "bearing_deg": 65.02542064938065,
+      "latitude": 40.6359925,
+      "longitude": -80.533953,
+      "land_area_km2": 2.155055
+     },
+     {
+      "geoid": "39029952300",
+      "residents": 2591,
+      "age_distribution": {
+       "0-4": 6.52,
+       "5-17": 25.67,
+       "18-64": 54.03,
+       "65+": 13.78
+      },
+      "distance_m": 1816.7909170706798,
+      "bearing_deg": 256.0147754705078,
+      "latitude": 40.6276715,
+      "longitude": -80.5672098,
+      "land_area_km2": 1.888003
+     },
+     {
+      "geoid": "39029952400",
+      "residents": 3880,
+      "age_distribution": {
+       "0-4": 2.42,
+       "5-17": 12.4,
+       "18-64": 56.31,
+       "65+": 28.87
+      },
+      "distance_m": 4118.068945832625,
+      "bearing_deg": 7.853287188218297,
+      "latitude": 40.6683091,
+      "longitude": -80.5396485,
+      "land_area_km2": 33.197089
+     },
+     {
+      "geoid": "54029021500",
+      "residents": 4001,
+      "age_distribution": {
+       "0-4": 2.2,
+       "5-17": 12.9,
+       "18-64": 55.16,
+       "65+": 29.74
+      },
+      "distance_m": 4166.681968723888,
+      "bearing_deg": 202.48394657940008,
+      "latitude": 40.596997,
+      "longitude": -80.5651927,
+      "land_area_km2": 33.690503
+     }
+    ],
+    "tracts_not_listed": 0
    }
   }
  ],
@@ -378,6 +613,8 @@
       "doc_ctrl_num": "1324222755151",
       "naics_code": "562211",
       "naics_title": "Hazardous Waste Treatment and Disposal",
+      "naics_subsector": "562",
+      "naics_subsector_title": "Waste Management and Remediation Services",
       "eis_ids": [
        "994211"
       ],
@@ -386,6 +623,38 @@
       "unit": "Pounds",
       "emission_rate": 4.1711627124556067e-07,
       "operating_hours_per_year": 8760.0,
+      "operating_hours_source": "default 8760 h/yr (no QPC match for 562211)",
+      "fugitive_release_kg_per_year": 0.0,
+      "fugitive_reporting_year": 2024,
+      "conditions_of_use": [
+       {
+        "tri_activity": "Repackaging",
+        "tri_section": "3.2d",
+        "lifecycle_stage": "Processing",
+        "cou_category": "Repackaging",
+        "mapping_strength": "Direct"
+       },
+       {
+        "tri_activity": "Ancillary or other use",
+        "tri_section": "3.3c",
+        "lifecycle_stage": "Industrial use",
+        "cou_category": "Industrial function category and chemical sector",
+        "mapping_strength": "Direct (group)"
+       },
+       {
+        "tri_activity": "Ancillary or other use",
+        "tri_section": "3.3c",
+        "lifecycle_stage": "Commercial use",
+        "cou_category": "Product category",
+        "mapping_strength": "Partial"
+       }
+      ],
+      "lifecycle_stages": [
+       "Processing",
+       "Industrial use",
+       "Commercial use"
+      ],
+      "conditions_note": null,
       "latitude": 33.2044,
       "longitude": -92.6308,
       "address": "309 AMERICAN CIR UNION",
@@ -402,6 +671,8 @@
       "doc_ctrl_num": "1324222528895",
       "naics_code": "562213",
       "naics_title": "Solid Waste Combustors and Incinerators",
+      "naics_subsector": "562",
+      "naics_subsector_title": "Waste Management and Remediation Services",
       "eis_ids": [
        "13429211"
       ],
@@ -410,6 +681,30 @@
       "unit": "Pounds",
       "emission_rate": 2.8766639396245566e-07,
       "operating_hours_per_year": 8760.0,
+      "operating_hours_source": "default 8760 h/yr (no QPC match for 562213)",
+      "fugitive_release_kg_per_year": 0.0,
+      "fugitive_reporting_year": 2024,
+      "conditions_of_use": [
+       {
+        "tri_activity": "Ancillary or other use",
+        "tri_section": "3.3c",
+        "lifecycle_stage": "Industrial use",
+        "cou_category": "Industrial function category and chemical sector",
+        "mapping_strength": "Direct (group)"
+       },
+       {
+        "tri_activity": "Ancillary or other use",
+        "tri_section": "3.3c",
+        "lifecycle_stage": "Commercial use",
+        "cou_category": "Product category",
+        "mapping_strength": "Partial"
+       }
+      ],
+      "lifecycle_stages": [
+       "Industrial use",
+       "Commercial use"
+      ],
+      "conditions_note": null,
       "latitude": 40.631622,
       "longitude": -80.54632,
       "address": "1250 ST GEORGE ST",

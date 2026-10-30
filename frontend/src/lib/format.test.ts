@@ -1,4 +1,5 @@
 import {
+  formatSchedule,
   NOT_REPORTED,
   formatCount,
   formatNumber,
@@ -94,5 +95,21 @@ describe("formatReported", () => {
 
   it("is not reported without a value", () => {
     expect(formatReported(null)).toBe(NOT_REPORTED);
+  });
+});
+
+describe("formatSchedule", () => {
+  const full = { operating_days_per_year: 250, hours_per_day: 16, annual_operating_hours: 4240 };
+
+  it("joins the parts the API gave", () => {
+    expect(formatSchedule(full)).toBe("250 days/yr • 16 hr/day • 4,240 hr/yr");
+  });
+
+  it("leaves out an absent part and is not reported without any", () => {
+    expect(formatSchedule({ ...full, hours_per_day: null })).toBe("250 days/yr • 4,240 hr/yr");
+    expect(formatSchedule(null)).toBe("not reported");
+    expect(
+      formatSchedule({ operating_days_per_year: null, hours_per_day: null, annual_operating_hours: null }),
+    ).toBe("not reported");
   });
 });

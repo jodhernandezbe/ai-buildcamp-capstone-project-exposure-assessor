@@ -38,21 +38,36 @@ function useMapMoves(map: MapLibreMap): void {
  * folded and it can be read at leisure. Escape closes it; leaving or blurring closes an
  * unpinned one; a click on the map closes a pinned one.
  */
+/** Name, community status and, when computed, the worker tier: what a marker announces. */
+function markerLabel(facility: Facility): string {
+  const name = facility.name ?? `FRS ${facility.frs_id}`;
+  const tier = facility.occupational_exposure?.risk_tier;
+  return `${name}, ${facility.status ?? "risk not computed"}${tier ? `, worker ${tier}` : ""}`;
+}
+
 export function FacilityInspector({
   map,
   facilities,
   scale,
   digits,
+  onPin,
+  onPinned,
 }: {
   map: MapLibreMap;
   facilities: Facility[];
   scale: MarkerScale;
   digits: number;
+  /** Told which facility a click pinned (not when it is unpinned, hovered or focused). */
+  onPin?: (frsId: string) => void;
+  /** Told which facility is pinned right now, or null when none is (also after it is closed). */
+  onPinned?: (frsId: string | null) => void;
 }) {
   const overlay = useRef<HTMLDivElement>(null);
   const cardId = useId();
   const [active, setActive] = useState<Active | null>(null);
   useMapMoves(map);
+  const pinnedId = active?.pinned ? active.frsId : null;
+  useEffect(() => onPinned?.(pinnedId), [onPinned, pinnedId]);
 
   useEffect(() => {
     if (!active?.pinned) return;
@@ -99,10 +114,12 @@ export function FacilityInspector({
   // Hovering or focusing shows a facility unless another one is pinned.
   const open = (facility: Facility, x: number, y: number) =>
     setActive((now) => (now?.pinned && now.frsId !== facility.frs_id ? now : placed(facility, x, y, now?.pinned ?? false)));
-  const pin = (facility: Facility, x: number, y: number) =>
+  const pin = (facility: Facility, x: number, y: number) => {
+    if (!(active?.pinned && active.frsId === facility.frs_id)) onPin?.(facility.frs_id);
     setActive((now) =>
       now?.pinned && now.frsId === facility.frs_id ? null : placed(facility, x, y, true),
     );
+  };
   const close = (frsId: string) =>
     setActive((now) => (now?.frsId === frsId && !now.pinned ? null : now));
 
@@ -116,7 +133,7 @@ export function FacilityInspector({
           <div key={facility.frs_id}>
             <button
               type="button"
-              aria-label={`${facility.name ?? `FRS ${facility.frs_id}`}, ${facility.status ?? "risk not computed"}`}
+              aria-label={markerLabel(facility)}
               aria-describedby={isActive ? cardId : undefined}
               className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full bg-transparent"
               style={{ left: x, top: y, width: radius * 2, height: radius * 2 }}

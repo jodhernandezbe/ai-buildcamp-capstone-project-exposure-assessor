@@ -16,6 +16,7 @@ from tools.exposure.helpers.population.census import (
     fetch_counts,
     fetch_tracts,
 )
+from tools.exposure.helpers.population.tracts import TractList, tract_list
 from tools.http import RetryingClient
 from tools.schemas import Population
 
@@ -32,6 +33,8 @@ def screening_default(settings: PopulationSettings, radius_km: float, reason: st
         age_distribution=dict(default.age_distribution),
         source=DEFAULT_SOURCE,
         warnings=[f"{reason}; using the {DEFAULT_SOURCE} (generic, not site-specific)"],
+        tracts=[],
+        tracts_not_listed=0,
     )
 
 
@@ -50,6 +53,7 @@ class _Tally:
     land_area_m2: float
     used: int
     left_out: int
+    found: tuple[tuple[Tract, Counts], ...] = ()
 
 
 def _sum(found: list[tuple[Tract, Counts]]) -> tuple[Counts, float]:
@@ -77,7 +81,7 @@ def _tally(
         table = fetch_counts(state, county, settings, client, api_key)
         found += [(t, c) for t in members if (c := table.get(t.tract)) is not None]
     counts, land = _sum(found)
-    return _Tally(counts, land, len(found), len(tracts) - len(found))
+    return _Tally(counts, land, len(found), len(tracts) - len(found), tuple(found))
 
 
 def _bands_and_notes(
@@ -94,15 +98,26 @@ def _bands_and_notes(
     return age_bands(c.total, c.under_5, c.under_18, c.over_65), notes
 
 
-def _result(tally: _Tally, radius_km: float, settings: PopulationSettings) -> Population:
+def _tract_notes(listing: TractList) -> list[str]:
+    if not listing.no_point:
+        return []
+    return [f"{listing.no_point} tracts have no internal point and are not listed with a distance"]
+
+
+def _result(
+    tally: _Tally, radius_km: float, settings: PopulationSettings, latitude: float, longitude: float
+) -> Population:
     circle_m2 = math.pi * (radius_km * _METERS_PER_KM) ** 2
     scaled = scale_to_circle(tally.counts.total, circle_m2, tally.land_area_m2)
     bands, notes = _bands_and_notes(tally, settings)
+    listing = tract_list(list(tally.found), latitude, longitude, settings.max_tracts_listed)
     return Population(
         total_population=round(scaled),
         age_distribution=bands,
         source=f"Census ACS {settings.acs_year} 5-year (DP05), {tally.used} tracts",
-        warnings=notes,
+        warnings=[*notes, *_tract_notes(listing)],
+        tracts=listing.listed,
+        tracts_not_listed=listing.not_listed,
     )
 
 
@@ -179,7 +194,7 @@ def _estimate(
 ) -> Population:
     try:
         tally = _locate(latitude, longitude, radius_km, settings, client, api_key)
-        return _result(tally, radius_km, settings)
+        return _result(tally, radius_km, settings, latitude, longitude)
     except _Unusable as exc:
         return screening_default(settings, radius_km, str(exc))
     except CensusError as exc:

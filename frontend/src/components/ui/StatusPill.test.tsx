@@ -13,3 +13,10 @@ describe("StatusPill", () => {
     expect(screen.getByText(label)).toBeInTheDocument();
   });
 });
+
+describe("StatusPill label", () => {
+  it("replaces the default words but keeps the status", () => {
+    render(<StatusPill status="above" label="Exceedance" />);
+    expect(screen.getByText("Exceedance")).toHaveAttribute("data-status", "above");
+  });
+});

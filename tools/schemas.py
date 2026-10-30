@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class ChemicalProperties(TypedDict):
@@ -24,6 +24,32 @@ class ChemicalProperties(TypedDict):
     toxicity_details: dict[str, ToxicityDetail]  # rfd/rfc/sf/iur found -> route and endpoint
     warnings: list[str]  # one entry per missing or unconvertible value
     missing: list[MissingEntry]  # missing values the result needs and the user may still enter
+    occupational_limits: OccupationalLimits  # PubChem OSHA/NIOSH/ACGIH/IDLH/PAC limits, mg/m^3
+
+
+class LimitValue(TypedDict):
+    """One occupational limit PubChem lists, in mg/m^3."""
+
+    value: float  # mg/m^3
+    programme: str  # e.g. "OSHA PEL-TWA"
+    converted_from_ppm: bool  # True when the record gave ppm and it was converted with the weight
+    statements: int  # how many clear statements it comes from (the median when more than one)
+
+
+class OccupationalLimits(TypedDict):
+    """Occupational exposure limits read from the chemical's PubChem record.
+
+    ``oel_twa_mg_m3`` is the 8-hour TWA benchmark chosen in the order OSHA PEL, NIOSH REL, ACGIH
+    TLV; it and ``oel_source`` are None when none is available. ``limits`` holds every limit
+    found (TWA, STEL, IDLH, PAC-1/2/3) under its key; ``reasons`` says why each other one is
+    missing. A limit is never guessed.
+    """
+
+    oel_twa_mg_m3: float | None  # mg/m^3, 8-hour time-weighted average benchmark
+    oel_source: str | None  # e.g. "OSHA PEL-TWA (PubChem)"
+    limits: dict[str, LimitValue]  # limit key -> value
+    reasons: dict[str, str]  # limit key -> why there is none
+    warnings: list[str]
 
 
 class PropertyValue(TypedDict):
@@ -65,6 +91,33 @@ class ConditionOfUse(TypedDict):
     mapping_strength: str  # how well the activity matches it, as the crosswalk states it
 
 
+class CdrSector(TypedDict):
+    """The TSCA Chemical Data Reporting industrial sector of a facility's NAICS code."""
+
+    code: str  # CDR industrial sector code, e.g. "IS21"
+    name: str  # the sector's name
+    matched_naics_prefix: str  # the NAICS prefix of EPA's crosswalk that matched
+    naics_edition: str  # NAICS edition of that prefix, e.g. "2007"
+
+
+class OperationalProfile(TypedDict):
+    """How a facility operates and where it sits in the TSCA framework (from public sources).
+
+    A value is None when its source does not give it; ``warnings`` says why. Nothing is guessed.
+    """
+
+    naics_code: str | None  # primary NAICS code TRI reports (2-6 digits)
+    life_cycle_stage: list[str]  # TSCA stages of the activities the facility reported to TRI
+    cou_category: list[str]  # TSCA condition-of-use categories of those activities
+    cdr_sector: CdrSector | None  # CDR industrial sector of the NAICS code
+    days_per_week: int | None  # d/week, derived from the Census QPC hours per week
+    operating_days_per_year: float | None  # d/yr
+    hours_per_day: float | None  # h/day
+    annual_operating_hours: float | None  # h/yr, at most 8,760
+    schedule_source: str  # where the hours come from (Census QPC release and code, or default)
+    warnings: list[str]
+
+
 class EmissionRecord(TypedDict):
     """One facility's most recent reported release of a chemical to one environmental medium."""
 
@@ -86,6 +139,8 @@ class EmissionRecord(TypedDict):
     total_release: float  # annual quantity, in `unit`, exactly as reported
     unit: str  # unit of `total_release` as reported, e.g. "Pounds"
     emission_rate: float  # g/s, total_release averaged over `operating_hours_per_year`
+    fugitive_release_kg_per_year: float | None  # TRI fugitive air release, kg/yr; None if none
+    fugitive_reporting_year: int | None  # year of that fugitive release; None if none
     operating_hours_per_year: float  # h/yr assumed for `emission_rate`
     operating_hours_source: str  # where those hours came from (industry baseline or default)
     conditions_of_use: list[ConditionOfUse]  # TSCA conditions of use of the reported activities
@@ -167,6 +222,19 @@ class Meteorology(TypedDict):
     warnings: list[str]  # hours excluded, adjustments made, or why the default was used
 
 
+class TractReceptor(TypedDict):
+    """The residents of one census tract and where its internal point lies from the facility."""
+
+    geoid: str  # state + county + tract FIPS code, 11 digits
+    residents: int  # persons, the tract's ACS estimate (not scaled to the circle)
+    age_distribution: dict[str, float]  # age band "0-4", "5-17", "18-64", "65+" -> percent
+    distance_m: float  # m, great circle from the facility to the tract's internal point
+    bearing_deg: float  # degrees clockwise from north, from the facility to that point
+    latitude: float  # decimal degrees, the tract's internal point as the census service gave it
+    longitude: float  # decimal degrees
+    land_area_km2: float  # km^2
+
+
 class Population(TypedDict):
     """Residents living within a search radius, from census estimates or a labelled default.
 
@@ -177,6 +245,8 @@ class Population(TypedDict):
     age_distribution: dict[str, float]  # age band "0-4", "5-17", "18-64", "65+" -> percent
     source: str  # data source and vintage, or "screening default"
     warnings: list[str]  # tracts left out, or why the default was used
+    tracts: NotRequired[list[TractReceptor]]  # nearest first; empty for the screening default
+    tracts_not_listed: NotRequired[int]  # tracts with residents beyond the listing limit
 
 
 class Toxicity(TypedDict):
@@ -347,6 +417,104 @@ class ScreeningBound(TypedDict):
     cancer_risk: float | None  # unitless lifetime excess risk
 
 
+class VentilationTier(TypedDict):
+    """The worker screening for one ventilation tier of the box model (None = not computable)."""
+
+    label: str  # e.g. "Baseline manufacturing ventilation"
+    ventilation_m3_per_s: float  # room ventilation rate Q, m^3/s
+    mixing_factor: float  # k, unitless
+    workplace_concentration_mg_m3: float | None  # mg/m^3 while the plant runs
+    twa_mg_m3: float | None  # 8-hour time-weighted average, mg/m^3
+    oel_ratio: float | None  # TWA over the occupational exposure limit; above 1 exceeds it
+    hq: float | None  # worker hazard quotient (average daily concentration over the RfC)
+    cancer_risk: float | None  # worker lifetime excess cancer risk
+    risk_tier: str | None  # "exceedance", "elevated", "acceptable", or None
+
+
+class OccupationalExposure(TypedDict):
+    """Worker screening of one facility: EPA ChemSTEER box model and RAGS Part F dosimetry.
+
+    The fugitive release is treated as generated only while the plant runs, in one well-mixed
+    zone; the ventilation tiers are screening defaults, not the plant's; and it is not a
+    compliance determination. A value is None when an input is missing; ``warnings`` says which.
+    """
+
+    fugitive_release_kg_per_year: float | None  # TRI fugitive air release, kg/yr
+    fugitive_reporting_year: int | None  # year of that release
+    operating_days_per_year: float | None  # d/yr
+    hours_per_day: float | None  # h/day
+    oel_twa_mg_m3: float | None  # 8-hour TWA limit used, mg/m^3
+    oel_source: str | None  # e.g. "OSHA PEL-TWA (PubChem)"
+    rfc: float | None  # mg/m^3, inhalation reference concentration used
+    iur: float | None  # (ug/m^3)^-1, inhalation unit risk used
+    vapor_pressure_mmhg: float | None  # context only; never enters an equation
+    vapor_pressure_source: str | None  # "CompTox" (experimental/predicted) or "PubChem"
+    baseline: VentilationTier
+    worst_case: VentilationTier
+    risk_tier: str | None  # the baseline tier; the worst case is in `worst_case`
+    assumptions: list[str]
+    warnings: list[str]
+
+
+class ScenarioFactor(TypedDict):
+    """One factor of a worst-case scenario: a value a tool returned, or why there is none."""
+
+    key: str  # e.g. "stack_height"
+    group: Literal["source", "release", "conditions", "receptor_model"]
+    label: str
+    value: float | str | None  # None when no tool reported it
+    unit: str  # empty when unitless or when the value is text
+    source: str | None  # where the value came from, when a tool said
+    reason: str | None  # why there is no value
+
+
+class ScenarioReceptor(TypedDict):
+    """A receptor of a scenario: a census tract, or the workers of the facility."""
+
+    kind: Literal["tract", "workers"]
+    label: str  # the tract's geoid, or "Workers"
+    residents: int | None  # persons (tracts)
+    age_distribution: dict[str, float]  # age band -> percent (tracts); empty for workers
+    distance_m: float | None  # m from the facility to the tract's internal point
+    bearing_deg: float | None  # degrees clockwise from north
+    latitude: float | None  # the tract's internal point, decimal degrees; None for workers
+    longitude: float | None
+    concentration: float | None  # ug/m^3, annual average the scenario gives at the receptor
+    fraction_of_maximum: float | None  # that concentration over the scenario's maximum
+    note: str | None
+
+
+class WorstCaseScenario(TypedDict):
+    """The combination of factors behind the high-end value of one quantity on one pathway.
+
+    Every value is one a tool returned. ``tier`` is the level the assessment gave the value;
+    it is a screening result, never a regulatory finding.
+    """
+
+    pathway_key: str  # e.g. "community_inhalation"
+    pathway: str  # medium, route and receptor class
+    quantity: str  # "hq", "cancer_risk" or "oel_ratio"
+    quantity_label: str
+    value: float  # unitless
+    tier: str | None  # e.g. "above threshold", "exceedance"; None when none was given
+    benchmark: float | None  # the level of concern the value was compared with, unitless
+    factors: list[ScenarioFactor]
+    receptors: list[ScenarioReceptor]
+    receptors_note: str | None  # why there are none, or what was left out
+    notes: list[str]
+
+
+class ScenarioDriver(TypedDict):
+    """The assessed facility whose scenario has the highest value of a pathway's quantity."""
+
+    pathway_key: str
+    quantity: str
+    frs_id: str
+    facility_name: str | None
+    stack_number: int | None  # the stack behind the value (community pathways); else None
+    value: float  # unitless
+
+
 class FacilityAssessment(TypedDict):
     """The chain for one facility, as the batch assessment ran it (for the program).
 
@@ -364,8 +532,11 @@ class FacilityAssessment(TypedDict):
     meteorology: Meteorology | None  # None at worst case only
     population: Population | None  # None at worst case only
     radius_km: float | None  # radius the residents were counted in; None = the default
-    exposure: FacilityExposure
+    exposure: FacilityExposure  # the community (ambient fenceline) result
+    occupational_exposure: OccupationalExposure  # the worker screening
+    operational_profile: OperationalProfile  # schedule, life cycle stage, COU, CDR sector
     notes: list[str]  # why a better stack source could not be used, and other choices made
+    scenarios: NotRequired[list[WorstCaseScenario]]  # one per pathway and quantity with a value
 
 
 class ScreenedOut(TypedDict):
@@ -386,6 +557,7 @@ class AssessmentArtifact(TypedDict):
     assessed: list[FacilityAssessment]  # fully assessed first, then worst case only
     screened_out: list[ScreenedOut]
     not_assessed: list[NotAssessed]  # asked for or reaching a threshold, but with no result
+    drivers: NotRequired[list[ScenarioDriver]]  # the facility behind each scenario's top value
 
 
 class NotAssessed(TypedDict):
@@ -421,6 +593,10 @@ class FacilitySummary(FacilityRanges):
     weather_source: str
     residents: int  # within the radius
     radius_km: float | None  # None = the default radius
+    worker_risk_tier: (
+        str | None
+    )  # worker screening tier (baseline ventilation), None = not computed
+    worker_oel_ratio: float | None  # worker 8-hour TWA over the occupational limit, unitless
     notes: list[str]  # the most important warnings, deduplicated and capped
 
 
@@ -477,6 +653,7 @@ class AssessmentResult(TypedDict):
     not_assessed: list[NotAssessed]
     note: str | None  # what was left out of the listing
     warnings: list[str]
+    drivers: NotRequired[list[ScenarioDriver]]  # the facility behind each pathway's top value
 
 
 class TriCategoryResult(TypedDict):

@@ -63,7 +63,24 @@ FULL_ASSESSMENT = Scenario(
     ),
     judges=(COMPLETE_ASSESSMENT_REPORT,),
     # The agent may assess the facilities by the batch tool instead of by hand; record it too.
-    extra_calls=(ExtraCall(c.ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS}),),
+    # It may also look the chemical up in the read-across tool first, and ask for the weather at a
+    # facility, with and without a reporting year (the same sites as the recorded calls).
+    extra_calls=(
+        ExtraCall(c.ASSESSMENT, {"cas_number": FULL_ASSESSMENT_CAS}),
+        ExtraCall("find_tri_read_across_surrogate", {"cas_number": FULL_ASSESSMENT_CAS}),
+        ExtraCall("get_meteorological_boundary", {"latitude": "33.2044", "longitude": "-92.6308"}),
+        ExtraCall(
+            "get_meteorological_boundary", {"latitude": "40.631622", "longitude": "-80.54632"}
+        ),
+        ExtraCall(
+            "get_meteorological_boundary",
+            {"latitude": "33.2044", "longitude": "-92.6308", "reporting_year": "2024"},
+        ),
+        ExtraCall(
+            "get_meteorological_boundary",
+            {"latitude": "40.631622", "longitude": "-80.54632", "reporting_year": "2024"},
+        ),
+    ),
 )
 
 # 2-Chlorophenol is not a discrete TRI chemical; TRI reports it under the chlorophenols
