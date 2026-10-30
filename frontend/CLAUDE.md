@@ -48,4 +48,10 @@ Project-wide guidance is in the root `CLAUDE.md`; these rules apply to work in `
 - Design tokens live as CSS variables in `src/index.css` (light and dark); components use
   them, not literal colours. The one exception is the EcoFate mark (`components/ui/BrandLogo`),
   whose fixed artwork colours match `public/logo.svg` and `public/favicon.svg`. Respect `prefers-reduced-motion` and `prefers-color-scheme`.
+- `DESIGN.md` in this folder is the design authority: direction, token meanings, scale,
+  primitives, required states, copy and anti-patterns. Use the `ui-craft` skill for any UI work;
+  compose from the primitives it lists and extend the document in the same change when a token
+  or primitive is added (`src/designDoc.test.ts` keeps its token table equal to `index.css`).
+- Run `/ui-check <surface>` (light and dark, checklist with evidence, visual and contrast tests)
+  before UI work is called done; a `fail` row means the work is not finished.
 - Pure helpers (formatting, SSE parsing, store reducers) get Vitest tests beside them.

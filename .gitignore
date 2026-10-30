@@ -40,3 +40,6 @@ frontend/yarn.lock
 
 # Logfire project credentials written by `logfire projects use`
 .logfire/
+
+# Vitest browser-mode attachments (screenshot diffs); references in __screenshots__/ are committed
+frontend/.vitest/
