@@ -75,6 +75,6 @@ SOLID, DRY and defensive programming apply to all code; the full rules are impor
   helpers. Enforced by `scripts/check_function_length.py` as a pre-commit hook on the source
   packages (not `tests/`); never raise the limit or skip the hook to make code fit.
 - Strict static typing: annotate all functions; no untyped `dict`, no `Any` unless unavoidable.
-- Formatting and linting are enforced by ruff (config in `pyproject.toml`); do not
-  hand-format or add `# noqa` without a reason.
+- Formatting and linting are enforced by ruff (config in `pyproject.toml`) and a hook that
+  adds trailing commas to multi-line constructs; do not hand-format or add `# noqa` unjustified.
 - Never invent numeric values in tool stubs or tests that look like real data.

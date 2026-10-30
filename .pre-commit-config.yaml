@@ -17,6 +17,12 @@ repos:
         args: ["--branch", "main"]
         stages: [manual]  # opt in with: pre-commit run --hook-stage manual
 
+  # Runs before ruff-format so its magic trailing comma keeps one element per line.
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v4.0.0
+    hooks:
+      - id: add-trailing-comma
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.0
     hooks:
